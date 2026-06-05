@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: oss-risk-db
+    environment:
+      POSTGRES_DB: oss_risk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oss_risk"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/scanner/sandbox/Dockerfile  # Can be customized for worker, or use a base node image
+      # For standard worker container, we can use a node base image:
+    image: node:20-alpine
+    container_name: oss-risk-worker
+    working_dir: /app
+    volumes:
+      - .:/app
+      # Mount host Docker socket so containerized worker can launch sandboxed sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DATABASE_URL=postgres://postgres:password123@db:5432/oss_risk
+      - ENCRYPTION_KEY=my-super-secret-key-123
+      - SANDBOX_IMAGE_TAG=latest
+      - WORKER_MAX_CONCURRENT=4
+      - WORKER_POLL_INTERVAL_MS=5000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm install && npm run worker"
+
+  export-worker:
+    image: node:20-alpine
+    container_name: oss-risk-export-worker
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgres://postgres:password123@db:5432/oss_risk
+      - EXPORT_WORKER_MAX_CONCURRENT=4
+      - EXPORT_WORKER_POLL_INTERVAL_MS=5000
+      - EXPORT_WORKER_TIMEOUT_MS=600000
+      - REPORT_OUTPUT_DIR=/app/report-output
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm install && npm run export-worker"
+
+volumes:
+  pgdata:

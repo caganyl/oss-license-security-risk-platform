@@ -1,12 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
 import pool from './lib/db';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
 import createReportRouter from './routes/reportRoutes';
 import createWorkflowRouter from './routes/workflowRoutes';
-
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;

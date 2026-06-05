@@ -1,0 +1,157 @@
+name: "Security Audit, SAST & Self-SBOM"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  sast-codeql:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  fs-security-scan:
+    name: Filesystem & Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full git history required for accurate secret scanning
+
+      - name: Run Trivy Scanner (FS, Secret & Config)
+        uses: aquasecurity/trivy-action@v0.29.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          scanners: 'vuln,secret,config'
+
+      - name: Upload Trivy FS Scan Results to Security Tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+
+  container-security-scan:
+    name: Container Build & Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build Sandbox Scanner Image
+        run: |
+          docker build \
+            -t sandbox-scanner:${{ github.sha }} \
+            -f src/scanner/sandbox/Dockerfile \
+            src/scanner/sandbox
+
+      - name: Run Trivy Scanner (Container Image)
+        uses: aquasecurity/trivy-action@v0.29.0
+        with:
+          image-ref: 'sandbox-scanner:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy Container Scan Results to Security Tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+
+  generate-sbom:
+    name: Generate Platform SBOMs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 1. Generate Repository (Source Code) SBOMs
+      - name: Generate Repository SBOM (CycloneDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: '.'
+          format: 'cyclonedx-json'
+          output-file: 'sbom-repo-cyclonedx.json'
+
+      - name: Generate Repository SBOM (SPDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: '.'
+          format: 'spdx-json'
+          output-file: 'sbom-repo-spdx.json'
+
+      # 2. Build image and generate Container Image SBOMs
+      - name: Build Sandbox Scanner Image
+        run: |
+          docker build \
+            -t sandbox-scanner:${{ github.sha }} \
+            -f src/scanner/sandbox/Dockerfile \
+            src/scanner/sandbox
+
+      - name: Generate Container Image SBOM (CycloneDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: 'sandbox-scanner:${{ github.sha }}'
+          format: 'cyclonedx-json'
+          output-file: 'sbom-container-cyclonedx.json'
+
+      - name: Generate Container Image SBOM (SPDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: 'sandbox-scanner:${{ github.sha }}'
+          format: 'spdx-json'
+          output-file: 'sbom-container-spdx.json'
+
+      # 3. Upload all generated SBOMs as build artifacts
+      - name: Upload Generated SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-sboms
+          path: |
+            sbom-repo-cyclonedx.json
+            sbom-repo-spdx.json
+            sbom-container-cyclonedx.json
+            sbom-container-spdx.json

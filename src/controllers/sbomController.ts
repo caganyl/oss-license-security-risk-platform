@@ -77,12 +77,15 @@ export class SbomController {
         throw Object.assign(new Error('id must be a valid UUID'), { statusCode: 400 });
       }
 
-      const { record, content, mimeType } = await this.service.readDocument(id);
-      const ext = record.storageKey.split('.').pop() ?? 'bin';
-      const filename = `sbom-${record.scanId}-${record.format}.${ext}`;
+      const { record, content } = await this.service.readDocument(id);
+      const downloadExt =
+        record.format === 'spdx_json' || record.format === 'cyclonedx_json' ? 'json'
+        : record.format === 'cyclonedx_xml' ? 'xml'
+        : record.format === 'spdx_tag_value' ? 'txt'
+        : 'json';
+      const filename = `sbom-${record.scanId}-${record.format}.${downloadExt}`;
 
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.attachment(filename);
       res.setHeader('Content-Length', content.length);
       res.setHeader('X-Checksum-SHA256', record.checksumSha256);
       res.send(content);
@@ -108,12 +111,15 @@ export class SbomController {
         doc = await this.service.generate(scanId, 'cyclonedx_json', req.user?.id);
       }
 
-      const { content, mimeType } = await this.service.readDocument(doc.id);
-      const ext = doc.storageKey.split('.').pop() ?? 'bin';
-      const filename = `sbom-${scanId}-${doc.format}.${ext}`;
+      const { content } = await this.service.readDocument(doc.id);
+      const downloadExt =
+        doc.format === 'spdx_json' || doc.format === 'cyclonedx_json' ? 'json'
+        : doc.format === 'cyclonedx_xml' ? 'xml'
+        : doc.format === 'spdx_tag_value' ? 'txt'
+        : 'json';
+      const filename = `sbom-${scanId}-${doc.format}.${downloadExt}`;
 
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.attachment(filename);
       res.setHeader('Content-Length', content.length);
       res.setHeader('X-Checksum-SHA256', doc.checksumSha256);
       res.send(content);

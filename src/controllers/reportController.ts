@@ -7,7 +7,7 @@ import {
 } from '../reports/reportService';
 import type { ReportFormat, ReportRecord, ReportType } from '../reports/reportService';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isUuid(value: string | undefined): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
@@ -95,13 +95,12 @@ export class ReportController {
         throw Object.assign(new Error('id must be a valid UUID'), { statusCode: 400 });
       }
 
-      const { record, content, mimeType } = await this.service.readReport(id);
+      const { record, content } = await this.service.readReport(id);
       const ext = record.format === 'excel' ? 'xlsx' : record.format;
       const scanId = typeof record.parameters.scanId === 'string' ? record.parameters.scanId : record.id;
       const filename = `report-${scanId}-${record.reportType}.${ext}`;
 
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.attachment(filename);
       res.setHeader('Content-Length', content.length);
       if (record.checksumSha256) {
         res.setHeader('X-Checksum-SHA256', record.checksumSha256);

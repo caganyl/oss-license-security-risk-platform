@@ -90,6 +90,37 @@ export class SbomController {
       handleError(err, res, next);
     }
   };
+
+  downloadDirect = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { scanId } = req.params;
+      if (!isUuid(scanId)) {
+        throw Object.assign(new Error('scanId must be a valid UUID'), { statusCode: 400 });
+      }
+
+      const existing = await this.service.listByScan(scanId);
+      const cyclonedx = existing.find(d => d.format === 'cyclonedx_json');
+
+      let doc;
+      if (cyclonedx) {
+        doc = cyclonedx;
+      } else {
+        doc = await this.service.generate(scanId, 'cyclonedx_json', req.user?.id);
+      }
+
+      const { content, mimeType } = await this.service.readDocument(doc.id);
+      const ext = doc.storageKey.split('.').pop() ?? 'bin';
+      const filename = `sbom-${scanId}-${doc.format}.${ext}`;
+
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', content.length);
+      res.setHeader('X-Checksum-SHA256', doc.checksumSha256);
+      res.send(content);
+    } catch (err) {
+      handleError(err, res, next);
+    }
+  };
 }
 
 function toResponse(doc: SbomDocumentRecord) {

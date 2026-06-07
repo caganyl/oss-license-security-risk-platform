@@ -645,7 +645,7 @@
         return `<div class="progress-bar-container" style="width:80px;"><div class="progress-bar" style="width: ${row.status==='running'?'65':'15'}%;"></div></div>`;
       }
       if (row.status === 'completed') {
-        return `<button class="btn btn-sm" onclick="downloadCycloneDxSbom('${row.id}')"><i data-lucide="download"></i> SBOM</button>`;
+        return `<a class="btn btn-sm" href="/api/scans/${row.id}/sbom/download" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;"><i data-lucide="download" style="width:12px;height:12px;"></i> SBOM</a>`;
       }
       return `<span style="color: var(--text-muted); font-size:0.8rem;">—</span>`;
     }
@@ -1121,9 +1121,9 @@
             <td style="color:var(--text-muted); font-size:0.85rem;">${new Date(doc.generatedAt).toLocaleString()}</td>
             <td style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${doc.checksumSha256.slice(0, 16)}...</td>
             <td>
-              <button class="btn btn-sm" onclick="downloadDoc('${doc.id}')">
-                <i data-lucide="download"></i> Download
-              </button>
+              <a class="btn btn-sm" href="/api/sbom/${doc.id}/download" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;">
+                <i data-lucide="download" style="width:12px;height:12px;"></i> Download
+              </a>
             </td>
           `;
           tbody.appendChild(tr);

@@ -22,6 +22,7 @@ export function createSbomRouter(db: Pool): Router {
   router.post('/scans/:scanId/sbom', guard('sbom:generate'), controller.generate);
   router.get('/scans/:scanId/sbom',  guard('sbom:read'),     controller.list);
   router.get('/sbom/:id/download',   guard('sbom:read'),     controller.download);
+  router.get('/scans/:scanId/sbom/download', guard('sbom:read'), controller.downloadDirect);
 
   return router;
 }

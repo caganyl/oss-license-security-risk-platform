@@ -111,6 +111,7 @@
       color: var(--text-muted); border: 1px solid var(--card-border);
     }
     .btn-ghost:hover { background: rgba(255,255,255,0.12); box-shadow: none; color: var(--text-main); }
+    .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.78rem; border-radius: 8px; }
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
     .stat-card {
       background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px;
@@ -190,23 +191,28 @@
     .form-control:focus { outline: none; border-color: var(--primary); }
     .form-control option { background: #1e293b; }
     .form-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
-    /* Findings panel */
-    .findings-panel { display: none; margin-top: 1rem; }
-    .findings-panel.open { display: block; }
+    /* Findings style */
     .finding-item {
-      display: flex; align-items: flex-start; gap: 1rem; padding: 1rem;
-      border-radius: 12px; background: rgba(0,0,0,0.2); margin-bottom: 0.75rem;
+      display: flex; align-items: flex-start; gap: 1rem; padding: 1.25rem;
+      border-radius: 16px; background: rgba(0, 0, 0, 0.15); margin-bottom: 1rem;
+      border: 1px solid var(--card-border); transition: transform 0.2s;
     }
-    .finding-icon { flex-shrink: 0; padding: 0.4rem; border-radius: 8px; }
-    .finding-info h4 { font-weight: 600; margin-bottom: 0.2rem; font-size: 0.9rem; }
-    .finding-info p { font-size: 0.8rem; color: var(--text-muted); }
-    .tag { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.7rem; font-weight: 600; margin-left: 0.35rem; }
-    .tag-vuln { background: rgba(239,68,68,0.15); color: #ef4444; }
-    .tag-license { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .finding-item:hover { transform: translateX(4px); }
+    .finding-icon { flex-shrink: 0; padding: 0.6rem; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+    .finding-info { flex: 1; }
+    .finding-title-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .finding-title { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+    .finding-meta { display: flex; gap: 1.5rem; font-size: 0.825rem; color: var(--text-muted); flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .finding-description { font-size: 0.875rem; line-height: 1.5; color: #cbd5e1; }
+    .tag { display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; gap: 0.25rem; }
+    .tag-critical { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .tag-high { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .tag-medium { background: rgba(139,92,246,0.15); color: var(--scanning); }
+    .tag-low { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+    .tag-violation { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .capsule { display: inline-block; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.06); border-radius: 6px; font-size: 0.75rem; font-weight: 500; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .spin { animation: spin 1.5s linear infinite; }
-    .refresh-btn { cursor: pointer; transition: transform 0.3s; }
-    .refresh-btn:hover { transform: rotate(90deg); }
     /* Notification toast */
     #toast {
       position: fixed; bottom: 2rem; right: 2rem; background: #1e293b;
@@ -262,70 +268,250 @@
         </div>
       </header>
 
-      <!-- Stats -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(139,92,246,0.15); color: #8b5cf6;"><i data-lucide="folder-git-2"></i></div>
-          <div class="stat-info">
-            <div class="stat-value" id="stat-projects">—</div>
-            <div class="stat-label">Active Projects</div>
+      <!-- View: Dashboard -->
+      <div id="view-dashboard" class="view-section">
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(139,92,246,0.15); color: #8b5cf6;"><i data-lucide="folder-git-2"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-projects">—</div>
+              <div class="stat-label">Active Projects</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #10b981;"><i data-lucide="package-search"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-packages">—</div>
+              <div class="stat-label">Packages Monitored</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b;"><i data-lucide="scale"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-license-alerts">—</div>
+              <div class="stat-label">License Alerts</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #ef4444;"><i data-lucide="bug"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-critical-cves">—</div>
+              <div class="stat-label">Critical CVEs</div>
+            </div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #10b981;"><i data-lucide="package-search"></i></div>
-          <div class="stat-info">
-            <div class="stat-value" id="stat-packages">—</div>
-            <div class="stat-label">Packages Monitored</div>
+
+        <!-- Scans Table -->
+        <div class="content-card" style="margin-top: 2rem;">
+          <div class="card-header">
+            <h2 class="card-title">Recent Compliance Scans</h2>
+            <div class="card-actions">
+              <span id="last-updated" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+            </div>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b;"><i data-lucide="scale"></i></div>
-          <div class="stat-info">
-            <div class="stat-value" id="stat-license-alerts">—</div>
-            <div class="stat-label">License Alerts</div>
+          <div id="table-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading scans...</p>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #ef4444;"><i data-lucide="bug"></i></div>
-          <div class="stat-info">
-            <div class="stat-value" id="stat-critical-cves">—</div>
-            <div class="stat-label">Critical CVEs</div>
+          <div id="table-container" style="display:none;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Packages</th>
+                  <th>License Risk</th>
+                  <th>Security Level</th>
+                  <th>Triggered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scans-tbody"></tbody>
+            </table>
+          </div>
+          <div id="table-empty" class="empty-state" style="display:none;">
+            <i data-lucide="scan" style="display:block; margin: 0 auto 1rem;"></i>
+            <p>No scans yet</p>
+            <small>Create a project and trigger a scan to get started.</small>
           </div>
         </div>
       </div>
 
-      <!-- Scans Table -->
-      <div class="content-card">
-        <div class="card-header">
-          <h2 class="card-title">Recent Compliance Scans</h2>
-          <div class="card-actions">
-            <span id="last-updated" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+      <!-- View: Scan History -->
+      <div id="view-scans" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">All Tarama Kayıtları</h2>
+          </div>
+          <div id="scans-list-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading scan history...</p>
+          </div>
+          <div id="scans-list-container" style="display: none;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Packages</th>
+                  <th>License Risks</th>
+                  <th>Security level</th>
+                  <th>Trigger type</th>
+                  <th>Triggered Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scans-list-tbody"></tbody>
+            </table>
           </div>
         </div>
-        <div id="table-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
-          <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-          <p>Loading scans...</p>
+      </div>
+
+      <!-- View: Vulnerabilities -->
+      <div id="view-findings" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
+            <h2 class="card-title">Vulnerability and Policy Registry</h2>
+            <div class="card-actions">
+              <label for="findings-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
+              <select id="findings-scan-select" class="form-control" style="width: 320px;" onchange="loadScanFindings()"></select>
+            </div>
+          </div>
+          <div id="findings-loading" style="display: none; text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading findings...</p>
+          </div>
+          <div id="findings-container">
+            <div class="empty-state">
+              <i data-lucide="alert-triangle" style="display:block; margin:0 auto 1rem;"></i>
+              <p>No scan selected</p>
+              <small>Select a completed scan above to view its dependency findings.</small>
+            </div>
+          </div>
         </div>
-        <div id="table-container" style="display:none;">
-          <table>
-            <thead>
-              <tr>
-                <th>Project</th>
-                <th>Status</th>
-                <th>Packages</th>
-                <th>License Risk</th>
-                <th>Security Level</th>
-                <th>Triggered</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="scans-tbody"></tbody>
-          </table>
+      </div>
+
+      <!-- View: Projects -->
+      <div id="view-projects" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">Monitored Codebases</h2>
+            <button class="btn btn-sm" onclick="openModal()"><i data-lucide="plus"></i> Add Project</button>
+          </div>
+          <div id="projects-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading projects...</p>
+          </div>
+          <div id="projects-container" style="display: none;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project Name</th>
+                  <th>Criticality</th>
+                  <th>Local Path / Repository</th>
+                  <th>Ecosystems</th>
+                  <th>Registered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="projects-list-tbody"></tbody>
+            </table>
+          </div>
         </div>
-        <div id="table-empty" class="empty-state" style="display:none;">
-          <i data-lucide="scan" style="display:block; margin: 0 auto 1rem;"></i>
-          <p>No scans yet</p>
-          <small>Create a project and trigger a scan to get started.</small>
+      </div>
+
+      <!-- View: SBOM Center -->
+      <div id="view-sbom" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
+            <h2 class="card-title">SBOM Center</h2>
+            <div class="card-actions">
+              <label for="sbom-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
+              <select id="sbom-scan-select" class="form-control" style="width: 320px;" onchange="loadScanSboms()"></select>
+            </div>
+          </div>
+
+          <div id="sbom-loading" style="display: none; text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading SBOM data...</p>
+          </div>
+
+          <div id="sbom-manager-container" style="display: none; margin-top: 1rem;">
+            <!-- Generator card -->
+            <div style="background: rgba(0,0,0,0.18); padding: 1.5rem; border-radius: 18px; margin-bottom: 2rem; border: 1px solid var(--card-border);">
+              <h3 style="font-size: 1rem; margin-bottom: 0.8rem; font-family: var(--font-display); font-weight:600;">Generate Compliance SBOM</h3>
+              <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 240px;">
+                  <label style="display:block; color:var(--text-muted); font-size:0.8rem; margin-bottom:0.4rem;">Specification Standard &amp; Format</label>
+                  <select id="sbom-format-select" class="form-control">
+                    <option value="cyclonedx_json">CycloneDX 1.5 (JSON)</option>
+                    <option value="cyclonedx_xml">CycloneDX 1.5 (XML)</option>
+                    <option value="spdx_json">SPDX 2.3 (JSON)</option>
+                    <option value="spdx_tag_value">SPDX 2.3 (Tag-Value)</option>
+                  </select>
+                </div>
+                <button class="btn" id="generate-sbom-btn" onclick="generateNewSbom()">
+                  <i data-lucide="plus"></i> Generate Document
+                </button>
+              </div>
+            </div>
+
+            <!-- Documents Table -->
+            <h3 style="font-size: 1.1rem; margin-bottom: 1rem; font-family: var(--font-display); font-weight:600;">Generated Documents</h3>
+            <div id="sbom-table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Format</th>
+                    <th>Spec Version</th>
+                    <th>File Size</th>
+                    <th>Generated At</th>
+                    <th>SHA-256 Checksum</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="sbom-documents-tbody"></tbody>
+              </table>
+            </div>
+            <div id="sbom-docs-empty" class="empty-state" style="display: none; padding: 2rem;">
+              <p>No SBOM documents generated for this scan yet.</p>
+              <small>Choose a format above and click "Generate".</small>
+            </div>
+          </div>
+
+          <div id="sbom-empty-state" class="empty-state">
+            <i data-lucide="scroll" style="display:block; margin: 0 auto 1rem;"></i>
+            <p>No scan selected</p>
+            <small>Select a completed scan above to view or generate SBOM documents.</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- View: Users -->
+      <div id="view-users" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">System User Management</h2>
+          </div>
+          <div id="users-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+            <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+            <p>Loading users...</p>
+          </div>
+          <div id="users-container" style="display: none;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Display Name</th>
+                  <th>Email Address</th>
+                  <th>Assigned Roles</th>
+                  <th>Account Status</th>
+                  <th>Created At</th>
+                </tr>
+              </thead>
+              <tbody id="users-list-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </main>
@@ -372,10 +558,11 @@
   <script>
     lucide.createIcons();
 
-    // ── Polling state
-    const pollingScans = new Set(); // scanIds currently being polled
+    // ── Global states
+    const pollingScans = new Set();
+    let currentActiveView = 'dashboard';
 
-    // ── Toast
+    // ── Toast notifier
     function showToast(msg, type = 'success') {
       const t = document.getElementById('toast');
       const icon = document.getElementById('toast-icon');
@@ -386,7 +573,7 @@
       setTimeout(() => { t.className = ''; }, 3500);
     }
 
-    // ── Health check
+    // ── Health checker
     async function checkHealth() {
       try {
         const r = await fetch('/health');
@@ -407,7 +594,7 @@
       }
     }
 
-    // ── Format helpers
+    // ── Formatter helpers
     function timeAgo(iso) {
       if (!iso) return '—';
       const diff = Date.now() - new Date(iso).getTime();
@@ -419,12 +606,20 @@
       return `${Math.floor(hrs / 24)}d ago`;
     }
 
+    function formatBytes(bytes) {
+      if (!bytes) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
     function securityLabel(row) {
       if (!row.total_vulnerabilities) return '<span style="color: var(--success);">✓ Clean</span>';
       const parts = [];
       if (row.critical_vulns) parts.push(`<span style="color: var(--danger);">${row.critical_vulns} Critical</span>`);
       if (row.high_vulns) parts.push(`<span style="color: var(--warning);">${row.high_vulns} High</span>`);
-      if (!parts.length) parts.push(`<span style="color: var(--text-muted);">${row.total_vulnerabilities} Medium/Low</span>`);
+      if (!parts.length) parts.push(`<span style="color: var(--text-muted);">${row.total_vulnerabilities} Med/Low</span>`);
       return parts.join(' / ');
     }
 
@@ -450,14 +645,40 @@
         return `<div class="progress-bar-container" style="width:80px;"><div class="progress-bar" style="width: ${row.status==='running'?'65':'15'}%;"></div></div>`;
       }
       if (row.status === 'completed') {
-        return `<button class="btn" style="padding:0.4rem 0.75rem;font-size:0.78rem;" onclick="downloadSbom('${row.id}')">
-          <i data-lucide="download"></i> SBOM
-        </button>`;
+        return `<button class="btn btn-sm" onclick="downloadCycloneDxSbom('${row.id}')"><i data-lucide="download"></i> SBOM</button>`;
       }
       return `<span style="color: var(--text-muted); font-size:0.8rem;">—</span>`;
     }
 
-    // ── Render scan row
+    // ── Direct Download helper (failsafe)
+    function downloadDoc(docId) {
+      window.location.href = `/api/sbom/${docId}/download`;
+    }
+
+    // ── Generate and download CycloneDX JSON (default fast download)
+    async function downloadCycloneDxSbom(scanId) {
+      showToast('Generating CycloneDX JSON SBOM...', 'success');
+      try {
+        const r = await fetch(`/api/scans/${scanId}/sbom`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'cyclonedx_json' })
+        });
+        if (!r.ok) {
+          const err = await r.json();
+          showToast(err.message || 'Generation failed', 'error');
+          return;
+        }
+        const { data } = await r.json();
+        // Redirect directly to triggering download
+        downloadDoc(data.id);
+        showToast('SBOM downloaded successfully!');
+      } catch (e) {
+        showToast('Failed to trigger SBOM download', 'error');
+      }
+    }
+
+    // ── Render standard scan rows
     function renderScanRow(row) {
       const tr = document.createElement('tr');
       tr.className = 'scan-row';
@@ -474,7 +695,7 @@
       return tr;
     }
 
-    // ── Poll a scan until terminal state
+    // ── Poll individual scan details until completed/failed
     function pollScanUntilDone(scanId) {
       if (pollingScans.has(scanId)) return;
       pollingScans.add(scanId);
@@ -483,25 +704,32 @@
         try {
           const r = await fetch(`/api/scans/${scanId}`);
           const { data } = await r.json();
-          const existingRow = document.getElementById(`scan-row-${scanId}`);
-          const newRow = renderScanRow(data);
-          lucide.createIcons();
 
-          if (existingRow) {
-            existingRow.replaceWith(newRow);
+          // Update scan row in main dashboard if visible
+          const rowDashboard = document.getElementById(`scan-row-${scanId}`);
+          if (rowDashboard) {
+            rowDashboard.replaceWith(renderScanRow(data));
           }
+
+          // Update scan row in Scan History list if visible
+          const rowHistory = document.getElementById(`history-row-${scanId}`);
+          if (rowHistory) {
+            rowHistory.replaceWith(renderHistoryRow(data));
+          }
+
           lucide.createIcons();
 
           if (!['pending','queued','running'].includes(data.status)) {
             clearInterval(interval);
             pollingScans.delete(scanId);
             if (data.status === 'completed') {
-              showToast(`Scan for ${data.project_name} completed! ${data.total_dependencies} packages analysed.`);
+              showToast(`Scan for "${data.project_name}" completed!`);
             } else if (data.status === 'failed') {
-              showToast(`Scan for ${data.project_name} failed.`, 'error');
+              showToast(`Scan for "${data.project_name}" failed!`, 'error');
             }
-            // Refresh stats
-            updateStats();
+            if (currentActiveView === 'dashboard') {
+              updateStats();
+            }
           }
         } catch (e) {
           clearInterval(interval);
@@ -510,7 +738,7 @@
       }, 2000);
     }
 
-    // ── Load scans from API
+    // ── Load Dashboard Scans (Recent)
     async function loadScans() {
       const loading = document.getElementById('table-loading');
       const container = document.getElementById('table-container');
@@ -534,9 +762,10 @@
         }
 
         container.style.display = 'block';
-        for (const scan of data) {
+        // Display top 10 recent scans on dashboard
+        const dashboardScans = data.slice(0, 10);
+        for (const scan of dashboardScans) {
           tbody.appendChild(renderScanRow(scan));
-          // Start polling for in-progress scans
           if (['pending','queued','running'].includes(scan.status)) {
             pollScanUntilDone(scan.id);
           }
@@ -548,20 +777,16 @@
       } catch (e) {
         loading.style.display = 'none';
         empty.style.display = 'block';
-        empty.querySelector('p').textContent = 'Failed to load scan data';
-        empty.querySelector('small').textContent = 'Backend may be offline. Check the server.';
       }
     }
 
-    // ── Update stats
+    // ── Update Dashboard statistics counters
     async function updateStats() {
       try {
-        // Projects count
         const projR = await fetch('/api/projects');
         const projData = await projR.json();
         document.getElementById('stat-projects').textContent = projData.data?.length ?? '0';
 
-        // Aggregate from scans
         const scanR = await fetch('/api/scans');
         const scanData = await scanR.json();
         const scans = (scanData.data || []).filter(s => s.status === 'completed');
@@ -594,37 +819,394 @@
       requestAnimationFrame(step);
     }
 
-    // ── SBOM download
-    async function downloadSbom(scanId) {
-      showToast('Generating CycloneDX SBOM...', 'success');
+    // ── Load Scan History Tab
+    function renderHistoryRow(row) {
+      const tr = document.createElement('tr');
+      tr.className = 'scan-row';
+      tr.id = `history-row-${row.id}`;
+      tr.innerHTML = `
+        <td><strong>${row.project_name || '—'}</strong><br><small style="color:var(--text-muted);">${row.ref || 'main'}</small></td>
+        <td>${statusBadge(row.status)}</td>
+        <td>${row.total_dependencies ? row.total_dependencies.toLocaleString() : '—'}</td>
+        <td>${licenseLabel(row)}</td>
+        <td>${securityLabel(row)}</td>
+        <td style="text-transform: capitalize;"><span class="capsule">${row.trigger || 'manual'}</span></td>
+        <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(row.completed_at || row.started_at || row.queued_at)}</td>
+        <td>${scanActions(row)}</td>
+      `;
+      return tr;
+    }
+
+    async function loadAllScansHistory() {
+      const loading = document.getElementById('scans-list-loading');
+      const container = document.getElementById('scans-list-container');
+      const tbody = document.getElementById('scans-list-tbody');
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+
+      try {
+        const r = await fetch('/api/scans');
+        const { data } = await r.json();
+
+        loading.style.display = 'none';
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No scans registered</td></tr>';
+          container.style.display = 'block';
+          return;
+        }
+
+        container.style.display = 'block';
+        for (const scan of data) {
+          tbody.appendChild(renderHistoryRow(scan));
+          if (['pending','queued','running'].includes(scan.status)) {
+            pollScanUntilDone(scan.id);
+          }
+        }
+        lucide.createIcons();
+      } catch (e) {
+        loading.style.display = 'none';
+      }
+    }
+
+    // ── Load Projects Tab
+    async function loadProjectsList() {
+      const loading = document.getElementById('projects-loading');
+      const container = document.getElementById('projects-container');
+      const tbody = document.getElementById('projects-list-tbody');
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+
+      try {
+        const r = await fetch('/api/projects');
+        const { data } = await r.json();
+
+        loading.style.display = 'none';
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No projects registered</td></tr>';
+          container.style.display = 'block';
+          return;
+        }
+
+        container.style.display = 'block';
+        for (const p of data) {
+          const tr = document.createElement('tr');
+          const ecosystemsHtml = (p.ecosystems || []).map(e => `<span class="capsule" style="margin-right:0.25rem;">${e}</span>`).join('');
+          
+          let critStyle = 'color: var(--success); background: rgba(16,185,129,0.1);';
+          if (p.criticality === 'high' || p.criticality === 'critical') {
+            critStyle = 'color: var(--danger); background: rgba(239,68,68,0.1);';
+          } else if (p.criticality === 'medium') {
+            critStyle = 'color: var(--warning); background: rgba(245,158,11,0.1);';
+          }
+
+          tr.innerHTML = `
+            <td><strong>${p.name}</strong></td>
+            <td><span class="status-badge" style="${critStyle}">${p.criticality}</span></td>
+            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${p.repo_url || '—'}</td>
+            <td>${ecosystemsHtml || '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(p.created_at)}</td>
+            <td>
+              <button class="btn btn-sm" onclick="triggerManualScan('${p.id}', '${p.name}')">
+                <i data-lucide="play" style="width:12px;height:12px;"></i> Scan Now
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+        lucide.createIcons();
+      } catch (e) {
+        loading.style.display = 'none';
+      }
+    }
+
+    async function triggerManualScan(projectId, name) {
+      showToast(`Scheduling scan for "${name}"...`, 'success');
+      try {
+        const r = await fetch('/api/scans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, trigger: 'manual' })
+        });
+        if (!r.ok) {
+          const err = await r.json();
+          throw new Error(err.message || 'Scan trigger failed');
+        }
+        showToast('Scan queued successfully!');
+        // Return to main dashboard view to display scanning progress
+        document.querySelector('#sidebar-nav button[data-view="dashboard"]').click();
+      } catch (e) {
+        showToast(e.message || 'Failed to trigger scan', 'error');
+      }
+    }
+
+    // ── Dropdowns Populator for Scans (Vulnerabilities and SBOM)
+    async function populateScansDropdown(selectId) {
+      const select = document.getElementById(selectId);
+      select.innerHTML = '<option value="">Loading completed scans...</option>';
+
+      try {
+        const r = await fetch('/api/scans');
+        const { data } = await r.json();
+        
+        // Filter to completed scans only
+        const completed = (data || []).filter(s => s.status === 'completed');
+        select.innerHTML = '';
+
+        if (completed.length === 0) {
+          select.innerHTML = '<option value="">No completed scans found</option>';
+          return;
+        }
+
+        for (const scan of completed) {
+          const opt = document.createElement('option');
+          opt.value = scan.id;
+          opt.textContent = `${scan.project_name} - ${scan.ref} (${new Date(scan.completed_at).toLocaleString()})`;
+          select.appendChild(opt);
+        }
+
+        // Trigger dynamic view loader for first index if any
+        select.dispatchEvent(new Event('change'));
+      } catch (e) {
+        select.innerHTML = '<option value="">Failed to fetch scans</option>';
+      }
+    }
+
+    // ── Load Vulnerabilities Tab
+    async function loadScanFindings() {
+      const scanId = document.getElementById('findings-scan-select').value;
+      const container = document.getElementById('findings-container');
+      const loading = document.getElementById('findings-loading');
+
+      if (!scanId) {
+        container.innerHTML = '<div class="empty-state"><i data-lucide="alert-triangle"></i><p>No scan selected</p><small>Select a completed scan above to view its findings.</small></div>';
+        lucide.createIcons();
+        return;
+      }
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+
+      try {
+        const r = await fetch(`/api/scans/${scanId}/findings`);
+        const { data } = await r.json();
+
+        loading.style.display = 'none';
+        container.style.display = 'block';
+
+        if (!data || data.length === 0) {
+          container.innerHTML = '<div class="empty-state"><i data-lucide="shield-check" style="color:var(--success);"></i><p>Compliance Clean!</p><small>No vulnerabilities or license risks were found for this scan.</small></div>';
+          lucide.createIcons();
+          return;
+        }
+
+        container.innerHTML = '';
+        for (const f of data) {
+          const item = document.createElement('div');
+          item.className = 'finding-item';
+
+          let icon = 'bug';
+          let iconColor = '#ef4444';
+          let iconBg = 'rgba(239,68,68,0.15)';
+          let badgeHtml = '';
+
+          if (f.finding_type === 'security') {
+            const sev = (f.severity || 'medium').toLowerCase();
+            badgeHtml = `<span class="tag tag-${sev}">${f.severity}</span> <span class="tag tag-${sev}">CVSS ${f.cvss_score || '—'}</span>`;
+            if (f.cve_id) badgeHtml += ` <span class="capsule">${f.cve_id}</span>`;
+            
+            icon = 'shield-alert';
+            if (sev === 'critical' || sev === 'high') {
+              iconColor = 'var(--danger)';
+              iconBg = 'rgba(239,68,68,0.15)';
+            } else if (sev === 'medium') {
+              iconColor = 'var(--warning)';
+              iconBg = 'rgba(245,158,11,0.15)';
+            } else {
+              iconColor = 'var(--text-muted)';
+              iconBg = 'rgba(255,255,255,0.06)';
+            }
+          } else {
+            icon = 'scale';
+            iconColor = 'var(--warning)';
+            iconBg = 'rgba(245,158,11,0.15)';
+            const risk = (f.risk_level || 'medium').toLowerCase();
+            badgeHtml = `<span class="tag tag-violation">License Alert</span> <span class="tag tag-${risk}">${risk} risk</span>`;
+            if (f.detected_license) badgeHtml += ` <span class="capsule">${f.detected_license}</span>`;
+          }
+
+          const upgradeText = f.fix_version ? `<div style="margin-top:0.4rem; font-size:0.8rem; color:var(--success);">Fixed in: <strong>${f.fix_version}</strong></div>` : '';
+
+          item.innerHTML = `
+            <div class="finding-icon" style="background: ${iconBg}; color: ${iconColor};">
+              <i data-lucide="${icon}"></i>
+            </div>
+            <div class="finding-info">
+              <div class="finding-title-row">
+                <h4 class="finding-title">${f.vuln_title || f.normalized_license || 'Unknown Policy Risk'}</h4>
+                <div>${badgeHtml}</div>
+              </div>
+              <div class="finding-meta">
+                <span>Package: <strong>${f.package_name}@${f.package_version}</strong></span>
+                <span>Type: <span class="capsule" style="text-transform: capitalize;">${f.finding_type}</span></span>
+                <span>Status: <span class="capsule" style="color:var(--danger);">${f.status}</span></span>
+              </div>
+              <p class="finding-description">${f.vuln_description || `Package "${f.package_name}" is using license "${f.detected_license}" which triggers risk constraints under active policy "${f.applied_policy || 'Default prohibited list'}".`}</p>
+              ${upgradeText}
+            </div>
+          `;
+          container.appendChild(item);
+        }
+        lucide.createIcons();
+      } catch (e) {
+        loading.style.display = 'none';
+        container.innerHTML = '<div class="empty-state"><p>Error loading findings</p></div>';
+      }
+    }
+
+    // ── Load SBOM Tab
+    async function loadScanSboms() {
+      const scanId = document.getElementById('sbom-scan-select').value;
+      const container = document.getElementById('sbom-manager-container');
+      const empty = document.getElementById('sbom-empty-state');
+      const loading = document.getElementById('sbom-loading');
+      const tbody = document.getElementById('sbom-documents-tbody');
+      const tableEmpty = document.getElementById('sbom-docs-empty');
+      const tableWrapper = document.getElementById('sbom-table-wrapper');
+
+      if (!scanId) {
+        container.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+      empty.style.display = 'none';
+
+      try {
+        const r = await fetch(`/api/scans/${scanId}/sbom`);
+        const { data } = await r.json();
+
+        loading.style.display = 'none';
+        container.style.display = 'block';
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tableEmpty.style.display = 'block';
+          tableWrapper.style.display = 'none';
+          return;
+        }
+
+        tableEmpty.style.display = 'none';
+        tableWrapper.style.display = 'block';
+
+        for (const doc of data) {
+          const tr = document.createElement('tr');
+          let formatLabel = doc.format;
+          if (doc.format === 'cyclonedx_json') formatLabel = 'CycloneDX (JSON)';
+          else if (doc.format === 'cyclonedx_xml') formatLabel = 'CycloneDX (XML)';
+          else if (doc.format === 'spdx_json') formatLabel = 'SPDX (JSON)';
+          else if (doc.format === 'spdx_tag_value') formatLabel = 'SPDX (Tag-Value)';
+
+          tr.innerHTML = `
+            <td><strong>${formatLabel}</strong></td>
+            <td><span class="capsule">${doc.specVersion}</span></td>
+            <td>${formatBytes(doc.fileSizeBytes)}</td>
+            <td style="color:var(--text-muted); font-size:0.85rem;">${new Date(doc.generatedAt).toLocaleString()}</td>
+            <td style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${doc.checksumSha256.slice(0, 16)}...</td>
+            <td>
+              <button class="btn btn-sm" onclick="downloadDoc('${doc.id}')">
+                <i data-lucide="download"></i> Download
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+        lucide.createIcons();
+      } catch (e) {
+        loading.style.display = 'none';
+      }
+    }
+
+    async function generateNewSbom() {
+      const scanId = document.getElementById('sbom-scan-select').value;
+      const format = document.getElementById('sbom-format-select').value;
+      const genBtn = document.getElementById('generate-sbom-btn');
+
+      if (!scanId) return;
+
+      genBtn.disabled = true;
+      genBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Generating...';
+      lucide.createIcons();
+
       try {
         const r = await fetch(`/api/scans/${scanId}/sbom`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'cyclonedx_json' })
+          body: JSON.stringify({ format })
         });
         if (!r.ok) {
           const err = await r.json();
-          showToast(err.message || 'SBOM generation failed', 'error');
-          return;
+          throw new Error(err.message || 'Generation failed');
         }
-        const { data } = await r.json();
-        // Download the file
-        const dlR = await fetch(`/api/sbom/${data.id}/download`);
-        const blob = await dlR.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `sbom-${scanId}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('SBOM downloaded!');
+        showToast('SBOM document generated successfully!');
+        await loadScanSboms();
       } catch (e) {
-        showToast('Failed to generate SBOM', 'error');
+        showToast(e.message || 'Failed to generate SBOM', 'error');
+      } finally {
+        genBtn.disabled = false;
+        genBtn.innerHTML = '<i data-lucide="plus"></i> Generate Document';
+        lucide.createIcons();
       }
     }
 
-    // ── Modal
+    // ── Load Users & Roles Tab
+    async function loadUsersList() {
+      const loading = document.getElementById('users-loading');
+      const container = document.getElementById('users-container');
+      const tbody = document.getElementById('users-list-tbody');
+
+      loading.style.display = 'block';
+      container.style.display = 'none';
+
+      try {
+        const r = await fetch('/api/users');
+        const { data } = await r.json();
+
+        loading.style.display = 'none';
+        container.style.display = 'block';
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No users registered</td></tr>';
+          return;
+        }
+
+        for (const u of data) {
+          const tr = document.createElement('tr');
+          const rolesHtml = (u.roles || []).map(role => `<span class="capsule" style="background:rgba(139,92,246,0.1); color:var(--primary); font-weight:600; text-transform:capitalize;">${role}</span>`).join('');
+          
+          tr.innerHTML = `
+            <td><strong>${u.display_name || '—'}</strong></td>
+            <td><a href="mailto:${u.email}" style="color:var(--primary); text-decoration:none;">${u.email}</a></td>
+            <td>${rolesHtml}</td>
+            <td><span class="status-badge status-healthy" style="text-transform: capitalize;">${u.status || 'active'}</span></td>
+            <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(u.created_at)}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (e) {
+        loading.style.display = 'none';
+      }
+    }
+
+    // ── Modal Handlers
     function openModal() {
       document.getElementById('scanModal').classList.add('open');
     }
@@ -637,7 +1219,7 @@
       if (e.target === e.currentTarget) closeModal();
     });
 
-    // ── Launch scan
+    // ── Launch Scan modal submission
     async function launchScan() {
       const name = document.getElementById('projectName').value.trim();
       const repoPath = document.getElementById('repoPath').value.trim();
@@ -680,20 +1262,8 @@
         closeModal();
         showToast(`Scan queued for "${name}". Results will appear shortly.`);
 
-        // 3. Insert pending row immediately
-        const tbody = document.getElementById('scans-tbody');
-        const container = document.getElementById('table-container');
-        const empty = document.getElementById('table-empty');
-        container.style.display = 'block';
-        empty.style.display = 'none';
-
-        const pendingRow = renderScanRow({ ...scan, project_name: name });
-        tbody.insertBefore(pendingRow, tbody.firstChild);
-        lucide.createIcons();
-
-        // 4. Poll for completion
-        pollScanUntilDone(scan.id);
-        updateStats();
+        // Force switch to Dashboard to view progress
+        document.querySelector('#sidebar-nav button[data-view="dashboard"]').click();
       } catch (e) {
         showToast(e.message || 'Launch failed', 'error');
       } finally {
@@ -703,15 +1273,82 @@
       }
     }
 
-    // ── Refresh all
+    // ── Sidebar view controller router
+    document.querySelectorAll('#sidebar-nav .nav-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('#sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const targetView = btn.getAttribute('data-view');
+        currentActiveView = targetView;
+
+        // Hide all view-section divs, show target
+        document.querySelectorAll('.view-section').forEach(sec => sec.style.display = 'none');
+        document.getElementById(`view-${targetView}`).style.display = 'block';
+
+        // Update headers & fetch corresponding view resources
+        const pageTitle = document.getElementById('page-title');
+        const pageSubtitle = document.getElementById('page-subtitle');
+        const headerActions = document.querySelector('.header-actions');
+
+        if (targetView === 'dashboard') {
+          pageTitle.textContent = 'OSS License & Security Dashboard';
+          pageSubtitle.textContent = 'Real-time open source package compliance metrics';
+          headerActions.style.display = 'flex';
+          loadScans();
+          updateStats();
+        } else if (targetView === 'scans') {
+          pageTitle.textContent = 'Scan History';
+          pageSubtitle.textContent = 'Historical log of compliance taramaları';
+          headerActions.style.display = 'none';
+          loadAllScansHistory();
+        } else if (targetView === 'findings') {
+          pageTitle.textContent = 'Vulnerabilities & Findings';
+          pageSubtitle.textContent = 'Security vulnerabilities and license policy alerts';
+          headerActions.style.display = 'none';
+          populateScansDropdown('findings-scan-select');
+        } else if (targetView === 'projects') {
+          pageTitle.textContent = 'Projects';
+          pageSubtitle.textContent = 'Manage registered local codebases and integration repositories';
+          headerActions.style.display = 'none';
+          loadProjectsList();
+        } else if (targetView === 'sbom') {
+          pageTitle.textContent = 'SBOM Center';
+          pageSubtitle.textContent = 'Software Bill of Materials (SBOM) generation and download registry';
+          headerActions.style.display = 'none';
+          populateScansDropdown('sbom-scan-select');
+        } else if (targetView === 'users') {
+          pageTitle.textContent = 'Users & Roles';
+          pageSubtitle.textContent = 'Access management and role-based permissions';
+          headerActions.style.display = 'none';
+          loadUsersList();
+        }
+      });
+    });
+
+    // ── Global refresher
     async function refreshAll() {
       const icon = document.getElementById('refresh-icon');
       icon.classList.add('spin');
-      await Promise.all([loadScans(), updateStats(), checkHealth()]);
+      
+      if (currentActiveView === 'dashboard') {
+        await Promise.all([loadScans(), updateStats(), checkHealth()]);
+      } else if (currentActiveView === 'scans') {
+        await Promise.all([loadAllScansHistory(), checkHealth()]);
+      } else if (currentActiveView === 'findings') {
+        await Promise.all([loadScanFindings(), checkHealth()]);
+      } else if (currentActiveView === 'projects') {
+        await Promise.all([loadProjectsList(), checkHealth()]);
+      } else if (currentActiveView === 'sbom') {
+        await Promise.all([loadScanSboms(), checkHealth()]);
+      } else if (currentActiveView === 'users') {
+        await Promise.all([loadUsersList(), checkHealth()]);
+      }
+      
       icon.classList.remove('spin');
     }
 
-    // ── Init
+    // ── Initialize App
     async function init() {
       await checkHealth();
       await loadScans();
@@ -720,10 +1357,12 @@
 
     init();
 
-    // Auto-refresh every 30 seconds
+    // Auto-refresh stats/scans every 30 seconds
     setInterval(async () => {
-      await loadScans();
-      await updateStats();
+      if (currentActiveView === 'dashboard') {
+        await loadScans();
+        await updateStats();
+      }
     }, 30000);
   </script>
 </body>

@@ -178,7 +178,7 @@ export class ScanWorker {
         WHERE s.status IN ('pending', 'queued') AND s.retry_count < $1
         ORDER BY s.created_at ASC
         LIMIT 1
-        FOR UPDATE SKIP LOCKED
+        FOR UPDATE OF s SKIP LOCKED
         `,
         [maxAttempts]
       );
@@ -222,6 +222,101 @@ export class ScanWorker {
     }
   }
 
+  /**
+   * Detect if Docker is available on this host.
+   */
+  private dockerAvailable(): Promise<boolean> {
+    return new Promise((resolve) => {
+      exec('docker info', (err) => resolve(!err));
+    });
+  }
+
+  /**
+   * Run scan using Python parser directly — no Docker required.
+   * Used when repoUrl is a local filesystem path or Docker is not available.
+   */
+  private async runLocalPythonScan(
+    scanId: string,
+    projectId: string,
+    workDir: string,
+    ecosystems: string[],
+    scanRow: any,
+    maxAttempts: number,
+    timeoutMs: number
+  ): Promise<void> {
+    const workerDir = __dirname; // e.g. /path/to/oss-license-security-risk-platform/dist/scanner
+    const projectRoot = require('path').resolve(workerDir, '../..');
+
+    const args = [
+      '-m', 'src.scanner.sandbox.parsers.scan',
+      '--scan-id', scanId,
+      '--work-dir', workDir,
+      '--ecosystems', ecosystems.join(','),
+    ];
+
+    console.log(`[LocalScanner] Running: python3 ${args.join(' ')} in ${projectRoot}`);
+
+    let stdoutData = '';
+    let stderrData = '';
+    const child = spawn('python3', args, {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        PYTHONPATH: projectRoot
+      }
+    });
+
+    child.stdout.on('data', (chunk) => { stdoutData += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderrData += chunk.toString(); });
+
+    const timeoutId = setTimeout(() => {
+      console.error(`[LocalScanner] Scan ${scanId} timed out after ${timeoutMs}ms.`);
+      child.kill('SIGKILL');
+    }, timeoutMs);
+
+    child.on('close', async (code) => {
+      clearTimeout(timeoutId);
+      this.activeScans--;
+
+      try {
+        if (child.killed) {
+          throw new Error(`Local scan timed out after ${timeoutMs / 60000} minutes.`);
+        }
+        if (code !== 0) {
+          throw new Error(`Python scanner exited with code ${code}.\nStderr: ${stderrData}`);
+        }
+
+        const lines = stdoutData.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        if (!lastLine) {
+          throw new Error('Python scanner produced no stdout output.');
+        }
+
+        let scanResult: SandboxScanResult;
+        try {
+          scanResult = JSON.parse(lastLine);
+        } catch (parseErr) {
+          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          throw new Error(`Failed to parse Python scanner output: ${msg}. Raw: ${lastLine.slice(0, 500)}`);
+        }
+
+        if (scanResult.status === 'failed') {
+          throw new Error('Python scanner reported inner parsing failure.');
+        }
+
+        console.log(`[LocalScanner] Scan ${scanId} completed. Saving ${scanResult.total_deps} deps to database...`);
+        await this.saveScanResults(scanId, projectId, scanResult);
+        console.log(`[LocalScanner] Scan ${scanId} results stored successfully.`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[LocalScanner] Scan ${scanId} failed:`, errMsg);
+        await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, stderrData);
+      }
+
+      this.schedulePoll(0);
+    });
+  }
+
   private async runScanJob(scanRow: any, timeoutMs: number, maxAttempts: number): Promise<void> {
     const scanId = scanRow.id;
     console.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
@@ -247,7 +342,19 @@ export class ScanWorker {
     const ref = scanRow.ref || scanRow.default_branch || 'main';
     const accessToken = decryptToken(scanRow.access_token_enc);
 
-    // Build Docker arguments
+    // -- Local fallback: skip Docker if repoUrl is a local path or Docker is unavailable
+    const fs = require('fs');
+    const isLocalPath = repoUrl && (repoUrl.startsWith('/') || repoUrl.startsWith('.'));
+    const localPathExists = isLocalPath ? fs.existsSync(repoUrl) : false;
+    const dockerOk = await this.dockerAvailable();
+
+    if (localPathExists || !dockerOk) {
+      const workDir = localPathExists ? repoUrl : '.';
+      console.log(`[LocalScanner] Using local Python fallback for scan ${scanId}. workDir=${workDir}`);
+      return this.runLocalPythonScan(scanId, scanRow.project_id, workDir, ecosystems, scanRow, maxAttempts, timeoutMs);
+    }
+
+    // -- Docker path
     const dockerArgs = ['run', ...buildDockerRunFlags(scanId, sandboxRunnerConfig)];
     dockerArgs.push('--env', `REPO_URL=${repoUrl}`);
     dockerArgs.push('--env', `REPO_REF=${ref}`);

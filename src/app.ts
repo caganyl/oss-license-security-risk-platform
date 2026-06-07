@@ -1,15 +1,24 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import pool from './lib/db';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
 import createReportRouter from './routes/reportRoutes';
 import createWorkflowRouter from './routes/workflowRoutes';
+import createProjectRouter from './routes/projectRoutes';
+import createScanRouter from './routes/scanRoutes';
 
 const app = express();
 const port = process.env.PORT || 3001;
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Root route to serve the dashboard
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
 // Mock Auth Middleware to populate req.user for easy testing/demo
 app.use((req, res, next) => {
@@ -28,6 +37,8 @@ app.use('/api/users', createUserRouter(pool));
 app.use('/api', createSbomRouter(pool));
 app.use('/api', createReportRouter(pool));
 app.use('/api/findings', createWorkflowRouter(pool));
+app.use('/api', createProjectRouter(pool));
+app.use('/api', createScanRouter(pool));
 
 // Base health route
 app.get('/health', async (req, res) => {

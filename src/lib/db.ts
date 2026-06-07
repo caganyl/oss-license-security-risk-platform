@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Pool } from 'pg';
 
 // Initialize connection pool from DATABASE_URL

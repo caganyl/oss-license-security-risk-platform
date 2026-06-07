@@ -647,3 +647,15 @@ INSERT INTO system_settings (key, value, description) VALUES
     ('sbom.default_format',         '"cyclonedx_json"', '"Default SBOM output format"'),
     ('report.async_threshold_rows', '10000',            '"Row count above which report generation runs asynchronously"')
 ON CONFLICT (key) DO NOTHING;
+
+-- =============================================================================
+-- SEED DATA: Mock Admin User
+-- =============================================================================
+
+INSERT INTO users (id, email, display_name, status)
+VALUES ('00000000-0000-0000-0000-000000000000', 'admin@company.com', 'Admin User', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT '00000000-0000-0000-0000-000000000000', id FROM roles WHERE name = 'admin'
+ON CONFLICT DO NOTHING;

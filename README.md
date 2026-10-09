@@ -47,7 +47,17 @@ Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olar
 2.  Veritabanını başlatın ve migration'ları uygulayın (`docker compose up -d db`, ardından `db/README.md`).
 3.  `npm install`, `npm run build`, `npm start`. `DATABASE_URL` tanımlı değilse API değerini yazmadan anlaşılır bir hatayla başlamaz.
 4.  Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
-5.  CLI/CI için arayüzden bir API anahtarı oluşturun ve isteklerde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Anahtar yalnız oluşturulduğu anda bir kez gösterilir; yeni anahtar öncekini iptal eder.
+5.  CLI/CI için API anahtarı, tarayıcıda giriş yaptıktan sonra API ile oluşturulur: `POST /api/auth/api-keys`. Bu uç nokta yalnız oturum çereziyle çalışır (Bearer ile `403 forbidden`) ve izin verilen bir `Origin` başlığı ister: `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>` veya `http://[::1]:<PORT>`. `Origin` yoksa ya da `null` ise istek `403 origin_rejected` alır; `Host` başlığı da aynı loopback adreslerinden biri olmalıdır (aksi halde `403 host_rejected`). Oturum çerezinin (`ossrisk_session`) değerini tarayıcının geliştirici araçlarından alın. İstek gövdesi isteğe bağlıdır ve yalnız en fazla 100 karakterlik bir `name` alanı alır:
+
+    ```bash
+    curl -X POST http://127.0.0.1:3001/api/auth/api-keys \
+      -H "Origin: http://127.0.0.1:3001" \
+      -H "Cookie: ossrisk_session=<tarayicidaki-oturum-cerezi>" \
+      -H "Content-Type: application/json" \
+      -d '{"name":"ci"}'
+    ```
+
+    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Anahtar yönetimi için arayüz ekranı F6'da gelecektir (D-22).
 
 **Tarama (Docker'sız, REQ-002 P-03/P-04)**
 

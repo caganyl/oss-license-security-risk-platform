@@ -3,7 +3,7 @@
 - **ADR-ID:** ADR-002
 - **Durum:** Accepted
 - **Tarih:** 2026-10-09 (taslak) · 2026-10-09 (karar)
-- **İlgili:** REQ-002 / P-03 (AC-P03-1…6), P-04 (AC-P04-1…6); rapor kararları K-4, K-3
+- **İlgili:** REQ-002 / P-03 (AC-P03-1…6), P-04 (AC-P04-1…6), P-09 (AC-P09-5, D-14); rapor kararları K-4, K-3
 
 ## Bağlam
 
@@ -13,8 +13,11 @@ olduğu için uzak repo verildiğinde ve Docker yoksa **platformun kendi klasör
 taranıp sonuç hedef projeye yazılıyor (kritik hata). Yerel yol algılaması yalnız
 `/` ve `.` önekine bakıyor (Windows sürücü yollarını tanımıyor) ve hiçbir kök
 sınırı yok. K-4: Docker yok, tek makine. Özel repo token'ı `integrations.access_token_enc`
-içinde; `decryptToken` anahtar yoksa düz metne düşüyor. Python ayrıştırıcıları F1'de
-yerinde kalır (TS taşıma F2/P-10).
+içinde (AES-256-GCM; tampon düzeni `IV(12) | tag(16) | ciphertext`). `decryptToken`
+üç durumda tamponu olduğu gibi metne çevirip **düz metin olarak döndürüyor**:
+(a) `ENCRYPTION_KEY` tanımsız, (b) şifre çözme başarısız (`catch` dalı),
+(c) tampon 28 bayttan kısa. Python ayrıştırıcıları F1'de yerinde kalır (TS taşıma
+F2/P-10).
 
 ## Karar
 
@@ -101,6 +104,32 @@ her biçim reddedilir (kayıtta `400`, worker'da `failed`):
 (varsayılan Windows'ta `python`, diğerlerinde `python3`). Davranış F2'de TS
 taşımasıyla (P-10, K-3) kalkar.
 
+### 6. Token çözme: düz metin geri dönüşü yok (AC-P09-5, REQ-002 D-14)
+
+- `decryptToken` (`src/scanner/worker.ts`) token'ı **hiçbir durumda düz metin geri
+  dönüşüyle** (tamponun olduğu gibi metne çevrilmesiyle) döndürmez. Çözülecek bir
+  token varken (boş olmayan `access_token_enc`) şu üç durumun **her birinde hata
+  fırlatır**:
+  - (a) `ENCRYPTION_KEY` tanımsız (veya boş);
+  - (b) şifre çözme başarısız — `catch` dalı (yanlış anahtar, bozulmuş/değiştirilmiş
+    veri, GCM doğrulama etiketi tutmuyor);
+  - (c) tampon 28 bayttan kısa (IV + doğrulama etiketi için yetersiz; ör. daha önce
+    şifresiz saklanmış bir token).
+- **Sonuç her üç durumda aynıdır:** tarama `failed` olur; token çözme clone'dan
+  **önce** yapılır, bu yüzden geçici klasör açılmaz ve `cloneRepo` çağrılmaz;
+  `saveScanResults` çağrılmaz. Hata deterministik olduğu için yeniden denenmez
+  (doğrulama hataları gibi).
+- **Sızıntı yok:** hata mesajı, `scans.error_message` ve log çıktısı token değerini,
+  tamponun metin/hex/base64 karşılığını veya ham kripto istisnasının ayrıntısını
+  içermez; yalnız sabit, durum belirten bir mesaj kullanılır (ör. "entegrasyon
+  token'ı çözülemedi: şifreleme anahtarı tanımsız" / "doğrulama başarısız" /
+  "geçersiz şifreli veri"). Entegrasyon kimliği gibi gizli olmayan bağlam eklenebilir.
+- **Token yoksa** (`access_token_enc` NULL veya boş) `decryptToken` hata fırlatmaz;
+  tarama token'sız devam eder (genel https repoları için).
+- Daha önce şifresiz saklanmış token'lar bu değişiklikten sonra kullanılamaz ((c)
+  veya (b) ile `failed`); yerel kurulum sıfırdan başladığı için kabul edilen
+  sonuçtur. Böyle bir kayıt varsa token yeniden girilmelidir.
+
 ## Gerekçe
 
 Docker'ın kalkmasıyla izolasyon katmanı kalmıyor; bu yüzden güvenlik, girdi
@@ -130,9 +159,11 @@ gerekmez.
 - **Güvenlik:** Platform klasörünün taranması ve kök dışı okuma kapanır. Kalan risk:
   izinli kök içindeki bir dosya sembolik bağlantıysa Python ayrıştırıcı onu
   izleyebilir — ayrıştırıcının bağlantı olan dosyaları atlaması (`lstat`) önerilir.
-  `decryptToken`'ın anahtar yokken düz metne düşmesi AC-P09-3 ile çelişir; P-09
-  kapsamında "anahtar yoksa başlama/hata" olmalıdır. Geçici klasör kullanıcının
-  `%TEMP%`'inde olduğundan diğer kullanıcılara kapalıdır.
+  `decryptToken`'ın üç düz metin geri dönüşü ((a) anahtar tanımsız, (b) şifre
+  çözme başarısız, (c) tampon < 28 bayt) karar 6 ile kapanır: şifreli alan artık
+  sessizce düz metin token kaynağı olarak kullanılamaz ve bozuk/yanlış anahtarlı
+  veri clone'a sızmaz. Geçici klasör kullanıcının `%TEMP%`'inde olduğundan diğer
+  kullanıcılara kapalıdır.
 - **Test (AC-P03-6, AC-G-4):** clone işlemi enjekte edilebilir bir arayüz
   (`cloneRepo(url, ref, dest, token)`) arkasına alınır; testlerde taklit edilir
   (internetsiz). Senaryolar: clone hatası → `failed`, platformun kendi
@@ -141,7 +172,12 @@ gerekmez.
   (`ext::`, `-u…`, `file://`, kullanıcı bilgili URL). SCAN_ROOTS: geçici dizinlerle
   kök içi kabul, kök dışı `400`, `..`, büyük/küçük harf varyantı, önek tuzağı,
   **junction** (`fs.symlink(hedef, yol, 'junction')` Windows'ta yönetici
-  gerektirmez), tanımsız `SCAN_ROOTS` → ret.
+  gerektirmez), tanımsız `SCAN_ROOTS` → ret. Token çözme (AC-P09-5): (a)
+  `ENCRYPTION_KEY` tanımsız, (b) farklı anahtarla şifrelenmiş veya içeriği
+  değiştirilmiş ≥ 28 baytlık tampon, (c) < 28 baytlık tampon — her birinde
+  `decryptToken` hata fırlatır, tamponun metin karşılığını döndürmez, tarama
+  `failed`, `cloneRepo` taklidi çağrılmaz, hata mesajı/log token değerini içermez;
+  `access_token_enc` boşken hata yok ve tarama token'sız sürer.
 - **Migration:** Bu ADR şema değişikliği gerektirmez. Yeni env değişkenleri
   `.env.example`'a eklenir: `SCAN_ROOTS`, `SCAN_CLONE_TIMEOUT_MS`, `PYTHON_BIN`
   (P-09 ile birlikte). Bu ADR'nin zorunlu kıldığı Git for Windows kurulumu, F1
@@ -152,15 +188,17 @@ gerekmez.
 ## Kanıt (Evidence)
 
 - Repo incelemesi: `src/scanner/worker.ts` (`dockerAvailable`, `'.'` geri dönüşü,
-  yerel yol algılaması), `runner.config.ts`, `integrations.access_token_enc` /
-  `decryptToken`.
+  yerel yol algılaması), `runner.config.ts`, `integrations.access_token_enc`,
+  `decryptToken` (anahtar tanımsızken, tampon 28 bayttan kısayken ve `catch`
+  dalında `encryptedBuffer.toString('utf8')` döndürüyor).
+- REQ-002 D-14 (kullanıcı kararı 2026-10-09) ve AC-P09-5.
 - Dış kaynak: git belgeleri (`GIT_CONFIG_COUNT`, `GIT_ALLOW_PROTOCOL`,
   `http.extraHeader`) ve Node `fs.realpath.native` davranışı — genel bilgi,
   doğrulanması önerilir. NotebookLM veya Obsidian kaynağı kullanılmadı.
 
 ## İlgili REQ / AC
 
-REQ-002: AC-P03-1…6, AC-P04-1…6, AC-P09-2/3, AC-G-3/4.
+REQ-002: AC-P03-1…6, AC-P04-1…6, AC-P09-2/3/5, AC-G-3/4; karar kaydı D-14.
 
 ## Kalan notlar (karar gerektirmeyen)
 
@@ -177,8 +215,10 @@ REQ-002: AC-P03-1…6, AC-P04-1…6, AC-P09-2/3, AC-G-3/4.
 
 ## Onay (Approval)
 
-- **Karar sahibi:** proje sahibi (kullanıcı). Tek açık insan kararı (SSH ile clone)
-  **2026-10-09** tarihinde "kapalı, yalnız https" olarak verildi; durum `Accepted`.
+- **Karar sahibi:** proje sahibi (kullanıcı). İnsan kararları **2026-10-09**
+  tarihinde verildi: SSH ile clone "kapalı, yalnız https"; `decryptToken` düz metin
+  geri dönüşlerinin üç durumda da hataya çevrilmesi (REQ-002 D-14, karar 6).
+  Durum `Accepted`.
   Kararlar ana oturum aracılığıyla iletilmiştir; kullanıcının bu dosyayı gözden
   geçirip commit etmesi kaydı kesinleştirir.
 - Bu karar **güvenlik sınırını** değiştirir (izolasyon katmanı kalkar, dosya sistemi

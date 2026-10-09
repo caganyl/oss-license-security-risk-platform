@@ -1,8 +1,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { resolveScanSource } from '../lib/scanSource';
 
 export class ScanController {
-  constructor(private readonly db: Pool) {}
+  /** @param scanRoots Allowed local scan roots (SCAN_ROOTS, P-04); empty = no local paths. */
+  constructor(
+    private readonly db: Pool,
+    private readonly scanRoots: readonly string[] = [],
+  ) {}
 
   listScans = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -42,9 +47,20 @@ export class ScanController {
       }
 
       // Verify project exists
-      const projCheck = await this.db.query('SELECT id FROM projects WHERE id = $1', [projectId]);
+      const projCheck = await this.db.query<{ id: string; repo_url: string | null }>(
+        'SELECT id, repo_url FROM projects WHERE id = $1',
+        [projectId],
+      );
       if (projCheck.rows.length === 0) {
         throw Object.assign(new Error('Project not found'), { statusCode: 404 });
+      }
+
+      // P-04 (AC-P04-5): re-check the effective source before queueing; a
+      // rejection is a 400 and no scans row is created. Scans created here
+      // carry no integration, so the project's repo_url is the effective one.
+      const repoUrl = projCheck.rows[0].repo_url;
+      if (repoUrl) {
+        await resolveScanSource(repoUrl, this.scanRoots);
       }
 
       const result = await this.db.query(`

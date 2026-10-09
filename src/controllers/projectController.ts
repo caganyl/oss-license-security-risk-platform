@@ -1,8 +1,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { ScanSourceError, resolveScanSource } from '../lib/scanSource';
 
 export class ProjectController {
-  constructor(private readonly db: Pool) {}
+  /** @param scanRoots Allowed local scan roots (SCAN_ROOTS, P-04); empty = no local paths. */
+  constructor(
+    private readonly db: Pool,
+    private readonly scanRoots: readonly string[] = [],
+  ) {}
 
   listProjects = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -22,6 +27,20 @@ export class ProjectController {
   };
 
   createProject = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    // P-04 / AC-P03-7: classify repoUrl before anything is stored; rejection -> 400, no row.
+    let storedRepoUrl: string | null = null;
+    try {
+      const repoUrl: unknown = req.body?.repoUrl;
+      if (repoUrl !== undefined && repoUrl !== null && repoUrl !== '') {
+        if (typeof repoUrl !== 'string') throw new ScanSourceError('repo_url_not_allowed');
+        const source = await resolveScanSource(repoUrl, this.scanRoots);
+        storedRepoUrl = source.kind === 'local' ? source.path : source.url;
+      }
+    } catch (err) {
+      next(err);
+      return;
+    }
+
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
@@ -30,7 +49,7 @@ export class ProjectController {
       if (!user) {
         throw Object.assign(new Error('Authentication required'), { statusCode: 401 });
       }
-      const { name, description, criticality, repoUrl, scanSchedule, tags, ecosystems } = req.body;
+      const { name, description, criticality, scanSchedule, tags, ecosystems } = req.body;
       if (!name || typeof name !== 'string' || name.trim() === '') {
         throw Object.assign(new Error('Project name is required'), { statusCode: 400 });
       }
@@ -43,7 +62,7 @@ export class ProjectController {
         name.trim(),
         description || null,
         criticality || 'medium',
-        repoUrl || null,
+        storedRepoUrl,
         scanSchedule || null,
         tags || [],
         user.id

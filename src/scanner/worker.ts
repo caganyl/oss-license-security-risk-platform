@@ -1,7 +1,19 @@
-import { spawn, exec } from 'child_process';
+import { spawn } from 'child_process';
 import crypto from 'crypto';
-import { pool } from '../lib/db';
-import { sandboxRunnerConfig, buildDockerRunFlags } from './sandbox/runner.config';
+import os from 'os';
+import path from 'path';
+import type { Pool } from 'pg';
+import { pool as defaultPool } from '../lib/db';
+import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
+import { sandboxRunnerConfig } from './sandbox/runner.config';
+import {
+  type CloneRepoFn,
+  cloneRepo as defaultCloneRepo,
+  isValidRef,
+  sanitizedChildEnv,
+  sweepStaleWorkspaces,
+  withTempWorkspace,
+} from './workspace';
 import type { SandboxScanResult } from '../types/scan';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import {
@@ -13,63 +25,123 @@ import {
 
 const WORKER_ID = sandboxRunnerConfig.worker.workerId;
 
-// Cryptography: decrypt AES-256-GCM token from DB
-function decryptToken(encryptedBuffer: Buffer | null, keyString?: string): string | null {
-  if (!encryptedBuffer) return null;
-  const keyEnv = keyString || process.env.ENCRYPTION_KEY;
-  if (!keyEnv) {
-    // Fallback to plain text if no key is configured
-    return encryptedBuffer.toString('utf8');
-  }
+const IV_LENGTH = 12;
+const TAG_LENGTH = 16;
+const STALE_WORKSPACE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-  try {
-    const key = crypto.createHash('sha256').update(keyEnv).digest();
-    if (encryptedBuffer.length < 28) {
-      return encryptedBuffer.toString('utf8');
-    }
-
-    const iv = encryptedBuffer.subarray(0, 12);
-    const tag = encryptedBuffer.subarray(12, 28);
-    const ciphertext = encryptedBuffer.subarray(28);
-
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(tag);
-
-    const decrypted = Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final()
-    ]);
-
-    return decrypted.toString('utf8');
-  } catch (err) {
-    // Fallback if the token was stored unencrypted
-    return encryptedBuffer.toString('utf8');
+/**
+ * Fixed-message error of `decryptToken`. The message never contains the
+ * token, the buffer in any encoding or the raw crypto exception (D-14).
+ */
+export class TokenDecryptionError extends Error {
+  constructor(reason: 'key_missing' | 'invalid_data' | 'auth_failed') {
+    const detail =
+      reason === 'key_missing'
+        ? 'ENCRYPTION_KEY is not set'
+        : reason === 'invalid_data'
+          ? 'invalid encrypted data'
+          : 'authentication failed';
+    super(`Integration token could not be decrypted: ${detail}`);
+    this.name = 'TokenDecryptionError';
   }
 }
 
-// Helper to scrub credentials from output
-function scrubLogs(logs: string, credentials: readonly string[]): string {
-  let scrubbed = logs;
-  for (const cred of credentials) {
-    if (cred && cred.length > 0) {
-      scrubbed = scrubbed.split(cred).join('[REDACTED]');
-    }
+/**
+ * Decrypts `integrations.access_token_enc` (AES-256-GCM, key =
+ * SHA-256(ENCRYPTION_KEY), layout `IV(12) | tag(16) | ciphertext`).
+ * No token (null/undefined/empty) -> `null`. Otherwise it returns the
+ * decrypted token or throws; it never falls back to reading the buffer as
+ * plain text (REQ-002 AC-P09-5 / D-14, ADR-002 karar 6).
+ */
+export function decryptToken(encrypted: Buffer | null | undefined, keyString?: string): string | null {
+  if (!encrypted || encrypted.length === 0) return null;
+  const keyMaterial = keyString || process.env.ENCRYPTION_KEY;
+  if (!keyMaterial) throw new TokenDecryptionError('key_missing');
+  if (encrypted.length < IV_LENGTH + TAG_LENGTH) throw new TokenDecryptionError('invalid_data');
+
+  const key = crypto.createHash('sha256').update(keyMaterial).digest();
+  const iv = encrypted.subarray(0, IV_LENGTH);
+  const tag = encrypted.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = encrypted.subarray(IV_LENGTH + TAG_LENGTH);
+
+  let decrypted: Buffer;
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch {
+    // The crypto exception is dropped on purpose: no detail about the data leaves here.
+    throw new TokenDecryptionError('auth_failed');
   }
-  return scrubbed;
+  return decrypted.toString('utf8');
+}
+
+export type RunParserFn = (workDir: string, ecosystems: string[], scanId: string) => Promise<SandboxScanResult>;
+export type WorkerLogger = Pick<Console, 'log' | 'warn' | 'error'>;
+
+export interface ScanWorkerDeps {
+  db: Pool;
+  cloneRepo: CloneRepoFn;
+  runParser: RunParserFn;
+  scanRoots: string[];
+  tmpRoot: string;
+  logger: WorkerLogger;
+}
+
+/** Deterministic failure (invalid source, ref or token): the scan fails without retry. */
+class NonRetryableScanError extends Error {}
+
+interface ClaimedJob {
+  scanRow: ScanJobRow;
+  timeoutMs: number;
+  maxAttempts: number;
+}
+
+interface ScanJobRow {
+  id: string;
+  project_id: string;
+  ref: string | null;
+  retry_count: number;
+  project_repo_url: string | null;
+  integration_repo_url: string | null;
+  default_branch: string | null;
+  access_token_enc: Buffer | null;
 }
 
 export class ScanWorker {
   private activeScans = 0;
   private isRunning = false;
   private pollTimeout: NodeJS.Timeout | null = null;
+  private readonly deps: ScanWorkerDeps;
+  /** Per-scan parser timeout (system_settings scan.timeout_minutes), keyed by scan id. */
+  private readonly parserTimeouts = new Map<string, number>();
 
-  constructor() {
-    console.log(`Scan Worker initialized with Worker ID: ${WORKER_ID}`);
+  constructor(deps: Partial<ScanWorkerDeps> = {}) {
+    this.deps = {
+      db: deps.db ?? defaultPool,
+      cloneRepo: deps.cloneRepo ?? defaultCloneRepo,
+      runParser: deps.runParser ?? ((workDir, ecosystems, scanId) => this.runPythonParser(workDir, ecosystems, scanId)),
+      scanRoots: deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS),
+      tmpRoot: deps.tmpRoot ?? os.tmpdir(),
+      logger: deps.logger ?? console,
+    };
+    this.deps.logger.log(`Scan Worker initialized with Worker ID: ${WORKER_ID}`);
+  }
+
+  private get db(): Pool {
+    return this.deps.db;
+  }
+
+  private get logger(): WorkerLogger {
+    return this.deps.logger;
   }
 
   public async start(): Promise<void> {
+    this.logger.log('Scan Worker starting...');
+    // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
+    this.deps.scanRoots = await canonicalizeScanRoots(this.deps.scanRoots);
+    await sweepStaleWorkspaces(this.deps.tmpRoot, STALE_WORKSPACE_MAX_AGE_MS, this.logger);
     this.isRunning = true;
-    console.log('Scan Worker starting...');
     await this.cleanupOrphanedScans();
     this.schedulePoll(0);
   }
@@ -79,13 +151,25 @@ export class ScanWorker {
     if (this.pollTimeout) {
       clearTimeout(this.pollTimeout);
     }
-    console.log('Scan Worker stopped.');
+    this.logger.log('Scan Worker stopped.');
+  }
+
+  /**
+   * Claims the next pending/queued scan and processes it to the end (DB
+   * updated) without starting the poll loop. Returns the scan id, or `null`
+   * when the queue is empty.
+   */
+  public async runOnce(): Promise<string | null> {
+    const job = await this.claimNextJob();
+    if (!job) return null;
+    await this.processJob(job);
+    return job.scanRow.id;
   }
 
   private async cleanupOrphanedScans(): Promise<void> {
     try {
-      console.log('Cleaning up orphaned running scans for this worker...');
-      const result = await pool.query(
+      this.logger.log('Cleaning up orphaned running scans for this worker...');
+      const result = await this.db.query(
         `
         UPDATE scans
         SET status = 'failed',
@@ -98,14 +182,10 @@ export class ScanWorker {
         [WORKER_ID]
       );
       if (result.rowCount && result.rowCount > 0) {
-        console.log(`Recovered and failed ${result.rowCount} orphaned running scans.`);
-        for (const row of result.rows) {
-          // Attempt to remove their docker volumes
-          exec(`docker volume rm scan-${row.id}-workspace`, () => {});
-        }
+        this.logger.log(`Recovered and failed ${result.rowCount} orphaned running scans.`);
       }
     } catch (error) {
-      console.error('Failed to cleanup orphaned scans:', error);
+      this.logger.error('Failed to cleanup orphaned scans:', error);
     }
   }
 
@@ -130,10 +210,15 @@ export class ScanWorker {
       const job = await this.claimNextJob();
       if (job) {
         this.activeScans++;
-        // Run job asynchronously
-        this.runScanJob(job.scanRow, job.timeoutMs, job.maxAttempts).catch((err) => {
-          console.error(`Unhandled error running scan ${job.scanRow.id}:`, err);
-        });
+        // Run job asynchronously; free the slot and poll again when it ends.
+        this.processJob(job)
+          .catch((err) => {
+            this.logger.error(`Unhandled error running scan ${job.scanRow.id}:`, err);
+          })
+          .finally(() => {
+            this.activeScans--;
+            this.schedulePoll(0);
+          });
 
         // If we still have capacity, immediately try to poll for another job
         if (this.activeScans < maxConcurrent) {
@@ -142,15 +227,15 @@ export class ScanWorker {
         }
       }
     } catch (err) {
-      console.error('Error claiming scan job from database:', err);
+      this.logger.error('Error claiming scan job from database:', err);
     }
 
     // Schedule next regular poll
     this.schedulePoll(sandboxRunnerConfig.worker.pollIntervalMs);
   }
 
-  private async claimNextJob() {
-    const client = await pool.connect();
+  private async claimNextJob(): Promise<ClaimedJob | null> {
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
 
@@ -223,226 +308,156 @@ export class ScanWorker {
   }
 
   /**
-   * Detect if Docker is available on this host.
+   * Single execution path (ADR-002 karar 1): decrypt token -> classify the
+   * source (TOCTOU re-check) -> local directory in place, or shallow clone
+   * into a temp workspace -> parser -> results. There is no other folder to
+   * fall back to: an unresolvable source fails the scan.
    */
-  private dockerAvailable(): Promise<boolean> {
-    return new Promise((resolve) => {
-      exec('docker info', (err) => resolve(!err));
-    });
+  private async processJob(job: ClaimedJob): Promise<void> {
+    const { scanRow, timeoutMs, maxAttempts } = job;
+    const scanId = scanRow.id;
+    this.logger.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
+    this.parserTimeouts.set(scanId, timeoutMs);
+    try {
+      // Before any clone: a token that cannot be decrypted fails the scan (D-14).
+      let token: string | null;
+      try {
+        token = decryptToken(scanRow.access_token_enc);
+      } catch (err) {
+        throw new NonRetryableScanError((err as Error).message);
+      }
+
+      const repoUrl = scanRow.integration_repo_url || scanRow.project_repo_url;
+      if (!repoUrl) {
+        throw new NonRetryableScanError('Project has no repository URL or local path to scan');
+      }
+      let source;
+      try {
+        source = await resolveScanSource(repoUrl, this.deps.scanRoots);
+      } catch (err) {
+        if (err instanceof ScanSourceError) throw new NonRetryableScanError(err.message);
+        throw err;
+      }
+
+      const ecosystems = await this.loadEcosystems(scanRow.project_id);
+      let result: SandboxScanResult;
+      if (source.kind === 'local') {
+        result = await this.deps.runParser(source.path, ecosystems, scanId);
+      } else {
+        const ref = scanRow.ref || scanRow.default_branch || null;
+        if (ref !== null && !isValidRef(ref)) {
+          throw new NonRetryableScanError('Invalid git ref for the scan');
+        }
+        const remoteUrl = source.url;
+        result = await withTempWorkspace(
+          async (workspace) => {
+            const repoDir = path.join(workspace, 'repo');
+            await this.deps.cloneRepo(remoteUrl, ref, repoDir, token);
+            return this.deps.runParser(repoDir, ecosystems, scanId);
+          },
+          { tmpRoot: this.deps.tmpRoot, logger: this.logger },
+        );
+      }
+
+      if (result.status === 'failed') {
+        throw new Error('Dependency parser reported a parsing failure.');
+      }
+      this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
+      await this.saveScanResults(scanId, scanRow.project_id, result);
+      this.logger.log(`Scan ${scanId} results stored.`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Scan ${scanId} failed: ${errMsg}`);
+      await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, !(err instanceof NonRetryableScanError));
+    } finally {
+      this.parserTimeouts.delete(scanId);
+    }
+  }
+
+  private async loadEcosystems(projectId: string): Promise<string[]> {
+    let ecosystems: string[] = [];
+    try {
+      const stackResult = await this.db.query<{ ecosystem: string }>(
+        'SELECT ecosystem FROM project_tech_stacks WHERE project_id = $1',
+        [projectId]
+      );
+      ecosystems = stackResult.rows
+        .map((r) => r.ecosystem)
+        .filter((e) => e === 'nodejs' || e === 'python');
+    } catch (err) {
+      this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId}:`, err);
+    }
+    // Fallback to all supported MVP ecosystems
+    return ecosystems.length > 0 ? ecosystems : ['nodejs', 'python'];
   }
 
   /**
-   * Run scan using Python parser directly — no Docker required.
-   * Used when repoUrl is a local filesystem path or Docker is not available.
+   * Default parser: the Python parsers run directly on this machine (F1
+   * interim state, ADR-002 karar 5) with `spawn(PYTHON_BIN, args)` and no
+   * shell. The scan directory is passed as an argument; the process cwd is
+   * the platform root only so `-m src.scanner…` resolves.
    */
-  private async runLocalPythonScan(
-    scanId: string,
-    projectId: string,
-    workDir: string,
-    ecosystems: string[],
-    scanRow: any,
-    maxAttempts: number,
-    timeoutMs: number
-  ): Promise<void> {
-    const workerDir = __dirname; // e.g. /path/to/oss-license-security-risk-platform/dist/scanner
-    const projectRoot = require('path').resolve(workerDir, '../..');
-
+  private async runPythonParser(scanDir: string, ecosystems: string[], scanId: string): Promise<SandboxScanResult> {
+    const platformRoot = path.resolve(__dirname, '../..');
+    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+    const timeoutMs = this.parserTimeouts.get(scanId) ?? sandboxRunnerConfig.scan.timeoutMs;
     const args = [
       '-m', 'src.scanner.sandbox.parsers.scan',
       '--scan-id', scanId,
-      '--work-dir', workDir,
+      '--work-dir', scanDir,
       '--ecosystems', ecosystems.join(','),
     ];
 
-    console.log(`[LocalScanner] Running: python3 ${args.join(' ')} in ${projectRoot}`);
-
+    const child = spawn(pythonBin, args, {
+      cwd: platformRoot,
+      shell: false,
+      windowsHide: true,
+      env: sanitizedChildEnv({ PYTHONPATH: platformRoot }),
+    });
     let stdoutData = '';
     let stderrData = '';
-    const child = spawn('python3', args, {
-      cwd: projectRoot,
-      env: {
-        ...process.env,
-        PYTHONPATH: projectRoot
-      }
-    });
+    child.stdout.on('data', (chunk: Buffer) => { stdoutData += chunk.toString('utf8'); });
+    child.stderr.on('data', (chunk: Buffer) => { stderrData = (stderrData + chunk.toString('utf8')).slice(-64 * 1024); });
 
-    child.stdout.on('data', (chunk) => { stdoutData += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderrData += chunk.toString(); });
-
-    const timeoutId = setTimeout(() => {
-      console.error(`[LocalScanner] Scan ${scanId} timed out after ${timeoutMs}ms.`);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGKILL');
     }, timeoutMs);
 
-    child.on('close', async (code) => {
-      clearTimeout(timeoutId);
-      this.activeScans--;
-
-      try {
-        if (child.killed) {
-          throw new Error(`Local scan timed out after ${timeoutMs / 60000} minutes.`);
-        }
-        if (code !== 0) {
-          throw new Error(`Python scanner exited with code ${code}.\nStderr: ${stderrData}`);
-        }
-
-        const lines = stdoutData.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        if (!lastLine) {
-          throw new Error('Python scanner produced no stdout output.');
-        }
-
-        let scanResult: SandboxScanResult;
-        try {
-          scanResult = JSON.parse(lastLine);
-        } catch (parseErr) {
-          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-          throw new Error(`Failed to parse Python scanner output: ${msg}. Raw: ${lastLine.slice(0, 500)}`);
-        }
-
-        if (scanResult.status === 'failed') {
-          throw new Error('Python scanner reported inner parsing failure.');
-        }
-
-        console.log(`[LocalScanner] Scan ${scanId} completed. Saving ${scanResult.total_deps} deps to database...`);
-        await this.saveScanResults(scanId, projectId, scanResult);
-        console.log(`[LocalScanner] Scan ${scanId} results stored successfully.`);
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[LocalScanner] Scan ${scanId} failed:`, errMsg);
-        await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, stderrData);
-      }
-
-      this.schedulePoll(0);
-    });
-  }
-
-  private async runScanJob(scanRow: any, timeoutMs: number, maxAttempts: number): Promise<void> {
-    const scanId = scanRow.id;
-    console.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
-
-    // Determine ecosystems to parse
-    let ecosystems: string[] = [];
-    try {
-      const stackResult = await pool.query(
-        'SELECT ecosystem FROM project_tech_stacks WHERE project_id = $1',
-        [scanRow.project_id]
-      );
-      ecosystems = stackResult.rows
-        .map(r => r.ecosystem)
-        .filter(e => e === 'nodejs' || e === 'python');
-    } catch (err) {
-      console.warn(`Warning: failed to fetch tech stack for project ${scanRow.project_id}:`, err);
-    }
-    if (ecosystems.length === 0) {
-      ecosystems = ['nodejs', 'python']; // Fallback to all supported MVP ecosystems
-    }
-
-    const repoUrl = scanRow.integration_repo_url || scanRow.project_repo_url;
-    const ref = scanRow.ref || scanRow.default_branch || 'main';
-    const accessToken = decryptToken(scanRow.access_token_enc);
-
-    // -- Local fallback: skip Docker if repoUrl is a local path or Docker is unavailable
-    const fs = require('fs');
-    const isLocalPath = repoUrl && (repoUrl.startsWith('/') || repoUrl.startsWith('.'));
-    const localPathExists = isLocalPath ? fs.existsSync(repoUrl) : false;
-    const dockerOk = await this.dockerAvailable();
-
-    if (localPathExists || !dockerOk) {
-      const workDir = localPathExists ? repoUrl : '.';
-      console.log(`[LocalScanner] Using local Python fallback for scan ${scanId}. workDir=${workDir}`);
-      return this.runLocalPythonScan(scanId, scanRow.project_id, workDir, ecosystems, scanRow, maxAttempts, timeoutMs);
-    }
-
-    // -- Docker path
-    const dockerArgs = ['run', ...buildDockerRunFlags(scanId, sandboxRunnerConfig)];
-    dockerArgs.push('--env', `REPO_URL=${repoUrl}`);
-    dockerArgs.push('--env', `REPO_REF=${ref}`);
-    dockerArgs.push('--env', `ECOSYSTEMS=${ecosystems.join(',')}`);
-    if (accessToken) {
-      dockerArgs.push('--env', `ACCESS_TOKEN=${accessToken}`);
-    }
-    dockerArgs.push(`${sandboxRunnerConfig.container.image}:${sandboxRunnerConfig.container.tag}`);
-
-    console.log(`Running: docker ${dockerArgs.filter(arg => !accessToken || arg !== `ACCESS_TOKEN=${accessToken}`).join(' ')}`);
-
-    const child = spawn('docker', dockerArgs);
-    let stdoutData = '';
-    let stderrData = '';
-
-    child.stdout.on('data', (chunk) => {
-      stdoutData += chunk.toString();
-    });
-
-    child.stderr.on('data', (chunk) => {
-      stderrData += chunk.toString();
-    });
-
-    const timeoutId = setTimeout(() => {
-      console.error(`Scan ${scanId} timed out after ${timeoutMs}ms. Terminating container.`);
-      child.kill('SIGKILL');
-      exec(`docker kill scanner-${scanId}`, () => {});
-    }, timeoutMs);
-
-    child.on('close', async (code) => {
-      clearTimeout(timeoutId);
-      this.activeScans--;
-
-      // Cleanup Docker volume in background
-      exec(`docker volume rm scan-${scanId}-workspace`, (err) => {
-        if (err) console.warn(`Note: Docker volume cleanup failed or already removed for scan ${scanId}`);
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once('error', (err) => {
+        clearTimeout(timer);
+        reject(new Error(`Dependency parser could not be started (${pythonBin}): ${err.message}`));
       });
-
-      const scrubbedStderr = scrubLogs(stderrData, accessToken ? [accessToken] : []);
-
-      try {
-        if (child.killed) {
-          throw new Error(`Scan execution exceeded timeout limit of ${timeoutMs / 60000} minutes.`);
-        }
-        if (code !== 0) {
-          throw new Error(`Scan container exited with non-zero code ${code}.\nLogs: ${scrubbedStderr}`);
-        }
-
-        const lines = stdoutData.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        if (!lastLine) {
-          throw new Error('Scanner container produced no output on stdout.');
-        }
-
-        let scanResult: SandboxScanResult;
-        try {
-          scanResult = JSON.parse(lastLine);
-        } catch (parseErr) {
-          const parseErrMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-          throw new Error(`Failed to parse scanner JSON result: ${parseErrMsg}. Raw output: ${lastLine}`);
-        }
-
-        if (scanResult.status === 'failed') {
-          throw new Error('Sandbox scanner reporting inner parsing failure.');
-        }
-
-        console.log(`Scan ${scanId} completed parsing. Writing results to database...`);
-        await this.saveScanResults(scanId, scanRow.project_id, scanResult);
-        console.log(`Scan ${scanId} results successfully stored.`);
-
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`Scan ${scanId} failed processing:`, errMsg);
-        await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, scrubbedStderr);
-      }
-
-      // Trigger next poll immediately to process pending scans
-      this.schedulePoll(0);
+      child.once('close', (exitCode) => {
+        clearTimeout(timer);
+        resolve(exitCode);
+      });
     });
+
+    if (timedOut) throw new Error(`Dependency parser timed out after ${Math.round(timeoutMs / 60000)} minutes.`);
+    if (code !== 0) {
+      throw new Error(`Dependency parser exited with code ${code}. Stderr: ${stderrData.trim().slice(-1024)}`);
+    }
+    const lines = stdoutData.trim().split('\n');
+    const lastLine = lines[lines.length - 1];
+    if (!lastLine) throw new Error('Dependency parser produced no output.');
+    try {
+      return JSON.parse(lastLine) as SandboxScanResult;
+    } catch (parseErr) {
+      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      throw new Error(`Failed to parse dependency parser output: ${msg}`);
+    }
   }
 
-  private async saveScanResults(
+  public async saveScanResults(
     scanId: string,
     projectId: string,
     result: SandboxScanResult
   ): Promise<void> {
     const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies);
-    const client = await pool.connect();
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
 
@@ -838,14 +853,15 @@ export class ScanWorker {
     retryCount: number,
     maxAttempts: number,
     errorMessage: string,
-    logs: string
+    retryable: boolean
   ): Promise<void> {
-    const client = await pool.connect();
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
 
       const nextRetry = retryCount + 1;
-      const canRetry = nextRetry < maxAttempts;
+      // Validation/token errors are deterministic and never retried (ADR-002 karar 3, 6).
+      const canRetry = retryable && nextRetry < maxAttempts;
 
       if (canRetry) {
         await client.query(
@@ -859,7 +875,7 @@ export class ScanWorker {
           `,
           [nextRetry, errorMessage, scanId]
         );
-        console.log(`Scan ${scanId} failed (attempt ${nextRetry}/${maxAttempts}). Rescheduling. Error: ${errorMessage}`);
+        this.logger.log(`Scan ${scanId} failed (attempt ${nextRetry}/${maxAttempts}). Rescheduling. Error: ${errorMessage}`);
       } else {
         await client.query(
           `
@@ -881,13 +897,17 @@ export class ScanWorker {
           `,
           [scanId]
         );
-        console.error(`Scan ${scanId} failed all ${maxAttempts} attempts. Error: ${errorMessage}`);
+        this.logger.error(
+          retryable
+            ? `Scan ${scanId} failed all ${maxAttempts} attempts. Error: ${errorMessage}`
+            : `Scan ${scanId} failed (not retried). Error: ${errorMessage}`,
+        );
       }
 
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
-      console.error(`Failed to update database for failed scan ${scanId}:`, err);
+      this.logger.error(`Failed to update database for failed scan ${scanId}:`, err);
     } finally {
       client.release();
     }
@@ -931,7 +951,7 @@ if (require.main === module) {
   const shutdown = () => {
     console.log('Shutdown signal received.');
     worker.stop();
-    pool.end().then(() => {
+    defaultPool.end().then(() => {
       console.log('Database connections closed. Exiting.');
       process.exit(0);
     });

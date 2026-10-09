@@ -7,6 +7,7 @@ import { assertRequiredEnv, isLoopbackHost, resolveHost, resolvePort } from './c
 import { AuthController } from './controllers/authController';
 import { LoginThrottle } from './lib/loginThrottle';
 import { statusLabel } from './lib/httpError';
+import { canonicalizeScanRoots, parseScanRoots } from './lib/scanSource';
 import { authenticate } from './middleware/authenticate';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
 import {
@@ -30,7 +31,7 @@ export interface AppDeps {
   port?: number;
   /** Bind host, also allowed in Host/Origin (default: HOST env or 127.0.0.1). */
   host?: string;
-  /** Allowed local scan roots (P-04); consumed by the scan source checks. */
+  /** Allowed local scan roots (P-04); default: parseScanRoots(process.env.SCAN_ROOTS). */
   scanRoots?: string[];
 }
 
@@ -45,6 +46,8 @@ const JSON_BODY_LIMIT = '1mb';
  */
 export function createApp(deps: AppDeps): express.Express {
   const { db } = deps;
+  // P-04: undefined/blank SCAN_ROOTS -> no local path is accepted (AC-P04-6).
+  const scanRoots = deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS);
   const allowed = buildAllowedOrigins(resolvePort(deps.port), resolveHost(deps.host));
   const jsonBody = express.json({ limit: JSON_BODY_LIMIT });
   const authController = new AuthController(db, new LoginThrottle());
@@ -87,8 +90,8 @@ export function createApp(deps: AppDeps): express.Express {
   api.use(createSbomRouter(db));
   api.use(createReportRouter(db));
   api.use('/findings', createWorkflowRouter(db));
-  api.use(createProjectRouter(db));
-  api.use(createScanRouter(db));
+  api.use(createProjectRouter(db, scanRoots));
+  api.use(createScanRouter(db, scanRoots));
   api.use(apiNotFound());
 
   app.use('/api', api);
@@ -111,7 +114,9 @@ export async function startServer(options: AppDeps): Promise<http.Server> {
         'session cookies and API keys travel unencrypted. Use 127.0.0.1 unless you know why.',
     );
   }
-  const app = createApp({ ...options, port, host });
+  // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
+  const scanRoots = await canonicalizeScanRoots(options.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS));
+  const app = createApp({ ...options, port, host, scanRoots });
   const server = http.createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

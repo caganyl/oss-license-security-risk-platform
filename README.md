@@ -49,6 +49,15 @@ Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olar
 4.  Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
 5.  CLI/CI için arayüzden bir API anahtarı oluşturun ve isteklerde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Anahtar yalnız oluşturulduğu anda bir kez gösterilir; yeni anahtar öncekini iptal eder.
 
+**Tarama (Docker'sız, REQ-002 P-03/P-04)**
+
+Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` ve Python 3.11+ bulunmalıdır.
+
+- **Uzak repo:** Yalnız `https://` adresleri kabul edilir. `http`, SSH (`ssh://`, `git@host:yol`), `file://`, kullanıcı bilgisi içeren URL ve benzeri biçimler `400 repo_url_not_allowed` döner. Repo, `os.tmpdir()` altında `ossrisk-scan-*` adlı geçici bir klasöre sığ (`--depth 1`) olarak clone edilir ve tarama bitince (hata alsa bile) silinir. Özel repo token'ı URL'ye yazılmaz, git'e ortam üzerinden verilir. `ENCRYPTION_KEY` yoksa ya da token çözülemiyorsa tarama `failed` olur. Clone zaman aşımı `SCAN_CLONE_TIMEOUT_MS` ile ayarlanır (varsayılan 5 dk).
+- **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök API'nin ve worker'ın başlangıçta hata vermesine yol açar.
+- **Python:** Ayrıştırıcılar `PYTHON_BIN` ile çağrılır. Varsayılan değer Windows'ta `python`, diğer sistemlerde `python3`'tür. Windows'taki Microsoft Store `python3` takma adı çalışmaz; gerekirse tam yolu verin.
+- Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.
+
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 
 _Agentic Development Orchestrator ile oluşturuldu._

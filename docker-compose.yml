@@ -20,23 +20,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # The scan worker no longer launches containers (REQ-002 P-03, ADR-002): it
+  # clones into a temp folder and runs the Python parsers itself, so it needs
+  # git and Python 3.11+ on PATH. The recommended F1 setup is running it on the
+  # host (`npm run worker`); this service is kept for reference and needs an
+  # image that provides git and Python.
   worker:
-    build:
-      context: .
-      dockerfile: src/scanner/sandbox/Dockerfile  # Can be customized for worker, or use a base node image
-      # For standard worker container, we can use a node base image:
     image: node:20-alpine
     container_name: oss-risk-worker
     working_dir: /app
     volumes:
       - .:/app
-      # Mount host Docker socket so containerized worker can launch sandboxed sibling containers
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}@db:5432/${POSTGRES_DB:-oss_risk}
       - PGPASSWORD=${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD_in_.env}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - SANDBOX_IMAGE_TAG=latest
+      - PYTHON_BIN=python3
+      - SCAN_ROOTS=${SCAN_ROOTS:-}
       - WORKER_MAX_CONCURRENT=4
       - WORKER_POLL_INTERVAL_MS=5000
     depends_on:

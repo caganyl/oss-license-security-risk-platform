@@ -1,8 +1,9 @@
 # ADR-002: Docker'sız tarama çalışma alanı ve izinli kök dizinler (SCAN_ROOTS)
 
 - **ADR-ID:** ADR-002
-- **Durum:** Accepted
-- **Tarih:** 2026-10-09 (taslak) · 2026-10-09 (karar)
+- **Durum:** Accepted — karar 5 **ADR-005 ile superseded** (2026-10-10); REQ-003
+  güncellemesi için dosya sonundaki "Ek: REQ-003 güncellemesi" bölümüne bakın.
+- **Tarih:** 2026-10-09 (taslak) · 2026-10-09 (karar) · 2026-10-10 (REQ-003 eki)
 - **İlgili:** REQ-002 / P-03 (AC-P03-1…6), P-04 (AC-P04-1…6), P-09 (AC-P09-5, D-14); rapor kararları K-4, K-3
 
 ## Bağlam
@@ -99,6 +100,11 @@ her biçim reddedilir (kayıtta `400`, worker'da `failed`):
   doğrulanmış kanonik yol `--work-dir` olarak verilir.
 
 ### 5. Python ayrıştırıcı çağrısı (F1 ara durum)
+
+> **Superseded (2026-10-10):** Bu karar ADR-005 ile geçersizdir. Ayrıştırıcılar
+> TypeScript'e taşınır ve `worker_threads` iş parçacığında çalışır; `PYTHON_BIN` ve
+> alt süreç çağrısı kaldırılır (REQ-003 P-10, D-31). Aşağıdaki metin tarihsel kayıt
+> olarak korunmuştur.
 
 `spawn(PYTHON_BIN, args, { shell: false })`; `PYTHON_BIN` env ile ayarlanır
 (varsayılan Windows'ta `python`, diğerlerinde `python3`). Davranış F2'de TS
@@ -224,3 +230,157 @@ REQ-002: AC-P03-1…6, AC-P04-1…6, AC-P09-2/3/5, AC-G-3/4; karar kaydı D-14.
 - Bu karar **güvenlik sınırını** değiştirir (izolasyon katmanı kalkar, dosya sistemi
   erişim sınırı SCAN_ROOTS'a taşınır). Implementation öncesi ayrıca gereken kapılar:
   ilgili contract onayı ve `docs/ownership/REQ-002.json` `status: approved`.
+
+---
+
+## Ek: REQ-003 güncellemesi (2026-10-10)
+
+- **İlgili:** REQ-003 takip kalemleri N-1 (D-47; AC-T-1, AC-T-2, AC-T-3), L-5
+  (D-48; AC-T-4, AC-P13-8), D-46. Yukarıdaki kararlar 1–4 ve 6 geçerlidir; bu ek
+  karar 3'ü genişletir. Karar 5 ADR-005 ile superseded'dır.
+- **Neden bu ADR'de:** clone yalıtımı ve hata metni arındırması karar 3'ün (clone
+  komutu, ortam, stderr maskeleme) doğrudan devamıdır; ADR-004 çalışma zamanını,
+  ADR-005 ayrıştırıcıyı kapsar.
+
+### E1. Clone yalıtımı (N-1, D-47, AC-T-1)
+
+**Çalışma klasörü düzeni** (`withTempWorkspace` içinde, iş başına):
+
+```
+<tmp>/ossrisk-scan-XXXX/
+  repo/        clone hedefi (karar 3)
+  gitconfig    boş dosya   -> GIT_CONFIG_GLOBAL
+  home/        boş klasör  -> HOME
+  hooks/       boş klasör  -> core.hooksPath
+```
+
+**Argümanlar** (`buildGitCloneArgs(url, ref, dest, { hooksDir, platform })`, saf):
+karar 3'teki ve REQ-002 D-18 sertleştirmesindeki tüm `-c` değerleri korunur
+(`core.symlinks=false`, `core.longpaths=true`, `credential.helper=`, LFS
+filtrelerinin boşaltılması, `http.followRedirects=false`; AC-T-2). Eklenenler,
+hepsi `clone`'dan önce:
+
+- `-c core.hooksPath=<workspace>/hooks` — kullanıcı/sistem kancaları ve şablondan
+  gelen kancalar çalışmaz.
+- `-c core.askPass=` — boş değer askpass programını devre dışı bırakır (`GIT_ASKPASS`
+  ve `SSH_ASKPASS` zaten aktarılmaz; VS Code gibi ortamların askpass yardımcısı
+  devreye girmez).
+- Yalnız Windows'ta `-c http.sslBackend=schannel` — Windows sertifika deposu
+  kullanılır. Sistem yapılandırması yok sayıldığı için Git for Windows'un sistem
+  dosyasındaki `http.sslCAInfo` (paketle gelen CA demeti) da devre dışıdır; OpenSSL
+  arka ucu CA bulamayabilirdi. Kurumsal TLS denetimi yapan ağlarda şirket CA'sı
+  Windows deposunda olduğu için schannel ile çalışır. `http.schannelCheckRevoke`
+  varsayılanı (iptal denetimi açık) değiştirilmez.
+
+**Ortam: izin listesi.** Üst ortam kopyalanıp kara listeyle süzülmez
+(`sanitizedChildEnv` git için kullanılmaz); yalnız aşağıdakiler aktarılır. Windows'ta
+ad karşılaştırması büyük/küçük harfe duyarsızdır.
+
+| Kaynak | Değişkenler |
+| --- | --- |
+| Üst ortamdan, aynen | `PATH`, `PATHEXT`, `SystemRoot`, `windir`, `SystemDrive`, `ComSpec`, `TEMP`, `TMP`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS` |
+| Üst ortamdan, vekil sunucu | `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`, `NO_PROXY`, `no_proxy` |
+| Uygulamanın değerleri | `GIT_CONFIG_NOSYSTEM=1`; `GIT_CONFIG_GLOBAL=<workspace>/gitconfig`; `HOME=<workspace>/home`; `XDG_CONFIG_HOME=<workspace>/home/.config`; `GIT_TERMINAL_PROMPT=0`; `GCM_INTERACTIVE=never`; `GIT_ALLOW_PROTOCOL=https`; `GIT_LFS_SKIP_SMUDGE=1`; `GIT_CONFIG_COUNT=0` veya token varken `1` + `GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` (karar 3) |
+
+Gerekçeler:
+
+- `GIT_CONFIG_NOSYSTEM=1`: Git for Windows sistem yapılandırması
+  (`credential.helper=manager`, `core.autocrlf`, `http.sslCAInfo` vb.) okunmaz.
+  `%ProgramData%\Git\config` dosyasının da bu bayrakla atlandığı varsayılır;
+  doğrulanması gerekiyor (AC-P12-14 elle kabulünde gözlenir).
+- `GIT_CONFIG_GLOBAL=<boş dosya>`: `~/.gitconfig` **ve** XDG
+  (`~/.config/git/config`) yerine yalnız bu dosya okunur. Böylece kullanıcının
+  `url.<base>.insteadOf` yeniden yazımları, `http.proxy`, `http.sslVerify=false`,
+  credential helper ve `include` zincirleri clone'a sızmaz. `NUL`/`/dev/null` yerine
+  işe özel dosya seçildi: platformdan bağımsız, testte gözlenebilir.
+- `HOME` yalıtımı: git ile libcurl `HOME` altındaki `.netrc`/`_netrc` dosyasını
+  okuyabilir; kullanıcının başka hostlar için kayıtlı parolası hedef sunucuya
+  gidebilirdi. `XDG_CONFIG_HOME` küresel `attributes`/`ignore` dosyalarını keser.
+  `USERPROFILE`, `APPDATA`, `LOCALAPPDATA` aktarılmaz.
+- `credential.helper=` (karar 3) sistem/küresel yapılandırma yokken de korunur
+  (savunma derinliği). `GIT_ALLOW_PROTOCOL=https` ortam değişkeni `protocol.allow`
+  yapılandırmasından önceliklidir; ayrıca `protocol.*` ayarı eklenmez.
+- Vekil sunucu: kullanıcının `http.proxy` git ayarı artık okunmadığı için tek yol
+  ortam değişkenleridir (libcurl). PAC/otomatik yapılandırma desteklenmez; README
+  kurumsal vekil notu (AC-P12-13) bunu söyler.
+- İzin listesi dışında kalan her şey (`GIT_*`, `GIT_SSL_NO_VERIFY`, `GIT_DIR`,
+  `GIT_TRACE*`, `CURL_CA_BUNDLE`, `SSL_CERT_FILE`, `SSH_ASKPASS`, sırlar) aktarılmaz.
+  Windows'ta izin listesindeki eksik bir değişken nedeniyle git'in çalışmadığı
+  görülürse liste bu ADR'nin güncellenmesiyle genişletilir.
+
+**Test (AC-T-1):** argüman ve ortam oluşturucuları saf fonksiyonlardır
+(`buildGitCloneArgs`, `buildGitEnv(parentEnv, workspace, token, platform)`). Üst
+ortamda `GIT_CONFIG_GLOBAL=/x`, `GIT_SSL_NO_VERIFY=1`, `GIT_DIR=/y`, `SSH_ASKPASS`,
+`ENCRYPTION_KEY` varken çıktıda yalnız uygulamanın `GIT_*` değerleri, vekil
+değişkenleri (her iki harf biçimi) ve izin listesi bulunur; `win32` için
+`http.sslBackend=schannel` var, diğer platformlarda yok. Bugünkü kodda başarısız
+olur (AC-G-5 sırası).
+
+### E2. Git sürüm kontrolü (D-46, D-47, AC-T-3)
+
+- Başlangıçta (ADR-004 karar 2 adım 5) `git --version` bir kez, `shell: false`,
+  izin listesi ortamıyla ve 10 sn zaman aşımıyla çalıştırılır; sonuç süreç
+  boyunca önbellekte tutulur. Ayrıştırma: `^git version (\d+)\.(\d+)` (ör.
+  `git version 2.47.1.windows.1`).
+- **Alt sınır 2.32:** `GIT_CONFIG_GLOBAL` (ve `GIT_CONFIG_SYSTEM`) git 2.32.0 ile
+  geldi. Daha eski git bu değişkeni **sessizce yok sayar** ve kullanıcının küresel
+  yapılandırması (credential helper, `insteadOf`, `sslVerify`) clone'a geri döner;
+  yalıtım fark edilmeden bozulur. (`GIT_CONFIG_COUNT` 2.31 gerektirir; 2.32 onu da
+  karşılar.)
+- Git yok veya < 2.32: uyarı log'lanır, uygulama başlar, yerel klasör taramaları
+  çalışır. Uzak (`https`) tarama, geçici klasör açılmadan, **kalıcı** hata olarak
+  `failed` olur: `Uzak tarama için git 2.32 veya üstü gerekli (bulunan: <sürüm|yok>).`
+  Sürüm sağlayıcısı enjekte edilebilir (test). Git sonradan kurulursa uygulama
+  yeniden başlatılır.
+
+### E3. Hata metni arındırma (L-5, D-48, AC-T-4, AC-P13-8)
+
+`scans.error_message`'a yazılan **her** metin (clone/ayrıştırıcı hatası, kalıcı
+ve geçici hata, kurtarma mesajı, `parse_errors` uyarı birleşimi) ve yeniden deneme
+log'u tek bir saf fonksiyondan geçer: `sanitizeErrorText(text, { secrets,
+workspaceDirs, scanRoots, homeDir })`. Sıra önemlidir:
+
+1. **Sırlar:** `scrubSecrets` (ham token ve Basic base64 biçimi) → `[REDACTED]`.
+2. **Yollar:** en uzundan kısaya, Windows'ta büyük/küçük harf duyarsız; her yol
+   için `\` ve `/` ayırıcılı biçimleri: geçici çalışma klasörü → `<workspace>`,
+   her `SCAN_ROOTS` kökü → `<scan-root>`, `os.homedir()` → `<home>`. (Çalışma
+   klasörü genellikle profil altındaki `%TEMP%`'tedir; uzun-önce kuralı doğru yer
+   tutucuyu seçer.)
+3. **Kontrol karakterleri:** ANSI CSI dizileri (`ESC [ … harf`) silinir; `\r\n` →
+   `\n`; `\n` ve `\t` dışındaki C0, `DEL` ve C1 (`\x80–\x9F`) karakterleri silinir.
+4. **Uzunluk:** en fazla 2000 karakter (kod noktası; vekil çifti bölünmez). Kesme en
+   son yapılır ki yarım kalmış bir sır/yol eşleşmeden kalmasın.
+
+- `cloneRepo` stderr'i 64 KiB kuyrukla yakalarken tampon baştan kırpıldıysa ilk
+  (yarım) satır atılır: kırpma bir token'ın ortasına denk gelirse kalan parça
+  `scrubSecrets` ile eşleşmezdi.
+- Ayrıştırıcı stdout sorunu alt süreç kalmadığı için ortadan kalkar (D-48);
+  ayrıştırıcı hata metinlerinin kendisi de mutlak yol içermez (ADR-005 karar 7).
+- **Test:** token (ham + base64), çalışma klasörü (iki ayırıcı ve farklı harf
+  büyüklüğüyle), `SCAN_ROOTS` kökü, profil yolu, `\x1b[31m`, `\x00`, `\x07` ve
+  3000 karakter içeren sahte git stderr'i (bugünkü kodda başarısız olur).
+
+### E4. Bu ADR'nin diğer bölümlerine etkiler
+
+- **Karar 3 "Hata":** "ağ hataları mevcut retry politikasına tabidir" →
+  ADR-004 karar 8 (clone hataları ve clone zaman aşımı geçicidir, üstel bekleme).
+  `CloneRepoFn` isteğe bağlı `signal` alır; iptalde süreç ağacı aynı yolla
+  (`taskkill /T /F`) öldürülür ve `close` beklenir (ADR-004 karar 7).
+- **Karar 4 / "Sonuçlar — Güvenlik":** "ayrıştırıcının bağlantı olan dosyaları
+  atlaması önerilir" → ADR-005 karar 6 ile uygulanır.
+- **"Sonuçlar — Migration":** `PYTHON_BIN` kaldırılır; göçler Git Bash yerine Node
+  aracıyla çalışır (ADR-004 karar 10). Git for Windows yalnız uzak tarama için
+  gerekir.
+- **Kalan notlar 1** (Python yürütücüsü) geçersizdir; **3** (`git --version`
+  kontrolü) E2 ile uygulanır.
+
+### E5. Onay (ek için)
+
+- **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10
+  (REQ-003'te kayıtlı). Durum `Accepted`. Kullanıcının dosyayı gözden geçirip commit
+  etmesi kaydı kesinleştirir.
+- **REQ-003 netleştirmesi:** D-47/AC-T-1 listesine `HOME`/`XDG_CONFIG_HOME`
+  yalıtımı, `core.askPass=` ve git ortamının izin listesiyle kurulması eklenir.
+- Ek, dış süreçlere aktarılan ortamı (**güvenlik sınırı**) değiştirir; release
+  öncesi Security Red Team incelemesine (N-1, L-5) dahildir. Implementation öncesi
+  `docs/ownership/REQ-003.json` `status: approved` gerekir.

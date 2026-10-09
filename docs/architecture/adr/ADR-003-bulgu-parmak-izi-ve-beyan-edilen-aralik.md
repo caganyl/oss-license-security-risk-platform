@@ -1,8 +1,9 @@
 # ADR-003: Beyan edilen sürüm aralığı, runtime kapsamı, bulgu parmak izi ve F1 migration yöntemi
 
 - **ADR-ID:** ADR-003
-- **Durum:** Accepted
-- **Tarih:** 2026-10-09 (taslak) · 2026-10-09 (karar)
+- **Durum:** Accepted — (d) bölümü **ADR-004 ile superseded** (2026-10-10); (a), (b),
+  (c) geçerlidir.
+- **Tarih:** 2026-10-09 (taslak) · 2026-10-09 (karar) · 2026-10-10 (durum notu)
 - **İlgili:** REQ-002 / P-05, P-06, P-07, P-08 (AC-P05-*, AC-P06-*, AC-P07-*, AC-P08-*); açık sorular 1 ve 4; K-2
 
 ## Bağlam
@@ -206,6 +207,11 @@ CREATE INDEX findings_fingerprint_created_idx ON findings (fingerprint, created_
 - Backfill mevcut bulguların **durumunu değiştirmez**; yalnız iz kolonunu doldurur.
 
 ### (d) F1 migration'larının Windows'ta çalıştırılması (açık soru 4 — kullanıcı kararı 2026-10-09)
+
+> **Superseded (2026-10-10):** Bu bölüm ADR-004 (karar 10) ile geçersizdir. Göçler
+> `npm run db:migrate` (Node + `pg`) ile çalışır; `db/migrate.sh`, Git Bash ve
+> `PATH`'te `psql` gerekmez. Araç `schema_migrations` kayıtlarını devralır
+> (REQ-003 P-11). Aşağıdaki metin tarihsel kayıt olarak korunmuştur.
 
 - **Yöntem: Git Bash + `db/migrate.sh`.** F1'de tüm migration'lar (`002`, `003`,
   `004`) Git Bash içinden `db/migrate.sh` ile çalıştırılır. Git for Windows ADR-002

@@ -1,8 +1,10 @@
-# REQ-002 (F1) test paketi
+# REQ-002 (F1) ve REQ-003 (F2) test paketi
 
 REQ-002 P-01…P-09 için **test-first** Vitest paketi. Testler bugünkü kodda
 hatayı yeniden üretir (KIRMIZI); backend/frontend düzeltmesi bu dosyada
 tanımlanan arayüzleri uyguladığında YEŞİL olmalıdır (AC-G-2, AC-G-3).
+REQ-003 P-10 (TypeScript ayrıştırıcılar, ADR-005) için golden eşdeğerlik,
+sapma ve iş parçacığı testleri de buradadır.
 
 ## İçindekiler
 
@@ -21,10 +23,10 @@ npm run typecheck   # tsc -p tsconfig.test.json (src + tests)
 npm run lint
 ```
 
-Ön koşullar: Node ≥ 20, Python 3.11+ (`PYTHON_BIN`, yoksa Windows'ta
-`python`), `git` (yalnız `git ls-files` için). İnternet gerekmez (AC-G-4):
-OSV/NVD çağrıları `fetch` taklidiyle, clone işlemi enjekte edilen sahte
-`cloneRepo` ile yapılır.
+Ön koşullar: Node ≥ 22, `git` (yalnız `git ls-files` için). Python, Docker,
+Git Bash ve `PATH`'te `psql` gerekmez; hiçbir test bunları çağırmaz
+(REQ-003 AC-G-2). İnternet gerekmez (AC-G-4): OSV/NVD çağrıları `fetch`
+taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 
 ## Klasör yapısı
 
@@ -36,14 +38,21 @@ OSV/NVD çağrıları `fetch` taklidiyle, clone işlemi enjekte edilen sahte
 | `helpers/pgCluster.ts` | embedded-postgres kümesi, migrate edilmiş şablon DB, CREATE/DROP DATABASE |
 | `helpers/db.ts` | `useTestDatabase({ scope: 'file' \| 'test' })` — dosya ya da test başına DB |
 | `helpers/pgGlobalSetup.ts` | İsteğe bağlı Vitest `globalSetup` (tek küme) — henüz kayıtlı değil |
-| `helpers/migrations.ts` | `db/migrations/*.up.sql`'i `migrate.sh` gibi uygular |
+| `helpers/migrations.ts` | `db/migrations/*.up.sql`'i sürüm sırasıyla, dosya başına bir transaction ve `schema_migrations` kaydıyla uygular (yalnız geçici test DB'leri) |
+| `helpers/parserGolden.ts` | P-10 golden karşılaştırıcısı (AC-P10-5): JSON gidiş-dönüş, sıradan bağımsız diziler, `parse_errors` yalnız `(ecosystem, file)`, hata metninde mutlak yol denetimi |
 | `helpers/psqlScript.ts` | psql betiğini düz SQL'e çevirir (`\ir` içe alınır, `\set`/`\echo` atılır) |
 | `helpers/http.ts` | supertest yardımcıları (Host/Origin, çerez, setup/login, hata gövdesi kontrolü) |
 | `helpers/tokenCrypto.ts` | AES-256-GCM token şifreleme (test verisi, gerçek sır değil) |
 | `fixtures/p05-ranges-no-lockfile` | Kilit dosyasız iki `package.json` (aynı paketin iki aralığı) + `requirements.txt` |
 | `fixtures/p07-dev-scope` | devDependency, `requirements-dev.txt`, Poetry dev grubu |
 | `fixtures/p10-golden/formats` | REQ-003 P-10 biçim fixture'ları: her klasör ayrı tarama kökü; `deviation-*` golden dışı. Kapsam: `formats/README.md`, bayt dönüşümü: `formats/MANIFEST-bytes.md` |
-| `unit/` | Saf fonksiyonlar ve Python ayrıştırıcı çıktısı |
+| `fixtures/p10-golden/snapshot-*` | AC-P10-3 repo anlık görüntüleri (`1b2b934`: 219, `73db78b`: 496 bağımlılık) |
+| `fixtures/p10-golden/expected` | Dondurulmuş golden çıktılar (eski Python ayrıştırıcı, D-26); değişmesi yeni bir D-xx gerektirir |
+| `unit/` | Saf fonksiyonlar ve TypeScript ayrıştırıcı (`parseManifests`) çıktısı |
+| `unit/parsersGolden.test.ts` | AC-P10-3…9: her `expected/*.json` için golden eşitliği, 219/496 sayıları, sonuç biçimi, CRLF ikizleri, karşılaştırıcının negatif kontrolü |
+| `unit/parsersDeviations.test.ts` | D-28 sapmaları: büyük/küçük harf (AC-P10-18), göreli `SKIP_DIRS` (AC-P10-10), junction/symlink (AC-P10-11), 32 MiB (AC-P10-19), dosya bazlı hata ve mutlak yol (AC-P10-12/13), derin TOML/JSON, tip-geçersiz ve NaN girdiler |
+| `unit/parserThread.test.ts` | AC-P10-14: iş parçacığında normal çalışma (kaynak modu ve `typescript` ile geçici klasöre derlenmiş `thread.js`), `env: {}`, AbortSignal iptali, bellek sınırı, çökme eşlemesi, `undefined/` regresyonu |
+| `unit/pythonParsers.test.ts` | P-05/P-07 ayrıştırıcı sözleşmesi ve AC-P10-7 tekilleştirme; REQ-003'ten beri TypeScript ayrıştırıcıyla (ad REQ-002'den kaldı) |
 | `integration/` | Gerçek PostgreSQL ile HTTP ve worker testleri, migration testi |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |
 
@@ -81,7 +90,7 @@ export interface AppDeps {
 }
 export function createApp(deps: AppDeps): express.Express;           // listen ETMEZ
 export function startServer(options: AppDeps): Promise<http.Server>; // listen olunca resolve; host vars. 127.0.0.1
-// `npm start` (node dist/app.js) için: if (require.main === module) startServer({ db: pool })
+// Süreç girişi REQ-003'ten beri src/main.ts'tir (`npm start` = node dist/main.js); app.ts yan etkisizdir.
 ```
 
 - İçe aktarma yan etkisiz olmalı (bugünkü `app.listen` modül düzeyinde kalmamalı).
@@ -167,7 +176,7 @@ export function decryptToken(encrypted: Buffer | null | undefined, keyString?: s
 export interface ScanWorkerDeps {
   db: Pool;                                  // vars. ../lib/db pool
   cloneRepo: CloneRepoFn;                    // vars. workspace.cloneRepo
-  runParser: (workDir: string, ecosystems: string[], scanId: string) => Promise<SandboxScanResult>; // vars. Python ayrıştırıcı (PYTHON_BIN)
+  runParser: (workDir: string, ecosystems: string[], scanId: string, signal?: AbortSignal) => Promise<SandboxScanResult>; // vars. createThreadParser() (REQ-003 P-10)
   scanRoots: string[];                       // vars. parseScanRoots(process.env.SCAN_ROOTS)
   tmpRoot: string;                           // vars. os.tmpdir()
   logger: Pick<Console, 'log' | 'warn' | 'error'>; // vars. console
@@ -217,9 +226,10 @@ export function computeFindingFingerprint(input: FingerprintInput): string; // 6
 `db/migrations/004_finding_fingerprint.up.sql` ile bayt düzeyinde aynı sonuç;
 referans değerler `db/tests/f1_migrations_test.sql` içindeki `_expected_fp`.
 
-### Python ayrıştırıcı çıktı sözleşmesi (P-05, P-07)
+### Ayrıştırıcı çıktı sözleşmesi (P-05, P-07; REQ-003 P-10)
 
-`python -m src.scanner.sandbox.parsers.scan` çıktısında her bağımlılık:
+`parseManifests(rootDir, ecosystems, scanId)` (`src/scanner/parsers`)
+çıktısında her bağımlılık:
 `version` = kesin sürüm veya `null` (`'unknown'` yok), `declared_range` =
 manifestteki aralık veya `null`, sürüm `null` ise purl sürümsüz.
 `requirements-dev.txt` ve Poetry dev grupları `scope: 'dev'`. `src/types/scan.ts`
@@ -291,6 +301,12 @@ kabul edilir; harici köken, `https:`, `*`, `'unsafe-eval'` yoktur.
 | P-06, P-07 | `integration/worker.test.ts`, `unit/pythonParsers.test.ts` |
 | P-08 | `unit/findingFingerprint.test.ts`, `integration/worker.test.ts`, `integration/migrations.test.ts` |
 | P-09 | `unit/decryptToken.test.ts`, `integration/worker.test.ts`, `security/credentialScan.test.ts` |
+| REQ-003 AC-P10-1, AC-P10-3…9 | `unit/parsersGolden.test.ts` |
+| REQ-003 AC-P10-7 | `unit/pythonParsers.test.ts`, `unit/parsersGolden.test.ts` |
+| REQ-003 AC-P10-10…13, AC-P10-15, AC-P10-18, AC-P10-19 | `unit/parsersDeviations.test.ts` |
+| REQ-003 AC-P10-14 | `unit/parserThread.test.ts` |
+| REQ-003 AC-P10-15, ADR-005 Karar 1, AC-G-6 | `security/staticCode.test.ts` |
+| REQ-003 AC-P10-16, AC-P12-12 (`.env.example`) | `security/staticCode.test.ts`, `security/credentialScan.test.ts` |
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

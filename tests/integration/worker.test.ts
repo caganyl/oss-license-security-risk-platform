@@ -6,7 +6,8 @@
  *   worker.runOnce(): Promise<string | null>   claims + fully processes one scan
  *   worker.saveScanResults(scanId, projectId, result): Promise<void>
  * Network: global fetch is stubbed (OSV lookups answer "no vulns"); clone is
- * always a fake; the real Python parser runs only on local fixtures.
+ * always a fake; the real parser (TypeScript, in a worker thread; REQ-003
+ * P-10) runs only on local fixtures.
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -46,8 +47,7 @@ const logger = {
 };
 
 beforeAll(() => {
-  for (const k of ['ENCRYPTION_KEY', 'PYTHONDONTWRITEBYTECODE', 'SCAN_ROOTS']) savedEnv[k] = process.env[k];
-  process.env.PYTHONDONTWRITEBYTECODE = '1'; // no __pycache__ under src/
+  for (const k of ['ENCRYPTION_KEY', 'SCAN_ROOTS']) savedEnv[k] = process.env[k];
 });
 afterAll(() => {
   for (const [k, v] of Object.entries(savedEnv)) {
@@ -188,7 +188,7 @@ describe('P-03 remote sources: temp workspace, no platform-folder fallback (AC-P
       fs.mkdirSync(dest, { recursive: true });
       throw new Error('fatal: unable to access repository (simulated)');
     };
-    // default runParser (real Python): if the worker fell back to '.', it would
+    // default runParser (real parser thread): if the worker fell back to '.', it would
     // parse the platform's own package.json and write express/pg/... here.
     const worker = await newWorker({ cloneRepo: failingClone });
     expect(await runOnce(worker)).toBe(scanId);

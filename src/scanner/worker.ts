@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
@@ -6,15 +5,15 @@ import type { Pool, PoolClient } from 'pg';
 import { pool as defaultPool } from '../lib/db';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
+import { createThreadParser } from './parsers/threadParser';
 import {
   type CloneRepoFn,
   cloneRepo as defaultCloneRepo,
   isValidRef,
-  sanitizedChildEnv,
   sweepStaleWorkspaces,
   withTempWorkspace,
 } from './workspace';
-import { isRuntimeScope, type SandboxScanResult } from '../types/scan';
+import { isRuntimeScope, type RunParserFn, type SandboxScanResult } from '../types/scan';
 import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import {
@@ -77,7 +76,7 @@ export function decryptToken(encrypted: Buffer | null | undefined, keyString?: s
   return decrypted.toString('utf8');
 }
 
-export type RunParserFn = (workDir: string, ecosystems: string[], scanId: string) => Promise<SandboxScanResult>;
+export type { RunParserFn };
 export type WorkerLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 
 export interface ScanWorkerDeps {
@@ -140,14 +139,13 @@ export class ScanWorker {
   private isRunning = false;
   private pollTimeout: NodeJS.Timeout | null = null;
   private readonly deps: ScanWorkerDeps;
-  /** Per-scan parser timeout (system_settings scan.timeout_minutes), keyed by scan id. */
-  private readonly parserTimeouts = new Map<string, number>();
 
   constructor(deps: Partial<ScanWorkerDeps> = {}) {
     this.deps = {
       db: deps.db ?? defaultPool,
       cloneRepo: deps.cloneRepo ?? defaultCloneRepo,
-      runParser: deps.runParser ?? ((workDir, ecosystems, scanId) => this.runPythonParser(workDir, ecosystems, scanId)),
+      // TypeScript parsers in a worker_threads thread (REQ-003 P-10, ADR-005 Karar 5).
+      runParser: deps.runParser ?? createThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
       scanRoots: deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS),
       tmpRoot: deps.tmpRoot ?? os.tmpdir(),
       logger: deps.logger ?? console,
@@ -337,14 +335,25 @@ export class ScanWorker {
   /**
    * Single execution path (ADR-002 karar 1): decrypt token -> classify the
    * source (TOCTOU re-check) -> local directory in place, or shallow clone
-   * into a temp workspace -> parser -> results. There is no other folder to
+   * into a temp workspace -> parser (worker thread) -> results. There is no other folder to
    * fall back to: an unresolvable source fails the scan.
    */
   private async processJob(job: ClaimedJob): Promise<void> {
     const { scanRow, timeoutMs, maxAttempts } = job;
     const scanId = scanRow.id;
     this.logger.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
-    this.parserTimeouts.set(scanId, timeoutMs);
+    // Interim parser time limit (system_settings scan.timeout_minutes); the
+    // job-level AbortSignal of ADR-004 Karar 7 replaces it in the runtime work.
+    const parserAbort = new AbortController();
+    let parserTimer: NodeJS.Timeout | null = null;
+    const parserSignal = (): AbortSignal => {
+      if (!parserTimer) {
+        parserTimer = setTimeout(() => {
+          parserAbort.abort(new Error(`Dependency parser timed out after ${Math.round(timeoutMs / 60000)} minutes.`));
+        }, timeoutMs);
+      }
+      return parserAbort.signal;
+    };
     try {
       // Before any clone: a token that cannot be decrypted fails the scan (D-14).
       let token: string | null;
@@ -369,7 +378,7 @@ export class ScanWorker {
       const ecosystems = await this.loadEcosystems(scanRow.project_id);
       let result: SandboxScanResult;
       if (source.kind === 'local') {
-        result = await this.deps.runParser(source.path, ecosystems, scanId);
+        result = await this.deps.runParser(source.path, ecosystems, scanId, parserSignal());
       } else {
         const ref = scanRow.ref || scanRow.default_branch || null;
         if (ref !== null && !isValidRef(ref)) {
@@ -380,7 +389,7 @@ export class ScanWorker {
           async (workspace) => {
             const repoDir = path.join(workspace, 'repo');
             await this.deps.cloneRepo(remoteUrl, ref, repoDir, token);
-            return this.deps.runParser(repoDir, ecosystems, scanId);
+            return this.deps.runParser(repoDir, ecosystems, scanId, parserSignal());
           },
           { tmpRoot: this.deps.tmpRoot, logger: this.logger },
         );
@@ -397,7 +406,7 @@ export class ScanWorker {
       this.logger.error(`Scan ${scanId} failed: ${errMsg}`);
       await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, !(err instanceof NonRetryableScanError));
     } finally {
-      this.parserTimeouts.delete(scanId);
+      if (parserTimer) clearTimeout(parserTimer);
     }
   }
 
@@ -416,66 +425,6 @@ export class ScanWorker {
     }
     // Fallback to all supported MVP ecosystems
     return ecosystems.length > 0 ? ecosystems : ['nodejs', 'python'];
-  }
-
-  /**
-   * Default parser: the Python parsers run directly on this machine (F1
-   * interim state, ADR-002 karar 5) with `spawn(PYTHON_BIN, args)` and no
-   * shell. The scan directory is passed as an argument; the process cwd is
-   * the platform root only so `-m src.scanner…` resolves.
-   */
-  private async runPythonParser(scanDir: string, ecosystems: string[], scanId: string): Promise<SandboxScanResult> {
-    const platformRoot = path.resolve(__dirname, '../..');
-    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
-    const timeoutMs = this.parserTimeouts.get(scanId) ?? sandboxRunnerConfig.scan.timeoutMs;
-    const args = [
-      '-m', 'src.scanner.sandbox.parsers.scan',
-      '--scan-id', scanId,
-      '--work-dir', scanDir,
-      '--ecosystems', ecosystems.join(','),
-    ];
-
-    const child = spawn(pythonBin, args, {
-      cwd: platformRoot,
-      shell: false,
-      windowsHide: true,
-      env: sanitizedChildEnv({ PYTHONPATH: platformRoot }),
-    });
-    let stdoutData = '';
-    let stderrData = '';
-    child.stdout.on('data', (chunk: Buffer) => { stdoutData += chunk.toString('utf8'); });
-    child.stderr.on('data', (chunk: Buffer) => { stderrData = (stderrData + chunk.toString('utf8')).slice(-64 * 1024); });
-
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    const code = await new Promise<number | null>((resolve, reject) => {
-      child.once('error', (err) => {
-        clearTimeout(timer);
-        reject(new Error(`Dependency parser could not be started (${pythonBin}): ${err.message}`));
-      });
-      child.once('close', (exitCode) => {
-        clearTimeout(timer);
-        resolve(exitCode);
-      });
-    });
-
-    if (timedOut) throw new Error(`Dependency parser timed out after ${Math.round(timeoutMs / 60000)} minutes.`);
-    if (code !== 0) {
-      throw new Error(`Dependency parser exited with code ${code}. Stderr: ${stderrData.trim().slice(-1024)}`);
-    }
-    const lines = stdoutData.trim().split('\n');
-    const lastLine = lines[lines.length - 1];
-    if (!lastLine) throw new Error('Dependency parser produced no output.');
-    try {
-      return JSON.parse(lastLine) as SandboxScanResult;
-    } catch (parseErr) {
-      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-      throw new Error(`Failed to parse dependency parser output: ${msg}`);
-    }
   }
 
   public async saveScanResults(

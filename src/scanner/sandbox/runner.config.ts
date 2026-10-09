@@ -1,9 +1,9 @@
 /**
- * Sandbox runner configuration.
+ * Scan runner configuration.
  *
- * All tunables live here so the worker (src/scanner/worker.ts, yet to be
- * written) and tests import from one authoritative source rather than
- * scattering magic numbers through the codebase.
+ * All tunables live here so the worker (src/scanner/worker.ts) and tests
+ * import from one authoritative source rather than scattering magic numbers
+ * through the codebase.
  *
  * Values that are also stored in the `system_settings` DB table are marked
  * with the key they mirror so the worker can override them at runtime.
@@ -60,10 +60,24 @@ export interface CleanupPolicy {
    */
   alwaysCleanWorkspace: boolean;
   /**
-   * Env var names that carry credentials; they are never passed to the git or
-   * parser child processes.
+   * Env var names that carry credentials; they are never passed to the git
+   * child process. (The parser thread gets no environment at all.)
    */
   credentialEnvVars: readonly string[];
+}
+
+/**
+ * Dependency parser thread (REQ-003 AC-P10-14, ADR-005 Karar 5). Fixed
+ * values, no env override: with WORKER_MAX_CONCURRENT=4 the worst case is
+ * ~2 GiB of parser heap. The 32 MiB per-file limit lives in the parsers
+ * (src/scanner/parsers/common.ts) because the thread cannot import this file.
+ */
+export interface ParserConfig {
+  resourceLimits: {
+    maxOldGenerationSizeMb: number;
+    maxYoungGenerationSizeMb: number;
+    stackSizeMb: number;
+  };
 }
 
 export interface WorkerConfig {
@@ -88,6 +102,7 @@ export interface SandboxRunnerConfig {
   retry: RetryPolicy;
   cleanup: CleanupPolicy;
   worker: WorkerConfig;
+  parser: ParserConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,5 +136,13 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
     pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS) || 5_000,
     workerId: process.env.WORKER_ID
       ?? `${process.env.HOSTNAME ?? 'worker'}-${process.pid}`,
+  },
+
+  parser: {
+    resourceLimits: {
+      maxOldGenerationSizeMb: 512,
+      maxYoungGenerationSizeMb: 64,
+      stackSizeMb: 4,
+    },
   },
 } as const;

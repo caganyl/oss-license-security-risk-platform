@@ -61,12 +61,12 @@ Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olar
 
 **Tarama (Docker'sız, REQ-002 P-03/P-04)**
 
-Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` ve Python 3.11+ bulunmalıdır.
+Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` bulunmalıdır. Python gerekmez (REQ-003 P-10).
 
 - **Uzak repo:** Yalnız `https://` adresleri kabul edilir. `http`, SSH (`ssh://`, `git@host:yol`), `file://`, kullanıcı bilgisi içeren URL ve benzeri biçimler `400 repo_url_not_allowed` döner. Repo, `os.tmpdir()` altında `ossrisk-scan-*` adlı geçici bir klasöre sığ (`--depth 1`) olarak clone edilir ve tarama bitince (hata alsa bile) silinir. Özel repo token'ı URL'ye yazılmaz, git'e ortam üzerinden verilir. `ENCRYPTION_KEY` yoksa ya da token çözülemiyorsa tarama `failed` olur. Clone zaman aşımı `SCAN_CLONE_TIMEOUT_MS` ile ayarlanır (varsayılan 5 dk).
 - **Clone sertleştirmesi:** Git LFS dosyaları indirilmez (yalnız işaretçi dosyaları gelir, LFS filtreleri çalışmaz) ve HTTP yönlendirmeleri izlenmez; yönlendiren bir sunucu taramayı `failed` yapar. Erişim token'ı yalnız repo adresinin hostuna gönderilir. Token ortam değişkeniyle (`GIT_CONFIG_COUNT`) iletildiği için `git` 2.31 veya üstü gerekir; daha eski sürümlerde token gönderilmez ve özel repo clone'u başarısız olur.
 - **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök API'nin ve worker'ın başlangıçta hata vermesine yol açar.
-- **Python:** Ayrıştırıcılar `PYTHON_BIN` ile çağrılır. Varsayılan değer Windows'ta `python`, diğer sistemlerde `python3`'tür. Windows'taki Microsoft Store `python3` takma adı çalışmaz; gerekirse tam yolu verin.
+- **Ayrıştırıcılar:** Bağımlılık dosyaları TypeScript ayrıştırıcılarıyla (`src/scanner/parsers/`), tarama başına açılan bir `worker_threads` iş parçacığında okunur. İş parçacığının bellek sınırı 512 MiB'dir ve ortam değişkenlerini görmez. Sembolik bağlantı ve junction izlenmez, 32 MiB'den büyük dosya okunmaz; bu durumlar taramanın uyarılarına yazılır.
 - Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.
 
 **Bulgular ve kararlar (REQ-002 P-05…P-08)**

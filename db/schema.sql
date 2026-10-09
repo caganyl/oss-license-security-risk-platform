@@ -1,6 +1,15 @@
 -- =============================================================================
 -- OSS License & Security Risk Platform — Database Schema
 -- PostgreSQL 15+
+--
+-- Reference snapshot of the schema after migrations
+--   001_initial_core_schema, 002_local_auth, 003_declared_range,
+--   004_finding_fingerprint
+-- The migrations in db/migrations/ are the source of truth and are applied
+-- with db/migrate.sh. Do not load this file into a database that is (or will
+-- be) managed by db/migrate.sh: it does not populate schema_migrations, so a
+-- later "migrate.sh up" would try to re-create every object and fail.
+-- Keep this file in sync whenever a migration is added.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -109,7 +118,13 @@ CREATE TABLE users (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at      TIMESTAMPTZ,                -- soft delete
-    UNIQUE (sso_provider, sso_subject)
+    -- Local password (002, ADR-001): scrypt$<N>$<r>$<p>$<salt_b64>$<hash_b64>.
+    -- NULL = not set yet / reset by the recovery SQL step (db/README.md).
+    password_hash       TEXT,
+    password_changed_at TIMESTAMPTZ,
+    UNIQUE (sso_provider, sso_subject),
+    CONSTRAINT users_password_hash_format_chk
+        CHECK (password_hash IS NULL OR password_hash ~ '^scrypt\$')
 );
 
 CREATE TABLE roles (
@@ -125,6 +140,35 @@ CREATE TABLE user_roles (
     granted_by  UUID        REFERENCES users(id) ON DELETE SET NULL,
     granted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, role_id)
+);
+
+-- Browser sessions (002, ADR-001 decision 3). Only the SHA-256 hex digest of
+-- the cookie token is stored. Valid while expires_at > now() (absolute, 7 days)
+-- and last_seen_at > now() - 12 hours (idle); evaluated by the API.
+CREATE TABLE sessions (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash    TEXT        NOT NULL UNIQUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at    TIMESTAMPTZ NOT NULL,
+    CONSTRAINT sessions_token_hash_format_chk CHECK (token_hash ~ '^[0-9a-f]{64}$')
+);
+
+-- CLI/CI API keys (002, ADR-001 decisions 6-7). key_hash = SHA-256 hex of the
+-- full key 'ossr_<16 hex>_<43 base64url>'; key_prefix = 'ossr_<16 hex>' is for
+-- display only. Revocation sets revoked_at; rows are never deleted.
+CREATE TABLE api_keys (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name          TEXT,
+    key_hash      TEXT        NOT NULL UNIQUE,
+    key_prefix    TEXT        NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at  TIMESTAMPTZ,
+    revoked_at    TIMESTAMPTZ,
+    CONSTRAINT api_keys_key_hash_format_chk   CHECK (key_hash   ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT api_keys_key_prefix_format_chk CHECK (key_prefix ~ '^ossr_[0-9a-f]{16}$')
 );
 
 -- =============================================================================
@@ -231,7 +275,9 @@ CREATE TABLE packages (
     id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     ecosystem       tech_ecosystem NOT NULL,
     name            TEXT           NOT NULL,
-    version         TEXT           NOT NULL,
+    -- Exactly resolved version only (003, ADR-003 a); NULL = unknown, then the
+    -- purl is versionless. Declared ranges live in scan_dependencies.declared_range.
+    version         TEXT,
     -- Package URL per https://github.com/package-url/purl-spec
     -- e.g. pkg:npm/lodash@4.17.21 or pkg:pypi/requests@2.31.0
     purl            TEXT           NOT NULL UNIQUE,
@@ -247,7 +293,11 @@ CREATE TABLE packages (
     metadata        JSONB          NOT NULL DEFAULT '{}',
     enriched_at     TIMESTAMPTZ,
     created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    UNIQUE (ecosystem, name, version)
+    UNIQUE (ecosystem, name, version),
+    -- AC-P05-3: unknown version => no '@version' after the last '/' of the purl
+    CONSTRAINT packages_unversioned_purl_chk
+        CHECK (version IS NOT NULL
+               OR split_part(split_part(purl, '#', 1), '?', 1) !~ '@[^/]*$')
 );
 
 -- =============================================================================
@@ -265,6 +315,8 @@ CREATE TABLE scan_dependencies (
     parent_dep_id   UUID               REFERENCES scan_dependencies(id) ON DELETE SET NULL,
     depth           INTEGER            NOT NULL DEFAULT 0,  -- 0 = direct dependency
     created_at      TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+    -- Version range as declared in this manifest, e.g. '^1.2.0' (003, ADR-003 a)
+    declared_range  TEXT,
     UNIQUE (scan_id, package_id, manifest_path, scope)
 );
 
@@ -364,7 +416,16 @@ CREATE TABLE findings (
     suppressed_at       TIMESTAMPTZ,
     suppression_reason  TEXT,
     created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    -- Deterministic fingerprint (004, ADR-003 c, formula v1): lowercase hex
+    -- SHA-256 of 'v1|project_id|purl_scope|finding_type|key'.
+    fingerprint         CHAR(64)       NOT NULL,
+    -- Previous finding whose decision was carried over to this one (P-08)
+    carried_from_finding_id UUID       REFERENCES findings(id) ON DELETE SET NULL,
+    CONSTRAINT findings_fingerprint_format_chk
+        CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT findings_carried_from_not_self_chk
+        CHECK (carried_from_finding_id IS NULL OR carried_from_finding_id <> id)
 );
 
 -- Security-specific finding detail (one row per security finding)
@@ -509,6 +570,16 @@ CREATE TABLE system_settings (
 -- users
 CREATE INDEX idx_users_email       ON users(email)  WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_status      ON users(status) WHERE deleted_at IS NULL;
+-- at most one user with a password (single local user, concurrent setup guard)
+CREATE UNIQUE INDEX idx_users_single_password ON users ((TRUE)) WHERE password_hash IS NOT NULL;
+
+-- sessions
+CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX idx_sessions_user    ON sessions(user_id);
+
+-- api_keys
+CREATE UNIQUE INDEX idx_api_keys_one_active_per_user ON api_keys(user_id) WHERE revoked_at IS NULL;
+CREATE INDEX idx_api_keys_user ON api_keys(user_id);
 
 -- projects
 CREATE INDEX idx_projects_owner       ON projects(owner_id)    WHERE deleted_at IS NULL;
@@ -531,6 +602,8 @@ CREATE INDEX idx_scan_files_scan ON scan_files(scan_id);
 CREATE INDEX idx_packages_purl           ON packages(purl);
 CREATE INDEX idx_packages_ecosystem_name ON packages(ecosystem, name);
 CREATE INDEX idx_packages_name_trgm      ON packages USING gin(name gin_trgm_ops);
+-- one versionless row per (ecosystem, name); NULLs are distinct in UNIQUE
+CREATE UNIQUE INDEX idx_packages_unversioned_unique ON packages(ecosystem, name) WHERE version IS NULL;
 
 -- scan_dependencies
 CREATE INDEX idx_scan_deps_scan    ON scan_dependencies(scan_id);
@@ -549,6 +622,8 @@ CREATE INDEX idx_findings_dep         ON findings(scan_dependency_id);
 CREATE INDEX idx_findings_type_status ON findings(finding_type, status);
 CREATE INDEX idx_findings_assignee    ON findings(assignee_id)    WHERE assignee_id IS NOT NULL;
 CREATE INDEX idx_findings_deadline    ON findings(deadline)       WHERE deadline IS NOT NULL AND status = 'open';
+CREATE INDEX idx_findings_fingerprint_created ON findings(fingerprint, created_at DESC);
+CREATE INDEX idx_findings_carried_from        ON findings(carried_from_finding_id) WHERE carried_from_finding_id IS NOT NULL;
 
 -- security_findings
 CREATE INDEX idx_sec_findings_vuln    ON security_findings(vulnerability_id);
@@ -648,14 +723,5 @@ INSERT INTO system_settings (key, value, description) VALUES
     ('report.async_threshold_rows', '10000',            '"Row count above which report generation runs asynchronously"')
 ON CONFLICT (key) DO NOTHING;
 
--- =============================================================================
--- SEED DATA: Mock Admin User
--- =============================================================================
-
-INSERT INTO users (id, email, display_name, status)
-VALUES ('00000000-0000-0000-0000-000000000000', 'admin@company.com', 'Admin User', 'active')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO user_roles (user_id, role_id)
-SELECT '00000000-0000-0000-0000-000000000000', id FROM roles WHERE name = 'admin'
-ON CONFLICT DO NOTHING;
+-- No user is seeded: the first (local admin) user is created only by the
+-- first-run setup flow (ADR-001 decision 2).

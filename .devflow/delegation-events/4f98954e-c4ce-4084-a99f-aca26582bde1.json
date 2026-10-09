@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "4f98954e-c4ce-4084-a99f-aca26582bde1",
+  "timestamp": "2026-10-09T11:21:12Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStop",
+  "lifecycle_state": "stopped",
+  "agent_type": "unknown",
+  "evidence_source": "native_hook_event"
+}

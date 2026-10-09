@@ -28,12 +28,17 @@ export type Action = 'read' | 'write' | 'delete' | 'generate' | 'cancel' | 'supp
 
 export type Permission = `${Resource}:${Action}`;
 
+/** How the request proved its identity (ADR-001 karar 8). */
+export type AuthMethod = 'session' | 'api_key';
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
   displayName: string;
   roles: RoleName[];
+  /** `sessions.id` for cookie sessions, `apikey:<api_keys.id>` for Bearer keys. */
   sessionId: string;
+  authMethod: AuthMethod;
 }
 
 declare global {

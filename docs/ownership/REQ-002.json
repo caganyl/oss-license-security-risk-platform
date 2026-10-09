@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-002",
+  "title": "REQ-002: F1 — Güvenli ve Doğru Temel (P-01…P-09)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (oturum içi talimatla Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-09T12:00:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-002.md",
+    "acceptance_criteria": "docs/product/REQ-002.md",
+    "contracts": [
+      "docs/contracts/REQ-002-auth-api.openapi.yaml",
+      "docs/contracts/REQ-002-auth-api.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-001-yerel-kimlik-dogrulama.md",
+      "docs/architecture/adr/ADR-002-dockersiz-tarama-calisma-alani.md",
+      "docs/architecture/adr/ADR-003-bulgu-parmak-izi-ve-beyan-edilen-aralik.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src", ".env.example", "docker-compose.yml", "README.md"] },
+    { "agent": "frontend-engineer", "write_paths": ["public"] },
+    { "agent": "database-engineer", "write_paths": ["db"] },
+    { "agent": "qa-automation",     "write_paths": ["tests"] }
+  ]
+}

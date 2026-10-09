@@ -5,7 +5,9 @@ direction="${1:-up}"
 migrations_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/migrations" && pwd)"
 
 if [[ "$direction" != "up" && "$direction" != "down" ]]; then
-  echo "Usage: DATABASE_URL=postgres://user:pass@host:5432/db $0 [up|down]" >&2
+  echo "Usage: DATABASE_URL=postgres://<user>@<host>:5432/<database> $0 [up|down]  (password via PGPASSWORD or pgpass; psql >= 10)" >&2
+  echo "  up:   applies pending migrations; each file + its schema_migrations row in one transaction" >&2
+  echo "  down: rolls back ALL applied migrations in reverse order, including 001 (drops all data)" >&2
   exit 64
 fi
 
@@ -44,8 +46,14 @@ apply_up() {
   fi
 
   echo "Applying $version"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$file"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v version="$version" <<'SQL'
+  # One psql session, one transaction: --single-transaction wraps ALL -f
+  # inputs (psql >= 10) in a single BEGIN/COMMIT, so the migration file and
+  # its schema_migrations row commit or roll back together. The migration
+  # path stays a command-line argument (Git Bash converts /c/... paths for
+  # the native psql.exe); the bookkeeping statement comes from stdin (-f -).
+  # Migration files must not contain BEGIN/COMMIT.
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v version="$version" \
+    --single-transaction -f "$file" -f - <<'SQL'
 INSERT INTO schema_migrations (version) VALUES (:'version');
 SQL
 }
@@ -61,8 +69,9 @@ apply_down() {
   fi
 
   echo "Rolling back $version"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$file"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v version="$version" <<'SQL'
+  # Same single-transaction pattern as apply_up: down file + DELETE together.
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v version="$version" \
+    --single-transaction -f "$file" -f - <<'SQL'
 DELETE FROM schema_migrations WHERE version = :'version';
 SQL
 }

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-001",
+  "title": "Proje iskeleti ve teslimat altyapısı",
+  "status": "approved",
+  "approval": {
+    "approved_by": "local-maintainer",
+    "approved_at": "2026-10-09T07:25:09Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-001.md",
+    "acceptance_criteria": "docs/product/REQ-001.md",
+    "contracts": [],
+    "contract_exception": {
+      "reason": "Iskelet asamasi; kullaniciya donuk API yuzeyi henuz yok, contract gerekmiyor.",
+      "approved_by": "local-maintainer",
+      "approved_at": "2026-10-09T07:25:09Z"
+    },
+    "adrs": []
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["backend"] },
+    { "agent": "frontend-engineer", "write_paths": ["frontend"] },
+    { "agent": "database-engineer", "write_paths": ["migrations"] },
+    { "agent": "qa-automation",     "write_paths": ["tests"] },
+    { "agent": "ai-data-engineer",  "write_paths": ["ai"] }
+  ]
+}

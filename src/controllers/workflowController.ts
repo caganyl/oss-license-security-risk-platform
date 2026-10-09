@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
+import { sendError } from '../lib/httpError';
 import {
   effectiveReviewDecision,
   resolveTransition,
@@ -143,20 +144,13 @@ function handleControllerError(err: unknown, res: Response, next: NextFunction):
   const error = err as Error & { statusCode?: number; code?: string; detail?: string };
 
   if (error.code === '23503') {
-    res.status(400).json({
-      error: 'Bad Request',
-      message: error.detail ?? 'Referenced record does not exist',
-    });
+    // Fixed text: the driver's `detail` would echo raw DB internals (AC-G-8).
+    sendError(res, 400, 'Referenced record does not exist', 'invalid_request');
     return;
   }
 
   if (error.statusCode) {
-    const label =
-      error.statusCode === 404 ? 'Not Found'
-      : error.statusCode === 403 ? 'Forbidden'
-      : error.statusCode === 409 ? 'Conflict'
-      : 'Bad Request';
-    res.status(error.statusCode).json({ error: label, message: error.message });
+    sendError(res, error.statusCode, error.message);
     return;
   }
 

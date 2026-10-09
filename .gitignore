@@ -1,6 +1,12 @@
+.devflow/cache/
+.devflow/logs/
+
+# oss-license-security-risk-platform
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 .DS_Store
 *.log
 __pycache__/

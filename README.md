@@ -39,4 +39,43 @@ Sistemin tüm gereksinimleri fonksiyonel, fonksiyonel olmayan ve güvenlik olmak
 *   **BOM ve SBOM Standartları:** Platform, uluslararası standart haline gelen ve ISO/IEC 5962:2021 olarak bilinen açık kaynaklı **SPDX** (JSON ve Tag/Value formatları) ile OWASP tarafından desteklenen tedarik zinciri odaklı genişletilmiş **CycloneDX** (JSON ve XML formatları) formatlarını kullanacak ve üretecektir [3, 25].
 *   **Entegrasyon Teknolojileri:** Kaynak kod yönetimi için ilk etapta **GitHub, GitLab, Azure DevOps** ve lokal dosya yükleme (Local upload) kullanılacaktır [26]. Gelecek fazlarda Bitbucket eklenecektir [26]. CI/CD otomasyon testleri için GitHub Actions, Azure DevOps Pipeline, GitLab CI ve Jenkins kullanılacaktır [27]. İletişim ve iş takibi adına Microsoft Teams, Slack, Jira ve ServiceNow ile entegre çalışacaktır [26].
 
+**Yerel Kurulum (tek kullanıcı, REQ-002 F1)**
+
+Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olarak yalnız `127.0.0.1` üzerinde dinler, giriş tek bir yerel parola ve oturum çereziyle yapılır, CLI/CI erişimi için API anahtarı üretilir.
+
+1.  `.env.example` dosyasını `.env` olarak kopyalayın ve değerleri yalnız yerel `.env` içinde doldurun (`.env` git'e girmez). Parola gibi gizli değerler bağlantı URL'sine yazılmaz: `DATABASE_URL` parolasız tutulur (`postgres://<kullanici>@localhost:5432/<veritabani>`), parola `PGPASSWORD` ile verilir. Docker Compose için `POSTGRES_PASSWORD` zorunludur; `ENCRYPTION_KEY` yalnız şifreli repository token'ı çözülürken gerekir.
+2.  Veritabanını başlatın ve migration'ları uygulayın (`docker compose up -d db`, ardından `db/README.md`).
+3.  `npm install`, `npm run build`, `npm start`. `DATABASE_URL` tanımlı değilse API değerini yazmadan anlaşılır bir hatayla başlamaz.
+4.  Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
+5.  CLI/CI için API anahtarı, tarayıcıda giriş yaptıktan sonra API ile oluşturulur: `POST /api/auth/api-keys`. Bu uç nokta yalnız oturum çereziyle çalışır (Bearer ile `403 forbidden`) ve izin verilen bir `Origin` başlığı ister: `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>` veya `http://[::1]:<PORT>`. `Origin` yoksa ya da `null` ise istek `403 origin_rejected` alır; `Host` başlığı da aynı loopback adreslerinden biri olmalıdır (aksi halde `403 host_rejected`). Oturum çerezinin (`ossrisk_session`) değerini tarayıcının geliştirici araçlarından alın. İstek gövdesi isteğe bağlıdır ve yalnız en fazla 100 karakterlik bir `name` alanı alır:
+
+    ```bash
+    curl -X POST http://127.0.0.1:3001/api/auth/api-keys \
+      -H "Origin: http://127.0.0.1:3001" \
+      -H "Cookie: ossrisk_session=<tarayicidaki-oturum-cerezi>" \
+      -H "Content-Type: application/json" \
+      -d '{"name":"ci"}'
+    ```
+
+    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Anahtar yönetimi için arayüz ekranı F6'da gelecektir (D-22).
+
+**Tarama (Docker'sız, REQ-002 P-03/P-04)**
+
+Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` ve Python 3.11+ bulunmalıdır.
+
+- **Uzak repo:** Yalnız `https://` adresleri kabul edilir. `http`, SSH (`ssh://`, `git@host:yol`), `file://`, kullanıcı bilgisi içeren URL ve benzeri biçimler `400 repo_url_not_allowed` döner. Repo, `os.tmpdir()` altında `ossrisk-scan-*` adlı geçici bir klasöre sığ (`--depth 1`) olarak clone edilir ve tarama bitince (hata alsa bile) silinir. Özel repo token'ı URL'ye yazılmaz, git'e ortam üzerinden verilir. `ENCRYPTION_KEY` yoksa ya da token çözülemiyorsa tarama `failed` olur. Clone zaman aşımı `SCAN_CLONE_TIMEOUT_MS` ile ayarlanır (varsayılan 5 dk).
+- **Clone sertleştirmesi:** Git LFS dosyaları indirilmez (yalnız işaretçi dosyaları gelir, LFS filtreleri çalışmaz) ve HTTP yönlendirmeleri izlenmez; yönlendiren bir sunucu taramayı `failed` yapar. Erişim token'ı yalnız repo adresinin hostuna gönderilir. Token ortam değişkeniyle (`GIT_CONFIG_COUNT`) iletildiği için `git` 2.31 veya üstü gerekir; daha eski sürümlerde token gönderilmez ve özel repo clone'u başarısız olur.
+- **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök API'nin ve worker'ın başlangıçta hata vermesine yol açar.
+- **Python:** Ayrıştırıcılar `PYTHON_BIN` ile çağrılır. Varsayılan değer Windows'ta `python`, diğer sistemlerde `python3`'tür. Windows'taki Microsoft Store `python3` takma adı çalışmaz; gerekirse tam yolu verin.
+- Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.
+
+**Bulgular ve kararlar (REQ-002 P-05…P-08)**
+
+- **Kilit dosyası yoksa:** Paketin kesin sürümü bilinmez. Sürüm boş (`NULL`) kalır, purl sürümsüz yazılır (`pkg:npm/lodash`), manifestteki aralık (`^4.17.0`, `>=2,<3`) taranan bağımlılığın `declared_range` alanında manifest başına saklanır. Sürümü bilinmeyen paket için güvenlik açığı sorgusu yapılmaz; doğru sonuç için `package-lock.json`/`yarn.lock`/`poetry.lock` ekleyin veya sürümü `==` ile sabitleyin.
+- **Geliştirme kapsamı:** `devDependencies`, `requirements-dev.txt`/`requirements-test.txt` ve Poetry grupları `dev` kapsamıyla envantere girer ama lisans ihlali sayılmaz. `direct`, `transitive`, `peer` ve `optional` çalışma zamanı (runtime) kapsamıdır.
+- **Lisansı bilinmeyen paket:** Lisansı bulunamayan runtime paket için `unknown` riskli lisans bulgusu (`NOASSERTION`) açılır; `dev` paket için açılmaz.
+- **Kararların taşınması:** Her bulgunun proje, paket ve bulgu türünden türetilen bir parmak izi vardır (lisansta sürümsüz, güvenlik açığında sürümlü). Sonraki taramada aynı parmak izli bulgu, önceki karar false positive ya da süresi geçmemiş risk kabulü ise o durumla açılır. Süresi geçmiş kabul ve `wont_fix` taşınmaz; bulgu `open` açılır. Güvenlik kararları paket sürümü değişince yeniden değerlendirilir, lisans kararları sürüm yükseltmesinde korunur.
+
+Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
+
 _Agentic Development Orchestrator ile oluşturuldu._

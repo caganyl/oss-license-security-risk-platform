@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "initialized_at": "2026-10-09T07:25:10Z",
+  "sources": [],
+  "_notes": [
+    "Yalnızca source metadata saklanır.",
+    "Ham NotebookLM içeriği, token veya credential ekleme.",
+    "NotebookLM için: label, freshness, access_mode, relevance, notes.",
+    "Obsidian için yalnızca seçilmiş note label/reference kaydedilir.",
+    "git_repository ve local_docs için path ve confidence metadata."
+  ]
+}

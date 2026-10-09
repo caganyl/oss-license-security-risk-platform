@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "291626f3-f32a-4e23-bb96-621850b30d55",
+  "timestamp": "2026-10-09T11:58:14Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStop",
+  "lifecycle_state": "stopped",
+  "agent_type": "devflow-plugin:security-red-team",
+  "evidence_source": "native_hook_event"
+}

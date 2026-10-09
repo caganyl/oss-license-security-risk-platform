@@ -18,6 +18,8 @@ from .common import (
 
 
 PACKAGE_SECTIONS = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
+# Exact semver (as written in lock files); ranges, tags, URLs and git refs are not.
+EXACT_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 
 
 def parse(root: Path) -> ParseResult:
@@ -31,16 +33,24 @@ def parse(root: Path) -> ParseResult:
             package_data = read_json(package_json)
             manifest_path = manifest_dir(rel_path, "package.json")
             declared_scopes = _declared_scopes(package_data)
+            locked: list[dict[str, Any]] = []
 
             lockfile = package_json.parent / "package-lock.json"
             if lockfile.is_file():
                 result.scan_files.append(scan_file_record(root, "nodejs", lockfile))
-                result.dependencies.extend(_dependencies_from_package_lock(lockfile, manifest_path, declared_scopes))
+                locked.extend(_dependencies_from_package_lock(lockfile, manifest_path, declared_scopes))
 
             yarn_lock = package_json.parent / "yarn.lock"
             if yarn_lock.is_file():
                 result.scan_files.append(scan_file_record(root, "nodejs", yarn_lock))
-                result.dependencies.extend(_dependencies_from_yarn_lock(yarn_lock, manifest_path, declared_scopes))
+                locked.extend(_dependencies_from_yarn_lock(yarn_lock, manifest_path, declared_scopes))
+
+            # With a lock file the version comes from the lock, the range from package.json.
+            declared_ranges = _declared_ranges(package_data)
+            for dependency in locked:
+                if dependency.get("declared_range") is None and dependency["name"] in declared_ranges:
+                    dependency["declared_range"] = declared_ranges[dependency["name"]]
+            result.dependencies.extend(locked)
 
             if not lockfile.is_file() and not yarn_lock.is_file():
                 result.dependencies.extend(_dependencies_from_package_json(package_data, manifest_path))
@@ -53,11 +63,13 @@ def parse(root: Path) -> ParseResult:
 
 def _dependencies_from_package_json(package_data: dict[str, Any], manifest_path: str) -> list[dict[str, Any]]:
     dependencies: list[dict[str, Any]] = []
+    """Without a lock file only the declared range is known: version stays None."""
     for section in PACKAGE_SECTIONS:
         scope = _scope_for_section(section)
         for name, specifier in package_data.get(section, {}).items():
-            version = str(specifier).strip()
-            dependencies.append(_dependency(name, version, manifest_path, "package.json", scope))
+            declared_range = str(specifier).strip() or None
+            version = declared_range if declared_range and _is_exact_version(declared_range) else None
+            dependencies.append(_dependency(name, version, manifest_path, "package.json", scope, declared_range=declared_range))
     return dependencies
 
 
@@ -198,17 +210,24 @@ def _name_from_node_modules_path(package_path: str) -> str | None:
 
 def _dependency(
     name: str,
-    version: str,
+    version: str | None,
     manifest_path: str,
     manifest_file: str,
     scope: str,
     licenses: list[str] | None = None,
+    declared_range: str | None = None,
 ) -> dict[str, Any]:
+    """version is an exact resolved version or None (ADR-003 a); a non-exact lock
+    value (git URL, file: path, tag) is kept as declared_range instead."""
+    if version is not None and not _is_exact_version(version):
+        declared_range = declared_range or version
+        version = None
     dependency: dict[str, Any] = {
         "ecosystem": "nodejs",
         "name": name,
         "version": version,
-        "purl": npm_purl(name, version if _is_exact_version(version) else None),
+        "declared_range": declared_range,
+        "purl": npm_purl(name, version),
         "manifest_file": manifest_file,
         "manifest_path": manifest_path,
         "scope": scope,
@@ -224,6 +243,16 @@ def _declared_scopes(package_data: dict[str, Any]) -> dict[str, str]:
         for name in package_data.get(section, {}):
             scopes[name] = _scope_for_section(section)
     return scopes
+
+
+def _declared_ranges(package_data: dict[str, Any]) -> dict[str, str]:
+    ranges: dict[str, str] = {}
+    for section in PACKAGE_SECTIONS:
+        for name, specifier in package_data.get(section, {}).items():
+            value = str(specifier).strip()
+            if value:
+                ranges[name] = value
+    return ranges
 
 
 def _scope_for_section(section: str) -> str:
@@ -255,4 +284,4 @@ def _licenses(package: dict[str, Any]) -> list[str]:
 
 
 def _is_exact_version(version: str) -> bool:
-    return not any(token in version for token in ("^", "~", ">", "<", "*", "x", "X", "||", " "))
+    return EXACT_VERSION_RE.match(version.strip()) is not None

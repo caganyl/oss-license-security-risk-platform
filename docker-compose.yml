@@ -4,36 +4,39 @@ services:
   db:
     image: postgres:15-alpine
     container_name: oss-risk-db
+    # Values come from .env (copy .env.example); nothing secret is committed (REQ-002 P-09).
     environment:
-      POSTGRES_DB: oss_risk
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${POSTGRES_DB:-oss_risk}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD_in_.env}
     ports:
-      - "5432:5432"
+      # Loopback only: the database is not exposed to the network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d oss_risk"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # The scan worker no longer launches containers (REQ-002 P-03, ADR-002): it
+  # clones into a temp folder and runs the Python parsers itself, so it needs
+  # git and Python 3.11+ on PATH. The recommended F1 setup is running it on the
+  # host (`npm run worker`); this service is kept for reference and needs an
+  # image that provides git and Python.
   worker:
-    build:
-      context: .
-      dockerfile: src/scanner/sandbox/Dockerfile  # Can be customized for worker, or use a base node image
-      # For standard worker container, we can use a node base image:
     image: node:20-alpine
     container_name: oss-risk-worker
     working_dir: /app
     volumes:
       - .:/app
-      # Mount host Docker socket so containerized worker can launch sandboxed sibling containers
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgres://postgres:password123@db:5432/oss_risk
-      - ENCRYPTION_KEY=my-super-secret-key-123
-      - SANDBOX_IMAGE_TAG=latest
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}@db:5432/${POSTGRES_DB:-oss_risk}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD_in_.env}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - PYTHON_BIN=python3
+      - SCAN_ROOTS=${SCAN_ROOTS:-}
       - WORKER_MAX_CONCURRENT=4
       - WORKER_POLL_INTERVAL_MS=5000
     depends_on:
@@ -48,7 +51,8 @@ services:
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgres://postgres:password123@db:5432/oss_risk
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}@db:5432/${POSTGRES_DB:-oss_risk}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD_in_.env}
       - EXPORT_WORKER_MAX_CONCURRENT=4
       - EXPORT_WORKER_POLL_INTERVAL_MS=5000
       - EXPORT_WORKER_TIMEOUT_MS=600000

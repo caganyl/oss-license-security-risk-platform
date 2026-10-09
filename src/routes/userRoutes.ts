@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { UserController } from '../controllers/userController';
+import { requireSession } from '../middleware/authenticate';
 import { guard } from '../middleware/rbac';
 
 /**
@@ -13,6 +14,13 @@ import { guard } from '../middleware/rbac';
 export function createUserRouter(db: Pool): Router {
   const router = Router();
   const controller = new UserController(db);
+
+  // K11 / AC-P01-18: user management is cookie-only. A leaked CI API key must
+  // not list, create, re-role or delete users, so every route rejects Bearer
+  // authentication with 403 before RBAC or the controller runs. (When an
+  // Authorization header is present, authenticate() ignores the cookie, so a
+  // Bearer + cookie request is also rejected here.)
+  router.use(requireSession());
 
   router.get('/', guard('users:read'), controller.listUsers);
   router.post('/', guard('users:write'), controller.createUser);

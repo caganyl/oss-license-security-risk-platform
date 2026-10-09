@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { Permission, RoleName } from '../types/auth';
 import { hasPermission, hasRole } from '../config/permissions';
+import { sendError } from '../lib/httpError';
 
 /**
  * Guards a route to authenticated users only.
@@ -12,10 +13,7 @@ import { hasPermission, hasRole } from '../config/permissions';
 export function requireAuth(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Authentication required',
-      });
+      sendError(res, 401, 'Authentication required', 'unauthenticated');
       return;
     }
     next();
@@ -33,15 +31,12 @@ export function requireAuth(): RequestHandler {
 export function requireRole(...roles: RoleName[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+      sendError(res, 401, 'Authentication required', 'unauthenticated');
       return;
     }
 
     if (!hasRole(req.user.roles, roles)) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: `One of the following roles is required: ${roles.join(', ')}`,
-      });
+      sendError(res, 403, `One of the following roles is required: ${roles.join(', ')}`, 'forbidden');
       return;
     }
 
@@ -62,14 +57,12 @@ export function requireRole(...roles: RoleName[]): RequestHandler {
 export function requirePermission(permission: Permission): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+      sendError(res, 401, 'Authentication required', 'unauthenticated');
       return;
     }
 
     if (!hasPermission(req.user.roles, permission)) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: `Permission "${permission}" is required`,
+      sendError(res, 403, `Permission "${permission}" is required`, 'forbidden', {
         required: permission,
         userRoles: req.user.roles,
       });

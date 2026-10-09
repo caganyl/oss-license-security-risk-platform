@@ -1,0 +1,29 @@
+{
+  "schema_version": "1",
+  "forbidden_git_operations": [
+    "merge",
+    "push --force",
+    "push -f",
+    "branch -d",
+    "branch -D",
+    "reset --hard",
+    "reset --soft",
+    "reset --mixed",
+    "checkout -- .",
+    "restore .",
+    "clean -f"
+  ],
+  "require_confirm_delivery": true,
+  "protected_branches": [
+    "main",
+    "master"
+  ],
+  "run_branch_prefix": "devflow/run-",
+  "dry_run_by_default": true,
+  "notes": [
+    "main merge insan onayı gerektirir.",
+    "force push, branch silme ve reset yasaktır.",
+    "prepare-delivery bu sürümde yalnızca doğrulama raporu üretir; gerçek Git mutasyonu yapmaz.",
+    "main branch üzerinde init-target, create-run ve prepare-delivery çalışmaz."
+  ]
+}

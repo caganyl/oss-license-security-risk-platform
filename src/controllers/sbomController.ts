@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { sendError } from '../lib/httpError';
 import { SbomService, VALID_FORMATS } from '../sbom/sbomService';
 import type { SbomFormat, SbomDocumentRecord } from '../sbom/sbomService';
 
@@ -12,11 +13,7 @@ function isUuid(value: string | undefined): value is string {
 function handleError(err: unknown, res: Response, next: NextFunction): void {
   const error = err as Error & { statusCode?: number };
   if (error.statusCode) {
-    const label =
-      error.statusCode === 404 ? 'Not Found'
-      : error.statusCode === 400 ? 'Bad Request'
-      : 'Error';
-    res.status(error.statusCode).json({ error: label, message: error.message });
+    sendError(res, error.statusCode, error.message);
     return;
   }
   next(err);

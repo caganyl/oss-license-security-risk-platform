@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "2138ac9f-253e-47f9-8444-246aeec6a0a1",
+  "timestamp": "2026-10-09T09:16:06Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStart",
+  "lifecycle_state": "started",
+  "agent_type": "devflow-plugin:database-engineer",
+  "evidence_source": "native_hook_event"
+}

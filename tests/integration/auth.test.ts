@@ -1,6 +1,6 @@
 /**
- * REQ-002 · P-01 (AC-P01-1…17), AC-G-8, AC-G-9
- * Contract: docs/contracts/REQ-002-auth-api.md (0.2.2-draft), ADR-001.
+ * REQ-002 · P-01 (AC-P01-1…18), AC-G-8, AC-G-9
+ * Contract: docs/contracts/REQ-002-auth-api.md (0.2.3-draft, K11), ADR-001.
  * Every test gets a fresh migrated database (no users) and a fresh app from
  * `createApp({ db, port: 3001, host: '127.0.0.1' })` (src/app.ts).
  * Session expiry is tested by moving sessions.last_seen_at / expires_at in
@@ -483,6 +483,80 @@ describe('P-01 API keys (AC-P01-3, AC-P01-5, AC-P01-15, D-16)', () => {
     ]);
     expect(results.map((r) => r.status)).toEqual([201, 201]);
     expect(await db.query('SELECT id FROM api_keys WHERE revoked_at IS NULL')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('P-01 user management requires a browser session (AC-P01-18, D-19, contract K11)', () => {
+  const SESSION_REQUIRED_MESSAGE = 'This endpoint requires a browser session';
+
+  /** Every user/role/status fact that a /api/users call could change. */
+  async function usersSnapshot() {
+    return db.query(
+      `SELECT u.id, u.email, u.display_name, u.status::text AS status, u.deleted_at,
+              COALESCE(array_agg(r.name::text ORDER BY r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS roles
+         FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
+        GROUP BY u.id ORDER BY u.email`,
+    );
+  }
+
+  /** All /api/users routes (src/routes/userRoutes.ts) with bodies that would change records if accepted. */
+  function userRoutes(targetId: string): Array<['get' | 'post' | 'put' | 'patch' | 'delete', string, Record<string, unknown> | undefined]> {
+    return [
+      ['get', '/api/users', undefined],
+      ['post', '/api/users', { email: 'minted@example.invalid', displayName: 'Minted', roles: ['admin'] }],
+      ['get', `/api/users/${targetId}`, undefined],
+      ['patch', `/api/users/${targetId}`, { displayName: 'changed-by-key', status: 'disabled' }],
+      ['put', `/api/users/${targetId}/roles`, { roles: ['admin'] }],
+      ['delete', `/api/users/${targetId}`, undefined],
+    ];
+  }
+
+  it('AC-P01-18: valid Bearer on every /api/users method -> 403 forbidden; no user, status or role changes', async () => {
+    const a = await app();
+    const cookie = await setupPassword(a);
+    const { key } = await createApiKey(a, cookie);
+    const targetId = await insertUser('target@example.invalid', { admin: false });
+    const before = await usersSnapshot();
+    for (const [method, url, body] of userRoutes(targetId)) {
+      const res = await req(a, method, url, { bearer: key, origin: null }).send(body);
+      try {
+        expectErrorBody(res, 403, 'forbidden');
+      } catch (err) {
+        throw new Error(`${method.toUpperCase()} ${url}: ${(err as Error).message}`);
+      }
+      expect(res.body.message, `${method.toUpperCase()} ${url}`).toBe(SESSION_REQUIRED_MESSAGE);
+    }
+    expect(await usersSnapshot()).toEqual(before);
+  });
+
+  it('AC-P01-18: valid Bearer together with a valid session cookie is still 403 (Authorization wins)', async () => {
+    const a = await app();
+    const cookie = await setupPassword(a);
+    const { key } = await createApiKey(a, cookie);
+    const targetId = await insertUser('target@example.invalid', { admin: false });
+    const before = await usersSnapshot();
+    expectErrorBody(await req(a, 'get', '/api/users', { bearer: key, cookie }), 403, 'forbidden');
+    expectErrorBody(await req(a, 'delete', `/api/users/${targetId}`, { bearer: key, cookie }), 403, 'forbidden');
+    expect(await usersSnapshot()).toEqual(before);
+  });
+
+  it('AC-P01-18: invalid or missing credentials on /api/users -> 401 unauthenticated', async () => {
+    const a = await app();
+    await setupPassword(a);
+    const targetId = await insertUser('target@example.invalid', { admin: false });
+    for (const [method, url, body] of userRoutes(targetId)) {
+      expectErrorBody(await req(a, method, url, { bearer: 'not-a-key', origin: null }).send(body), 401, 'unauthenticated');
+      expectErrorBody(await req(a, method, url).send(body), 401, 'unauthenticated');
+    }
+  });
+
+  it('AC-P01-18 (control): the same requests with a session cookie are not 403 forbidden', async () => {
+    const a = await app();
+    const cookie = await setupPassword(a);
+    const targetId = await insertUser('target@example.invalid', { admin: false });
+    expect((await req(a, 'get', '/api/users', { cookie })).status).toBe(200);
+    expect((await req(a, 'get', `/api/users/${targetId}`, { cookie })).status).toBe(200);
   });
 });
 

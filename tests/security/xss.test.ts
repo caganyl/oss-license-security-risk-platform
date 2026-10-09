@@ -1,12 +1,17 @@
 /**
- * REQ-002 · P-02 (AC-P02-1…4) — public/index.html in jsdom.
- * fetch is replaced by an in-memory fake API; the external lucide <script>
- * is never loaded (jsdom loads no sub-resources here) and `lucide` is stubbed.
- * Every dynamic field returned by the API carries an HTML/JS payload; the UI
- * must render it as text: no element is created from it, no handler runs.
+ * REQ-002 · P-02 (AC-P02-1…7) — public/index.html in jsdom.
+ * fetch is replaced by an in-memory fake API. Sub-resources are served by
+ * PublicDirLoader: same-origin `<script src="/…">` files are read from
+ * public/ (so the page script may live in `public/app.js`, AC-P02-6), while
+ * public/vendor/* (lucide, stubbed as `window.lucide`) and every external URL
+ * are never loaded. Every dynamic field returned by the API carries an
+ * HTML/JS payload; the UI must render it as text: no element is created from
+ * it, no handler runs. The static part checks the D-17 page structure.
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as jsdomModule from 'jsdom';
 import { JSDOM } from 'jsdom';
 import { repoPath } from '../helpers/paths';
 
@@ -81,6 +86,30 @@ afterEach(() => {
   open = [];
 });
 
+const PUBLIC_DIR = repoPath('public');
+
+/**
+ * jsdom 26 (runtime) exports ResourceLoader, but the installed @types/jsdom
+ * no longer declares it; the minimal shape used here is typed locally.
+ */
+type LoaderResult = (Promise<Buffer> & { abort(): void }) | null;
+type ResourceLoaderCtor = new () => { fetch(url: string, options: unknown): LoaderResult };
+const ResourceLoaderBase = (jsdomModule as unknown as { ResourceLoader: ResourceLoaderCtor }).ResourceLoader;
+
+/** Serves same-origin files from public/ (except vendor/); everything else is not loaded. */
+class PublicDirLoader extends ResourceLoaderBase {
+  override fetch(url: string, options: unknown): LoaderResult {
+    const target = new URL(url);
+    if (target.origin !== BASE || target.pathname.startsWith('/vendor/')) return null;
+    const file = path.resolve(PUBLIC_DIR, `.${decodeURIComponent(target.pathname)}`);
+    if (!file.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      return null; // missing local files are reported by the static AC-P02-6 test
+    }
+    void options;
+    return Object.assign(Promise.resolve(fs.readFileSync(file)), { abort: () => undefined });
+  }
+}
+
 function loadPage(overrides: Record<string, Route> = {}): Page {
   const html = fs.readFileSync(repoPath('public', 'index.html'), 'utf8');
   const api = defaultApi(overrides);
@@ -89,6 +118,7 @@ function loadPage(overrides: Record<string, Route> = {}): Page {
   const dom = new JSDOM(html, {
     url: `${BASE}/`,
     runScripts: 'dangerously',
+    resources: new PublicDirLoader() as never, // see ResourceLoaderBase
     pretendToBeVisual: true,
     beforeParse(window) {
       const w = window as unknown as Record<string, unknown>;
@@ -209,6 +239,62 @@ describe('P-02 XSS — API data is rendered as text (AC-P02-1…3)', () => {
     (scanButton as HTMLElement).click();
     await waitFor(() => page.calls.includes('POST /api/scans') && payloadCount(page) > before, 'error message rendered');
     expectNoInjection(page);
+  });
+});
+
+describe('P-02 page structure: no external or inline script (AC-P02-5…7, D-17, contract K13)', () => {
+  const EXTERNAL_RE = /^\s*(?:[a-z][a-z0-9+.-]*:|\/\/)/i; // any scheme (http:, https:, data:, javascript:) or protocol-relative
+  const html = fs.readFileSync(repoPath('public', 'index.html'), 'utf8');
+  const doc = new JSDOM(html).window.document; // parsed only; no script runs
+  const scripts = Array.from(doc.querySelectorAll('script'));
+  const localFile = (src: string) => path.join(PUBLIC_DIR, ...src.replace(/^\//, '').split('/'));
+
+  it('AC-P02-5: no <script src> points to an external origin (http, https, //, data:, javascript:)', () => {
+    const external = scripts.map((s) => s.getAttribute('src')).filter((src): src is string => src !== null && EXTERNAL_RE.test(src));
+    expect(external).toEqual([]);
+  });
+
+  it('AC-P02-5: lucide 1.48.0 is loaded from the local /vendor/ path and the file exists', () => {
+    const lucide = scripts.map((s) => s.getAttribute('src') ?? '').filter((src) => /lucide/i.test(src));
+    expect(lucide).toEqual(['/vendor/lucide-1.48.0.min.js']);
+    expect(fs.existsSync(localFile(lucide[0]))).toBe(true);
+  });
+
+  it('AC-P02-6: no inline <script> (every script has a src and an empty body)', () => {
+    const inline = scripts.filter((s) => !s.hasAttribute('src') || (s.textContent ?? '').trim() !== '');
+    expect(inline.map((s) => (s.textContent ?? '').trim().slice(0, 60))).toEqual([]);
+  });
+
+  it('AC-P02-6: the page script is public/app.js, loaded as /app.js; every local script file exists', () => {
+    const srcs = scripts.map((s) => s.getAttribute('src')).filter((src): src is string => src !== null);
+    expect(srcs).toContain('/app.js');
+    for (const src of srcs.filter((s) => !EXTERNAL_RE.test(s))) {
+      expect(fs.existsSync(localFile(src)), `${src} under public/`).toBe(true);
+    }
+  });
+
+  it('AC-P02-6: no inline event handler attributes (on*=) and no javascript: URLs', () => {
+    const offenders: string[] = [];
+    for (const el of Array.from(doc.querySelectorAll('*'))) {
+      for (const attr of Array.from(el.attributes)) {
+        if (/^on/i.test(attr.name)) offenders.push(`<${el.tagName.toLowerCase()} ${attr.name}>`);
+        if (/^(href|src|action|formaction)$/i.test(attr.name) && /^\s*javascript:/i.test(attr.value)) {
+          offenders.push(`<${el.tagName.toLowerCase()} ${attr.name}="javascript:…">`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('AC-P02-7 (a): no external stylesheet, font or preconnect link; no external @import/url() in inline styles', () => {
+    const links = Array.from(doc.querySelectorAll('link[href]'))
+      .map((l) => `${l.getAttribute('rel') ?? ''} ${l.getAttribute('href') ?? ''}`)
+      .filter((entry) => EXTERNAL_RE.test(entry.split(' ').pop() ?? ''));
+    expect(links).toEqual([]);
+    const styles = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
+    expect(styles).not.toMatch(/@import\s+(?:url\()?\s*['"]?\s*(?:https?:)?\/\//i);
+    expect(styles).not.toMatch(/url\(\s*['"]?\s*(?:https?:)?\/\//i);
+    expect(html).not.toMatch(/fonts\.(googleapis|gstatic)\.com/i);
   });
 });
 

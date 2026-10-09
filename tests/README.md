@@ -131,6 +131,34 @@ export function withTempWorkspace<T>(fn: (dir: string) => Promise<T>, options?: 
 - `withTempWorkspace`: `<tmpRoot>/ossrisk-scan-XXXX` açar, başarıda da hatada da
   siler (salt-okunur dosyalar dahil), `fn`'in hatasını aynen yeniden fırlatır.
 
+#### Clone sertleştirmesi — AC-P03-8…10 (D-18, güvenlik incelemesi M-2)
+
+`unit/cloneRepoConfig.test.ts`, `child_process`'i taklit edip (`vi.mock`)
+`cloneRepo`'nun `spawn('git', args, { env })` çağrısını yakalar ve git'in
+**etkin yapılandırmasını** iki kanaldan birleştirir: `clone`'dan önceki
+`-c key=value` çiftleri + `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`.
+Anahtar karşılaştırması git kuralıyla (bölüm/değişken büyük-küçük harf duyarsız,
+alt bölüm/URL duyarlı); aynı anahtarda son değer geçerlidir. Beklenen küme:
+
+| Ayar | Değer | Kanal |
+| --- | --- | --- |
+| `GIT_LFS_SKIP_SMUDGE` (ortam değişkeni) | `1` | env |
+| `filter.lfs.smudge` | `` (boş) | args veya `GIT_CONFIG_*` |
+| `filter.lfs.clean` | `` (boş) | args veya `GIT_CONFIG_*` |
+| `filter.lfs.process` | `` (boş) | args veya `GIT_CONFIG_*` |
+| `filter.lfs.required` | `false` | args veya `GIT_CONFIG_*` |
+| `http.followRedirects` | `false` | **`buildGitCloneArgs` çıktısında** `-c http.followRedirects=false` (`clone`'dan önce) |
+| `http.<https://host/>.extraHeader` | `Authorization: Basic <base64(user:token)>` | **yalnız `GIT_CONFIG_*`** (token argümanlarda ham ya da base64 olarak görünmez) |
+
+- Token varken tam olarak **bir** `extraHeader` girdisi olur; alt bölümü hedef
+  URL'nin `https://<host>/` kökenidir (ör. `http.https://github.com/.extraHeader`).
+  Hosttan bağımsız `http.extraHeader` **bulunmaz**. Token yoksa hiç
+  `extraHeader` yoktur.
+- Ayarlar token'lı ve token'sız clone'da aynıdır. Önerilen yer: LFS/filtre ve
+  yönlendirme ayarları `buildGitCloneArgs` içinde `-c` olarak (saf, test edilebilir),
+  token başlığı `cloneRepo` ortamında.
+- Test `cloneRepo`'nun tam olarak bir `git` süreci başlatmasını bekler.
+
 ### `src/scanner/worker.ts` — P-03, P-04 (worker), P-05…P-09
 
 ```ts
@@ -203,13 +231,60 @@ Ek export yok. Test, sayfayı jsdom'da `fetch` taklidiyle açar ve
 `GET /api/auth/me` `401` ise sayfada `input[type="password"]` beklenir; formun
 gönderimi (`requestSubmit` ya da formdaki buton) `POST /api/auth/login` çağırır.
 
+#### Sayfa yapısı — AC-P02-5…7 (D-17, AC-P02-7 seçenek (a))
+
+- Sayfa betiği **`public/app.js`** dosyasına taşınır ve
+  `<script src="/app.js">` ile yüklenir (`defer` serbest). `index.html`'de
+  inline `<script>` gövdesi, `on*=` özniteliği ve `javascript:` URL'si kalmaz;
+  olay işleyiciler `addEventListener` ile bağlanır.
+- `lucide` yalnız `<script src="/vendor/lucide-1.48.0.min.js">` ile yüklenir;
+  hiçbir `<script src>` şema (`http:`, `https:`, `data:`, `javascript:`) ya da
+  `//` ile başlamaz.
+- Harici `<link>` (preconnect, stylesheet, font) ve satır içi `<style>`'da
+  harici `@import`/`url()` yoktur; `fonts.googleapis.com`/`fonts.gstatic.com`
+  sayfada geçmez (Google Fonts tamamen kaldırılır).
+- jsdom yükleyicisi (`security/xss.test.ts` → `PublicDirLoader`) aynı kökenli
+  `<script src="/…">` / `<link href="/…">` dosyalarını `public/` altından okuyup
+  çalıştırır; `public/vendor/*` ve harici URL'ler yüklenmez (`window.lucide`
+  taklit edilir). Bu yüzden `app.js`, `window.lucide` yoksa da çalışmalıdır.
+
+### HTTP güvenlik başlıkları — contract K13 (AC-P02-6, AC-P02-7)
+
+`integration/securityHeaders.test.ts`. **Her** yanıtta (HTML, statik `.js`,
+`/health`, `200`/`204`, `400` bozuk JSON, `401`, `404`, yabancı Host `403`):
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`. `GET /` ve `GET /index.html` yanıtında
+`Content-Security-Policy`; test şu direktifleri **tam değerle** bekler:
+`default-src 'self'`, `script-src 'self'`, `object-src 'none'`, `base-uri 'none'`,
+`frame-ancestors 'none'`, `form-action 'self'`. Herhangi bir direktifte yalnız
+`'self'`, `'none'`, `data:` izinlidir; `'unsafe-inline'` yalnız `style-src`'de
+kabul edilir; harici köken, `https:`, `*`, `'unsafe-eval'` yoktur.
+
+### HTTP davranışları — contract K11, K12
+
+- **K11 / AC-P01-18** (`integration/auth.test.ts`): `/api/users` altındaki
+  6 rota geçerli Bearer ile `403 forbidden`, mesaj
+  `This endpoint requires a browser session`; aynı istekte geçerli çerez olsa
+  da `403`; kullanıcı/durum/rol anlık görüntüsü değişmez. Geçersiz ya da eksik
+  kimlik `401 unauthenticated`; çerezle `GET` `200`.
+- **K12 / AC-P03-11** (`integration/scanSourceHttp.test.ts`): `repo_url`
+  `NULL` ya da `''` olan proje için `POST /api/scans` → `400 project_source_missing`,
+  mesaj `Project has no repository URL or local path`, `scans` satırı oluşmaz;
+  bilinmeyen `projectId` → `404 not_found`.
+
 ## AC → test eşlemesi
 
 | Kalem | Dosya |
 | --- | --- |
 | P-01, AC-G-8, AC-G-9 | `integration/auth.test.ts`, `security/staticCode.test.ts` |
+| AC-P01-18 (K11) | `integration/auth.test.ts` |
 | P-02 | `security/xss.test.ts` |
+| AC-P02-5…7 (D-17) | `security/xss.test.ts` (sayfa yapısı), `integration/securityHeaders.test.ts` (CSP) |
+| K13 güvenlik başlıkları | `integration/securityHeaders.test.ts` |
 | P-03 | `unit/workspace.test.ts`, `unit/scanSource.test.ts`, `integration/worker.test.ts`, `security/staticCode.test.ts` |
+| AC-P03-8…10 (D-18) | `unit/cloneRepoConfig.test.ts` |
+| AC-P03-11 (K12) | `integration/scanSourceHttp.test.ts` |
+| AC-P08-12 (D-21) | `integration/worker.test.ts` |
 | P-04 | `unit/scanSource.test.ts`, `integration/scanSourceHttp.test.ts`, `integration/worker.test.ts` |
 | P-05 | `unit/pythonParsers.test.ts`, `integration/worker.test.ts`, `integration/migrations.test.ts` |
 | P-06, P-07 | `integration/worker.test.ts`, `unit/pythonParsers.test.ts` |

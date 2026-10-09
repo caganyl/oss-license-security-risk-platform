@@ -383,7 +383,7 @@ describe('P-07 dev/test scope is not a license violation (AC-P07-1…4)', () => 
 });
 
 // ---------------------------------------------------------------------------
-describe('P-08 fingerprint and decision carry-over (AC-P08-1…11)', () => {
+describe('P-08 fingerprint and decision carry-over (AC-P08-1…12)', () => {
   const CVE = 'CVE-2099-0001';
   let reviewerId = '';
 
@@ -527,6 +527,22 @@ describe('P-08 fingerprint and decision carry-over (AC-P08-1…11)', () => {
     const second = await scanWith(projectId, '1.0.0');
     await decide(second.license.id, 'open', null); // reopen
     expect((await scanWith(projectId, '1.0.0')).license.status).toBe('open');
+  });
+
+  it('AC-P08-12 / D-21: closed status without a review record is not carried -> open; with a review it is carried', async () => {
+    const bare = await insertProject(null);
+    const a = await scanWith(bare, '1.0.0');
+    await decide(a.license.id, 'false_positive', null); // closed directly in the DB, no finding_reviews row
+    await decide(a.security.id, 'accepted', null);
+    const b = await scanWith(bare, '1.0.0');
+    expect(b.license).toMatchObject({ status: 'open', carried: null });
+    expect(b.security).toMatchObject({ status: 'open', carried: null });
+    expect(await reviews(b.license.id)).toEqual([]);
+
+    const reviewed = await insertProject(null);
+    const c = await scanWith(reviewed, '1.0.0');
+    await decide(c.license.id, 'false_positive', 'false_positive');
+    expect((await scanWith(reviewed, '1.0.0')).license).toMatchObject({ status: 'false_positive', carried: c.license.id });
   });
 
   it('AC-P08-1: decisions never leak across projects (project id is part of the fingerprint)', async () => {

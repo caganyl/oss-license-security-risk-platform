@@ -1,5 +1,5 @@
 /**
- * REQ-002 · P-04 (AC-P04-2…6) and P-03 (AC-P03-7) at the HTTP boundary.
+ * REQ-002 · P-04 (AC-P04-2…6) and P-03 (AC-P03-7, AC-P03-11) at the HTTP boundary.
  * POST /api/projects (repoUrl) and POST /api/scans (effective repo_url) are
  * classified BEFORE anything is stored/queued; on rejection nothing is
  * written. Contract: REQ-002-auth-api.md "P-04 — 400 davranışı".
@@ -107,6 +107,32 @@ describe('P-04 POST /api/scans re-checks the effective repo_url (AC-P04-5)', () 
   it('AC-P04-2: stored path under SCAN_ROOTS -> 201', async () => {
     const projectId = await projectWithRepo(dirs.proj);
     expect((await req(app, 'post', '/api/scans', { cookie }).send({ projectId })).status).toBe(201);
+  });
+});
+
+describe('P-03 project without a source (AC-P03-11, D-20, contract K12)', () => {
+  const SOURCE_MISSING_MESSAGE = 'Project has no repository URL or local path';
+
+  it.each([
+    ['NULL', null],
+    ["''", ''],
+  ])('AC-P03-11: repo_url %s -> 400 project_source_missing, no scan row', async (_label, repoUrl) => {
+    const [row] = await db.query<{ id: string }>(`INSERT INTO projects (name, repo_url) VALUES ('no-source', $1) RETURNING id`, [repoUrl]);
+    const before = await count('scans');
+    const res = await req(app, 'post', '/api/scans', { cookie }).send({ projectId: row.id });
+    expectErrorBody(res, 400, 'project_source_missing');
+    expect(res.body.message).toBe(SOURCE_MISSING_MESSAGE);
+    expect(await count('scans')).toBe(before);
+  });
+
+  it('K12 (regression): unknown projectId -> 404 not_found, not 400', async () => {
+    const res = await req(app, 'post', '/api/scans', { cookie }).send({ projectId: '7d1f3f5e-1c2b-4a3d-9e8f-0123456789ab' });
+    expectErrorBody(res, 404, 'not_found');
+  });
+
+  it('K12 (regression): POST /api/projects without repoUrl is still 201', async () => {
+    const res = await req(app, 'post', '/api/projects', { cookie }).send({ name: 'no-source-allowed' });
+    expect(res.status).toBe(201);
   });
 });
 

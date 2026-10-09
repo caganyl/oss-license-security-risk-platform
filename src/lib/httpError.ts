@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'invalid_password'
   | 'path_not_allowed'
   | 'repo_url_not_allowed'
+  | 'project_source_missing'
   | 'unauthenticated'
   | 'setup_required'
   | 'invalid_credentials'

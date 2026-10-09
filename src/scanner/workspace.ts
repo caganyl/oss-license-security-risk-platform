@@ -36,12 +36,22 @@ export function isValidRef(ref: string): boolean {
 /**
  * Pure argument array for `git clone`; the token never appears here. `--`
  * ends option parsing before the URL and destination.
+ *
+ * Hardening (D-18, AC-P03-8, AC-P03-10): the Git LFS filters are emptied and
+ * made optional so no LFS process runs and no LFS object is downloaded from
+ * an attacker-chosen endpoint, and HTTP redirects are not followed so the
+ * clone (and a token header) never leaves the requested host.
  */
 export function buildGitCloneArgs(url: string, ref: string | null, dest: string): string[] {
   const args = [
     '-c', 'core.symlinks=false',
     '-c', 'core.longpaths=true',
     '-c', 'credential.helper=',
+    '-c', 'filter.lfs.smudge=',
+    '-c', 'filter.lfs.clean=',
+    '-c', 'filter.lfs.process=',
+    '-c', 'filter.lfs.required=false',
+    '-c', 'http.followRedirects=false',
     'clone', '--depth', '1', '--single-branch', '--no-tags',
   ];
   if (ref !== null) {
@@ -85,10 +95,22 @@ function tokenUserFor(url: string): string {
 }
 
 /**
- * Real shallow clone with `spawn('git', args, { shell: false })`. The token
- * travels only through git's environment configuration (`http.extraHeader`),
- * never in the URL, the argument list or `.git/config`; captured stderr is
- * scrubbed of both the raw and the base64 form.
+ * `https://<host>[:port]/` origin of the clone URL, used as the URL subsection
+ * of `http.<url>.extraHeader` so git sends the token only to that host
+ * (D-18, AC-P03-9). `URL.host` keeps a non-default port.
+ */
+function headerScopeFor(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.protocol}//${parsed.host}/`;
+}
+
+/**
+ * Real shallow clone with a single `spawn('git', args, { shell: false })`.
+ * The token travels only through git's environment configuration as one
+ * host-scoped `http.<https://host/>.extraHeader` (GIT_CONFIG_*), never in the
+ * URL, the argument list or `.git/config`; captured stderr is scrubbed of both
+ * the raw and the base64 form. LFS smudge is skipped (GIT_LFS_SKIP_SMUDGE) in
+ * addition to the emptied filters in `buildGitCloneArgs`.
  */
 export const cloneRepo: CloneRepoFn = async (url, ref, dest, token) => {
   assertRemoteUrl(url);
@@ -98,12 +120,15 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token) => {
     GIT_TERMINAL_PROMPT: '0',
     GCM_INTERACTIVE: 'never',
     GIT_ALLOW_PROTOCOL: 'https',
+    GIT_LFS_SKIP_SMUDGE: '1',
+    // Overrides any inherited GIT_CONFIG_* so no stray header/config leaks in.
+    GIT_CONFIG_COUNT: '0',
   };
   const secrets: string[] = [];
   if (token) {
     const basic = Buffer.from(`${tokenUserFor(url)}:${token}`, 'utf8').toString('base64');
     gitEnv.GIT_CONFIG_COUNT = '1';
-    gitEnv.GIT_CONFIG_KEY_0 = 'http.extraHeader';
+    gitEnv.GIT_CONFIG_KEY_0 = `http.${headerScopeFor(url)}.extraHeader`;
     gitEnv.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${basic}`;
     secrets.push(token, basic);
   }

@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { HttpError } from '../lib/httpError';
 import { resolveScanSource } from '../lib/scanSource';
 
 export class ScanController {
@@ -55,13 +56,16 @@ export class ScanController {
         throw Object.assign(new Error('Project not found'), { statusCode: 404 });
       }
 
-      // P-04 (AC-P04-5): re-check the effective source before queueing; a
-      // rejection is a 400 and no scans row is created. Scans created here
-      // carry no integration, so the project's repo_url is the effective one.
+      // P-03 (AC-P03-11, K12) and P-04 (AC-P04-5): re-check the effective
+      // source before queueing; a rejection is a 400 and no scans row is
+      // created. Scans created here carry no integration, so the project's
+      // repo_url is the effective one. A missing source would otherwise only
+      // fail later in the worker, so it is rejected up front.
       const repoUrl = projCheck.rows[0].repo_url;
-      if (repoUrl) {
-        await resolveScanSource(repoUrl, this.scanRoots);
+      if (repoUrl === null || repoUrl === '') {
+        throw new HttpError(400, 'Project has no repository URL or local path', 'project_source_missing');
       }
+      await resolveScanSource(repoUrl, this.scanRoots);
 
       const result = await this.db.query(`
         INSERT INTO scans (project_id, trigger, status, ref, ref_type, queued_at, initiated_by)

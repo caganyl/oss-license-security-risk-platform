@@ -16,6 +16,7 @@ import {
   requireSameOrigin,
   requireSameOriginForSessionWrites,
 } from './middleware/requestGuards';
+import { securityHeaders } from './middleware/securityHeaders';
 import { createAuthRouter, createPublicAuthRouter } from './routes/authRoutes';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
@@ -40,7 +41,7 @@ const JSON_BODY_LIMIT = '1mb';
 
 /**
  * Builds the Express app without listening. Middleware order follows
- * ADR-001 karar 8: Host -> static and /health -> login/setup -> cookie/Bearer
+ * ADR-001 karar 8 (security headers, K13, come first): Host -> static and /health -> login/setup -> cookie/Bearer
  * authentication -> CSRF (Origin) -> routers and RBAC -> /api 404 -> JSON
  * error handler. All in-memory state (login throttle) belongs to this instance.
  */
@@ -54,6 +55,9 @@ export function createApp(deps: AppDeps): express.Express {
 
   const app = express();
   app.disable('x-powered-by');
+  // K13: first in the chain, before the Host check, so every response
+  // (including 403 host_rejected and express.static files) carries them.
+  app.use(securityHeaders());
   app.use(requireAllowedHost(allowed));
 
   app.get('/health', async (_req, res) => {

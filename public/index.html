@@ -28,6 +28,7 @@
       --font-body: 'Plus Jakarta Sans', sans-serif;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
     body {
       background: var(--bg-gradient);
       color: var(--text-main);
@@ -80,6 +81,13 @@
     .sidebar-footer {
       margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--card-border);
     }
+    .user-box {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 1rem;
+    }
+    .user-name {
+      font-size: 0.85rem; color: var(--text-main); min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .connection-status {
       display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-muted);
     }
@@ -112,6 +120,9 @@
     }
     .btn-ghost:hover { background: rgba(255,255,255,0.12); box-shadow: none; color: var(--text-main); }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.78rem; border-radius: 8px; }
+    .btn:focus-visible, .nav-item:focus-visible, .modal-close:focus-visible, a:focus-visible {
+      outline: 2px solid var(--scanning); outline-offset: 2px;
+    }
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
     .stat-card {
       background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px;
@@ -191,6 +202,21 @@
     .form-control:focus { outline: none; border-color: var(--primary); }
     .form-control option { background: #1e293b; }
     .form-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
+    /* Auth (login / initial setup) */
+    .auth-screen {
+      min-height: calc(100vh - 4rem); display: flex; align-items: center; justify-content: center;
+    }
+    .auth-card {
+      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 24px;
+      padding: 2.5rem; width: 440px; max-width: 100%; backdrop-filter: blur(16px);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+    .auth-card .logo-container { margin-bottom: 1.75rem; }
+    .auth-hint { display: block; color: var(--text-muted); font-size: 0.8rem; margin-top: 0.4rem; }
+    .auth-message { min-height: 1.25rem; font-size: 0.85rem; line-height: 1.4; }
+    .auth-message.error { color: var(--danger); }
+    .auth-message.info { color: var(--text-muted); }
+    .auth-card .form-actions .btn { width: 100%; justify-content: center; }
     /* Findings style */
     .finding-item {
       display: flex; align-items: flex-start; gap: 1rem; padding: 1.25rem;
@@ -224,10 +250,28 @@
     #toast.show { transform: translateY(0); opacity: 1; }
     #toast.success { border-color: rgba(16,185,129,0.4); }
     #toast.error { border-color: rgba(239,68,68,0.4); }
+    @media (max-width: 900px) {
+      body { padding: 1rem; }
+      .dashboard-container { grid-template-columns: 1fr; gap: 1rem; }
+      aside { position: static; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .content-card { overflow-x: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="dashboard-container">
+  <!-- Auth (login / initial password setup). Content is built by script (AC-P02-4). -->
+  <div id="auth-screen" class="auth-screen">
+    <p role="status" style="color: var(--text-muted);">Checking session...</p>
+  </div>
+
+  <div class="dashboard-container" id="app-root" hidden>
     <!-- Sidebar -->
     <aside>
       <div class="logo-container">
@@ -235,14 +279,20 @@
         <div class="logo-text">Compliance Hub</div>
       </div>
       <nav class="nav-menu" id="sidebar-nav">
-        <button class="nav-item active" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
-        <button class="nav-item" data-view="scans"><i data-lucide="scan"></i>Scan History</button>
-        <button class="nav-item" data-view="findings"><i data-lucide="alert-triangle"></i>Vulnerabilities</button>
-        <button class="nav-item" data-view="projects"><i data-lucide="folder-git-2"></i>Projects</button>
-        <button class="nav-item" data-view="sbom"><i data-lucide="scroll"></i>SBOM Center</button>
-        <button class="nav-item" data-view="users"><i data-lucide="users"></i>Users &amp; Roles</button>
+        <button class="nav-item active" type="button" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+        <button class="nav-item" type="button" data-view="scans"><i data-lucide="scan"></i>Scan History</button>
+        <button class="nav-item" type="button" data-view="findings"><i data-lucide="alert-triangle"></i>Vulnerabilities</button>
+        <button class="nav-item" type="button" data-view="projects"><i data-lucide="folder-git-2"></i>Projects</button>
+        <button class="nav-item" type="button" data-view="sbom"><i data-lucide="scroll"></i>SBOM Center</button>
+        <button class="nav-item" type="button" data-view="users"><i data-lucide="users"></i>Users &amp; Roles</button>
       </nav>
       <div class="sidebar-footer">
+        <div class="user-box">
+          <span class="user-name" id="current-user-name"></span>
+          <button class="btn btn-ghost btn-sm" type="button" id="logout-btn" title="Sign out of this browser session">
+            <i data-lucide="log-out" style="width:14px;height:14px;"></i> Logout
+          </button>
+        </div>
         <div class="connection-status">
           <div class="status-dot" id="db-dot"></div>
           <span id="db-status-text">Connecting...</span>
@@ -259,10 +309,10 @@
           <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;" id="page-subtitle">Real-time open source package compliance metrics</p>
         </div>
         <div class="header-actions">
-          <button class="btn btn-ghost" onclick="refreshAll()" title="Refresh data">
+          <button class="btn btn-ghost" type="button" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
             <i data-lucide="refresh-cw" id="refresh-icon"></i>
           </button>
-          <button class="btn" id="new-scan-btn" onclick="openModal()">
+          <button class="btn" type="button" id="new-scan-btn">
             <i data-lucide="plus"></i> New Project Scan
           </button>
         </div>
@@ -375,7 +425,7 @@
             <h2 class="card-title">Vulnerability and Policy Registry</h2>
             <div class="card-actions">
               <label for="findings-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
-              <select id="findings-scan-select" class="form-control" style="width: 320px;" onchange="loadScanFindings()"></select>
+              <select id="findings-scan-select" class="form-control" style="width: 320px;"></select>
             </div>
           </div>
           <div id="findings-loading" style="display: none; text-align:center; padding: 2rem; color: var(--text-muted);">
@@ -397,7 +447,7 @@
         <div class="content-card">
           <div class="card-header">
             <h2 class="card-title">Monitored Codebases</h2>
-            <button class="btn btn-sm" onclick="openModal()"><i data-lucide="plus"></i> Add Project</button>
+            <button class="btn btn-sm" type="button" id="add-project-btn"><i data-lucide="plus"></i> Add Project</button>
           </div>
           <div id="projects-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
@@ -428,7 +478,7 @@
             <h2 class="card-title">SBOM Center</h2>
             <div class="card-actions">
               <label for="sbom-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
-              <select id="sbom-scan-select" class="form-control" style="width: 320px;" onchange="loadScanSboms()"></select>
+              <select id="sbom-scan-select" class="form-control" style="width: 320px;"></select>
             </div>
           </div>
 
@@ -443,7 +493,7 @@
               <h3 style="font-size: 1rem; margin-bottom: 0.8rem; font-family: var(--font-display); font-weight:600;">Generate Compliance SBOM</h3>
               <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 240px;">
-                  <label style="display:block; color:var(--text-muted); font-size:0.8rem; margin-bottom:0.4rem;">Specification Standard &amp; Format</label>
+                  <label for="sbom-format-select" style="display:block; color:var(--text-muted); font-size:0.8rem; margin-bottom:0.4rem;">Specification Standard &amp; Format</label>
                   <select id="sbom-format-select" class="form-control">
                     <option value="cyclonedx_json">CycloneDX 1.5 (JSON)</option>
                     <option value="cyclonedx_xml">CycloneDX 1.5 (XML)</option>
@@ -451,7 +501,7 @@
                     <option value="spdx_tag_value">SPDX 2.3 (Tag-Value)</option>
                   </select>
                 </div>
-                <button class="btn" id="generate-sbom-btn" onclick="generateNewSbom()">
+                <button class="btn" type="button" id="generate-sbom-btn">
                   <i data-lucide="plus"></i> Generate Document
                 </button>
               </div>
@@ -518,10 +568,10 @@
   </div>
 
   <!-- New Scan Modal -->
-  <div class="modal" id="scanModal">
+  <div class="modal" id="scanModal" role="dialog" aria-modal="true" aria-labelledby="scanModal-title">
     <div class="modal-content">
-      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
-      <h3 class="modal-title">Trigger Compliance Scan</h3>
+      <button class="modal-close" type="button" id="modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="scanModal-title">Trigger Compliance Scan</h3>
       <p class="modal-subtitle">Create a new project or scan an existing repository path.</p>
 
       <div class="form-group">
@@ -543,54 +593,251 @@
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn" id="launch-btn" onclick="launchScan()"><i data-lucide="play"></i> Launch Scanner</button>
+        <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Cancel</button>
+        <button class="btn" type="button" id="launch-btn"><i data-lucide="play"></i> Launch Scanner</button>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast">
+  <div id="toast" role="status" aria-live="polite">
     <i data-lucide="check-circle" id="toast-icon"></i>
     <span id="toast-msg"></span>
   </div>
 
   <script>
-    lucide.createIcons();
+    'use strict';
+
+    // ════════════════════════════════════════════════════════════════════
+    // Safe rendering (REQ-002 P-02). Data returned by the API reaches the DOM
+    // only as text nodes (textContent / createTextNode) or as attribute values
+    // set through setAttribute/dataset. No HTML string is ever built from API
+    // data, so no escaping helper is needed; inline on* handlers are not used.
+    // ════════════════════════════════════════════════════════════════════
+
+    /** True for same-origin absolute paths and http(s) URLs; anything else (javascript:, data:, mailto:, //host) is refused. */
+    function isAllowedHref(value) {
+      const s = String(value);
+      if (s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\')) return true;
+      return safeExternalHref(s) !== null;
+    }
+
+    /** Returns a normalised http/https URL or null. */
+    function safeExternalHref(value) {
+      if (typeof value !== 'string' || value.trim() === '') return null;
+      try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+      } catch {
+        return null;
+      }
+    }
+
+    /** Builds an /api path; every dynamic segment is URL-encoded. */
+    function apiPath(...segments) {
+      return '/api/' + segments.map((s) => encodeURIComponent(String(s))).join('/');
+    }
+
+    /**
+     * Element builder. `props.text` and string children become text nodes.
+     * `style` must only receive literal style strings from this file, never API data.
+     */
+    function el(tag, props, ...children) {
+      const node = document.createElement(tag);
+      if (props) {
+        for (const [key, value] of Object.entries(props)) {
+          if (value === undefined || value === null || value === false) continue;
+          if (key === 'className') node.className = value;
+          else if (key === 'style') node.style.cssText = value;
+          else if (key === 'text') node.textContent = String(value);
+          else if (key === 'dataset') Object.assign(node.dataset, value);
+          else if (key === 'href') { if (isAllowedHref(value)) node.setAttribute('href', String(value)); }
+          else node.setAttribute(key, value === true ? '' : String(value));
+        }
+      }
+      return append(node, children);
+    }
+
+    function append(parent, children) {
+      for (const child of children.flat()) {
+        if (child === undefined || child === null || child === false) continue;
+        parent.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
+      }
+      return parent;
+    }
+
+    function icon(name, style, className) {
+      return el('i', { 'data-lucide': name, style, className });
+    }
+
+    function clear(node) {
+      if (node) node.textContent = '';
+      return node;
+    }
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function setText(id, text) {
+      const node = byId(id);
+      if (node) node.textContent = String(text);
+    }
+
+    /** lucide is loaded from a CDN; the page must keep working if it is missing. */
+    function refreshIcons() {
+      try {
+        if (typeof lucide !== 'undefined' && lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      } catch {
+        /* icons are decorative */
+      }
+    }
+
+    function setButtonContent(button, iconName, label, spinning) {
+      if (!button) return;
+      clear(button);
+      append(button, [icon(iconName, undefined, spinning ? 'spin' : undefined), ' ' + label]);
+      refreshIcons();
+    }
+
+    function emptyState(iconName, title, hint, iconStyle) {
+      return el('div', { className: 'empty-state' },
+        icon(iconName, 'display:block; margin:0 auto 1rem;' + (iconStyle || '')),
+        el('p', { text: title }),
+        hint ? el('small', { text: hint }) : null);
+    }
+
+    function emptyRow(tbody, colspan, text) {
+      tbody.appendChild(el('tr', null,
+        el('td', { colspan, style: 'text-align:center; color:var(--text-muted);' }, text)));
+    }
+
+    function setPlaceholderOption(select, text) {
+      clear(select);
+      select.appendChild(el('option', { value: '' }, text));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Error plumbing. Every async entry point (listener, timer, init) goes
+    // through fire() so no promise rejection is ever left unhandled.
+    // ════════════════════════════════════════════════════════════════════
+
+    function onUnexpectedError(err) {
+      if (err && err.authRedirect) return;
+      try {
+        if (document && document.getElementById('toast-msg')) {
+          showToast(err && err.message ? err.message : 'Unexpected error', 'error');
+        }
+      } catch {
+        /* page is being torn down */
+      }
+    }
+
+    function fire(fn) {
+      return function (...args) {
+        try {
+          const result = fn.apply(this, args);
+          if (result && typeof result.then === 'function') result.catch(onUnexpectedError);
+        } catch (err) {
+          onUnexpectedError(err);
+        }
+      };
+    }
+
+    function reportError(err, fallback) {
+      if (err && err.authRedirect) return; // the auth form already explains what happened
+      showToast(err && err.message ? err.message : fallback, 'error');
+    }
+
+    class ApiError extends Error {
+      constructor(status, code, message) {
+        super(message);
+        this.status = status;
+        this.code = code;
+        this.authRedirect = false;
+      }
+    }
+
+    /**
+     * fetch wrapper. Session cookie is HttpOnly + SameSite=Strict: JS never
+     * reads it, the browser sends it (credentials: 'same-origin').
+     * Error bodies are {error, message, code}; we branch on `code`.
+     * A 401 setup_required / unauthenticated switches to the matching form
+     * unless `authRedirect: false` (login/setup/logout handle 401 themselves).
+     */
+    async function api(path, options = {}) {
+      const { method = 'GET', body, authRedirect = true } = options;
+      const init = { method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
+      if (body !== undefined) {
+        init.headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+      }
+      const response = await fetch(path, init);
+      let payload = null;
+      if (response.status !== 204) {
+        try { payload = await response.json(); } catch { payload = null; }
+      }
+      if (!response.ok) {
+        const code = payload && typeof payload.code === 'string' ? payload.code : '';
+        let message = payload && typeof payload.message === 'string' && payload.message
+          ? payload.message
+          : `Request failed (HTTP ${response.status})`;
+        if (response.status === 429) {
+          const retryAfter = Number.parseInt(response.headers.get('Retry-After') || '', 10);
+          if (Number.isFinite(retryAfter) && retryAfter > 0) message += ` Try again in ${retryAfter} seconds.`;
+        }
+        const err = new ApiError(response.status, code, message);
+        if (response.status === 401 && authRedirect) {
+          err.authRedirect = true;
+          if (code === 'setup_required') showAuth('setup', '');
+          else showAuth('login', currentUser ? 'Your session has ended. Please sign in again.' : '');
+        }
+        throw err;
+      }
+      return payload || {};
+    }
 
     // ── Global states
-    const pollingScans = new Set();
+    const pollingScans = new Map(); // scanId -> interval id
     let currentActiveView = 'dashboard';
+    let currentUser = null;
+    let authMode = null; // 'login' | 'setup' | null
+    let toastTimer = null;
 
-    // ── Toast notifier
+    // ── Toast notifier (message always rendered as text)
     function showToast(msg, type = 'success') {
-      const t = document.getElementById('toast');
-      const icon = document.getElementById('toast-icon');
-      document.getElementById('toast-msg').textContent = msg;
-      t.className = `show ${type}`;
-      icon.setAttribute('data-lucide', type === 'success' ? 'check-circle' : 'alert-circle');
-      lucide.createIcons();
-      setTimeout(() => { t.className = ''; }, 3500);
+      const t = byId('toast');
+      const msgEl = byId('toast-msg');
+      if (!t || !msgEl) return;
+      const kind = type === 'error' ? 'error' : 'success';
+      msgEl.textContent = String(msg ?? '');
+      t.className = `show ${kind}`;
+      const toastIcon = byId('toast-icon');
+      if (toastIcon) toastIcon.setAttribute('data-lucide', kind === 'success' ? 'check-circle' : 'alert-circle');
+      refreshIcons();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { t.className = ''; }, 3500);
     }
 
     // ── Health checker
     async function checkHealth() {
+      const dot = byId('db-dot');
       try {
-        const r = await fetch('/health');
+        const r = await fetch('/health', { credentials: 'same-origin' });
         const data = await r.json();
-        const dot = document.getElementById('db-dot');
-        const txt = document.getElementById('db-status-text');
         if (data.status === 'healthy') {
-          dot.style.background = 'var(--success)';
-          dot.style.boxShadow = '0 0 6px var(--success)';
-          txt.textContent = 'Database connected';
+          if (dot) {
+            dot.style.background = 'var(--success)';
+            dot.style.boxShadow = '0 0 6px var(--success)';
+          }
+          setText('db-status-text', 'Database connected');
         } else {
-          dot.style.background = 'var(--danger)';
-          txt.textContent = 'DB error';
+          if (dot) dot.style.background = 'var(--danger)';
+          setText('db-status-text', 'DB error');
         }
       } catch {
-        document.getElementById('db-dot').style.background = 'var(--danger)';
-        document.getElementById('db-status-text').textContent = 'Backend offline';
+        if (dot) dot.style.background = 'var(--danger)';
+        setText('db-status-text', 'Backend offline');
       }
     }
 
@@ -598,6 +845,7 @@
     function timeAgo(iso) {
       if (!iso) return '—';
       const diff = Date.now() - new Date(iso).getTime();
+      if (!Number.isFinite(diff)) return '—';
       const mins = Math.floor(diff / 60000);
       if (mins < 1) return 'Just now';
       if (mins < 60) return `${mins}m ago`;
@@ -607,174 +855,191 @@
     }
 
     function formatBytes(bytes) {
-      if (!bytes) return '0 Bytes';
+      const n = Number(bytes);
+      if (!n || !Number.isFinite(n)) return '0 Bytes';
       const k = 1024;
       const sizes = ['Bytes', 'KB', 'MB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      const i = Math.min(Math.floor(Math.log(n) / Math.log(k)), sizes.length - 1);
+      return parseFloat((n / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function formatDate(value) {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+    }
+
+    /** Maps API severity / risk strings onto the fixed set of tag classes. */
+    function tagLevel(value) {
+      const s = String(value || 'medium').toLowerCase();
+      return ['critical', 'high', 'medium', 'low'].includes(s) ? s : 'low';
     }
 
     function securityLabel(row) {
-      if (!row.total_vulnerabilities) return '<span style="color: var(--success);">✓ Clean</span>';
+      if (!row.total_vulnerabilities) return el('span', { style: 'color: var(--success);' }, '✓ Clean');
       const parts = [];
-      if (row.critical_vulns) parts.push(`<span style="color: var(--danger);">${row.critical_vulns} Critical</span>`);
-      if (row.high_vulns) parts.push(`<span style="color: var(--warning);">${row.high_vulns} High</span>`);
-      if (!parts.length) parts.push(`<span style="color: var(--text-muted);">${row.total_vulnerabilities} Med/Low</span>`);
-      return parts.join(' / ');
+      if (row.critical_vulns) parts.push(el('span', { style: 'color: var(--danger);' }, `${row.critical_vulns} Critical`));
+      if (row.high_vulns) parts.push(el('span', { style: 'color: var(--warning);' }, `${row.high_vulns} High`));
+      if (!parts.length) parts.push(el('span', { style: 'color: var(--text-muted);' }, `${row.total_vulnerabilities} Med/Low`));
+      const wrap = el('span');
+      parts.forEach((p, i) => append(wrap, [i ? ' / ' : null, p]));
+      return wrap;
     }
 
     function licenseLabel(row) {
-      if (row.license_violations === 0) return '<span style="color: var(--success);">All Safe</span>';
-      return `<span style="color: var(--warning);">${row.license_violations} Alert${row.license_violations > 1 ? 's' : ''}</span>`;
+      const n = Number(row.license_violations) || 0;
+      if (n === 0) return el('span', { style: 'color: var(--success);' }, 'All Safe');
+      return el('span', { style: 'color: var(--warning);' }, `${n} Alert${n > 1 ? 's' : ''}`);
     }
 
+    const STATUS_BADGES = {
+      completed: { cls: 'status-healthy', icon: 'check-circle', label: 'Completed' },
+      running: { cls: 'status-scanning', icon: 'refresh-cw', label: 'Scanning...', spin: true },
+      pending: { cls: 'status-pending', icon: 'clock', label: 'Pending' },
+      queued: { cls: 'status-pending', icon: 'clock', label: 'Pending' },
+      failed: { cls: 'status-critical', icon: 'x-circle', label: 'Failed' },
+      cancelled: { cls: 'status-pending', icon: 'minus-circle', label: 'Cancelled' },
+    };
+
     function statusBadge(status) {
-      switch(status) {
-        case 'completed': return `<span class="status-badge status-healthy"><i data-lucide="check-circle" style="width:13px;height:13px;"></i>Completed</span>`;
-        case 'running': return `<span class="status-badge status-scanning"><i data-lucide="refresh-cw" style="width:13px;height:13px;" class="spin"></i>Scanning...</span>`;
-        case 'pending':
-        case 'queued': return `<span class="status-badge status-pending"><i data-lucide="clock" style="width:13px;height:13px;"></i>Pending</span>`;
-        case 'failed': return `<span class="status-badge status-critical"><i data-lucide="x-circle" style="width:13px;height:13px;"></i>Failed</span>`;
-        case 'cancelled': return `<span class="status-badge status-pending"><i data-lucide="minus-circle" style="width:13px;height:13px;"></i>Cancelled</span>`;
-        default: return `<span class="status-badge status-pending">${status}</span>`;
-      }
+      const def = Object.prototype.hasOwnProperty.call(STATUS_BADGES, status) ? STATUS_BADGES[status] : null;
+      if (!def) return el('span', { className: 'status-badge status-pending' }, String(status ?? '—'));
+      return el('span', { className: `status-badge ${def.cls}` },
+        icon(def.icon, 'width:13px;height:13px;', def.spin ? 'spin' : undefined), def.label);
+    }
+
+    function isActiveStatus(status) {
+      return ['pending', 'queued', 'running'].includes(status);
     }
 
     function scanActions(row) {
-      if (['pending','queued','running'].includes(row.status)) {
-        return `<div class="progress-bar-container" style="width:80px;"><div class="progress-bar" style="width: ${row.status==='running'?'65':'15'}%;"></div></div>`;
+      if (isActiveStatus(row.status)) {
+        return el('div', { className: 'progress-bar-container', style: 'width:80px;' },
+          el('div', { className: 'progress-bar', style: `width: ${row.status === 'running' ? '65' : '15'}%;` }));
       }
       if (row.status === 'completed') {
-        return `<a class="btn btn-sm" href="/api/scans/${row.id}/sbom/download" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;"><i data-lucide="download" style="width:12px;height:12px;"></i> SBOM</a>`;
+        return el('a', {
+          className: 'btn btn-sm',
+          href: apiPath('scans', row.id, 'sbom', 'download'),
+          target: '_blank',
+          rel: 'noopener',
+          style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
+        }, icon('download', 'width:12px;height:12px;'), ' SBOM');
       }
-      return `<span style="color: var(--text-muted); font-size:0.8rem;">—</span>`;
+      return el('span', { style: 'color: var(--text-muted); font-size:0.8rem;' }, '—');
     }
 
     // ── Direct Download helper (failsafe)
     function downloadDoc(docId) {
-      window.location.href = `/api/sbom/${docId}/download`;
+      window.location.href = apiPath('sbom', docId, 'download');
     }
 
     // ── Generate and download CycloneDX JSON (default fast download)
     async function downloadCycloneDxSbom(scanId) {
       showToast('Generating CycloneDX JSON SBOM...', 'success');
       try {
-        const r = await fetch(`/api/scans/${scanId}/sbom`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'cyclonedx_json' })
-        });
-        if (!r.ok) {
-          const err = await r.json();
-          showToast(err.message || 'Generation failed', 'error');
-          return;
-        }
-        const { data } = await r.json();
-        // Redirect directly to triggering download
+        const { data } = await api(apiPath('scans', scanId, 'sbom'), { method: 'POST', body: { format: 'cyclonedx_json' } });
         downloadDoc(data.id);
         showToast('SBOM downloaded successfully!');
       } catch (e) {
-        showToast('Failed to trigger SBOM download', 'error');
+        reportError(e, 'Failed to trigger SBOM download');
       }
     }
 
-    // ── Render standard scan rows
+    // ── Scan rows (dashboard + history share one renderer)
+    function buildScanRow(row, idPrefix, withTrigger) {
+      const tr = el('tr', { className: 'scan-row', id: `${idPrefix}-${row.id}` });
+      return append(tr, [
+        el('td', null,
+          el('strong', null, row.project_name || '—'),
+          el('br'),
+          el('small', { style: 'color:var(--text-muted);' }, row.ref || 'main')),
+        el('td', null, statusBadge(row.status)),
+        el('td', null, row.total_dependencies ? Number(row.total_dependencies).toLocaleString() : '—'),
+        el('td', null, licenseLabel(row)),
+        el('td', null, securityLabel(row)),
+        withTrigger
+          ? el('td', { style: 'text-transform: capitalize;' }, el('span', { className: 'capsule' }, row.trigger || 'manual'))
+          : null,
+        el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(row.completed_at || row.started_at || row.queued_at)),
+        el('td', null, scanActions(row)),
+      ]);
+    }
+
     function renderScanRow(row) {
-      const tr = document.createElement('tr');
-      tr.className = 'scan-row';
-      tr.id = `scan-row-${row.id}`;
-      tr.innerHTML = `
-        <td><strong>${row.project_name || '—'}</strong><br><small style="color:var(--text-muted);">${row.ref || 'main'}</small></td>
-        <td>${statusBadge(row.status)}</td>
-        <td>${row.total_dependencies ? row.total_dependencies.toLocaleString() : '—'}</td>
-        <td>${licenseLabel(row)}</td>
-        <td>${securityLabel(row)}</td>
-        <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(row.completed_at || row.started_at || row.queued_at)}</td>
-        <td>${scanActions(row)}</td>
-      `;
-      return tr;
+      return buildScanRow(row, 'scan-row', false);
+    }
+
+    function renderHistoryRow(row) {
+      return buildScanRow(row, 'history-row', true);
     }
 
     // ── Poll individual scan details until completed/failed
+    function stopPolling(scanId) {
+      clearInterval(pollingScans.get(scanId));
+      pollingScans.delete(scanId);
+    }
+
+    function stopAllPolling() {
+      for (const id of Array.from(pollingScans.keys())) stopPolling(id);
+    }
+
     function pollScanUntilDone(scanId) {
       if (pollingScans.has(scanId)) return;
-      pollingScans.add(scanId);
-
-      const interval = setInterval(async () => {
+      const interval = setInterval(fire(async () => {
         try {
-          const r = await fetch(`/api/scans/${scanId}`);
-          const { data } = await r.json();
+          const { data } = await api(apiPath('scans', scanId));
+          if (!data) throw new Error('Scan not found');
 
-          // Update scan row in main dashboard if visible
-          const rowDashboard = document.getElementById(`scan-row-${scanId}`);
-          if (rowDashboard) {
-            rowDashboard.replaceWith(renderScanRow(data));
+          const rowDashboard = byId(`scan-row-${scanId}`);
+          if (rowDashboard) rowDashboard.replaceWith(renderScanRow(data));
+          const rowHistory = byId(`history-row-${scanId}`);
+          if (rowHistory) rowHistory.replaceWith(renderHistoryRow(data));
+          refreshIcons();
+
+          if (!isActiveStatus(data.status)) {
+            stopPolling(scanId);
+            if (data.status === 'completed') showToast(`Scan for "${data.project_name}" completed!`);
+            else if (data.status === 'failed') showToast(`Scan for "${data.project_name}" failed!`, 'error');
+            if (currentActiveView === 'dashboard') await updateStats();
           }
-
-          // Update scan row in Scan History list if visible
-          const rowHistory = document.getElementById(`history-row-${scanId}`);
-          if (rowHistory) {
-            rowHistory.replaceWith(renderHistoryRow(data));
-          }
-
-          lucide.createIcons();
-
-          if (!['pending','queued','running'].includes(data.status)) {
-            clearInterval(interval);
-            pollingScans.delete(scanId);
-            if (data.status === 'completed') {
-              showToast(`Scan for "${data.project_name}" completed!`);
-            } else if (data.status === 'failed') {
-              showToast(`Scan for "${data.project_name}" failed!`, 'error');
-            }
-            if (currentActiveView === 'dashboard') {
-              updateStats();
-            }
-          }
-        } catch (e) {
-          clearInterval(interval);
-          pollingScans.delete(scanId);
+        } catch {
+          stopPolling(scanId);
         }
-      }, 2000);
+      }), 2000);
+      pollingScans.set(scanId, interval);
     }
 
     // ── Load Dashboard Scans (Recent)
     async function loadScans() {
-      const loading = document.getElementById('table-loading');
-      const container = document.getElementById('table-container');
-      const empty = document.getElementById('table-empty');
-      const tbody = document.getElementById('scans-tbody');
+      const loading = byId('table-loading');
+      const container = byId('table-container');
+      const empty = byId('table-empty');
+      const tbody = byId('scans-tbody');
 
       loading.style.display = 'block';
       container.style.display = 'none';
       empty.style.display = 'none';
 
       try {
-        const r = await fetch('/api/scans');
-        const { data } = await r.json();
+        const { data } = await api('/api/scans');
 
         loading.style.display = 'none';
-        tbody.innerHTML = '';
+        clear(tbody);
 
-        if (!data || data.length === 0) {
+        if (!Array.isArray(data) || data.length === 0) {
           empty.style.display = 'block';
           return;
         }
 
         container.style.display = 'block';
         // Display top 10 recent scans on dashboard
-        const dashboardScans = data.slice(0, 10);
-        for (const scan of dashboardScans) {
+        for (const scan of data.slice(0, 10)) {
           tbody.appendChild(renderScanRow(scan));
-          if (['pending','queued','running'].includes(scan.status)) {
-            pollScanUntilDone(scan.id);
-          }
+          if (isActiveStatus(scan.status)) pollScanUntilDone(scan.id);
         }
-        lucide.createIcons();
-
-        const now = new Date();
-        document.getElementById('last-updated').textContent = `Last updated: ${now.toLocaleTimeString()}`;
-      } catch (e) {
+        refreshIcons();
+        setText('last-updated', `Last updated: ${new Date().toLocaleTimeString()}`);
+      } catch {
         loading.style.display = 'none';
         empty.style.display = 'block';
       }
@@ -783,209 +1048,245 @@
     // ── Update Dashboard statistics counters
     async function updateStats() {
       try {
-        const projR = await fetch('/api/projects');
-        const projData = await projR.json();
-        document.getElementById('stat-projects').textContent = projData.data?.length ?? '0';
+        const projData = await api('/api/projects');
+        setText('stat-projects', Array.isArray(projData.data) ? projData.data.length : 0);
 
-        const scanR = await fetch('/api/scans');
-        const scanData = await scanR.json();
-        const scans = (scanData.data || []).filter(s => s.status === 'completed');
+        const scanData = await api('/api/scans');
+        const scans = (Array.isArray(scanData.data) ? scanData.data : []).filter((s) => s.status === 'completed');
 
-        const totalPkgs = scans.reduce((acc, s) => acc + (s.total_dependencies || 0), 0);
-        const totalLicAlerts = scans.reduce((acc, s) => acc + (s.license_violations || 0), 0);
-        const totalCritical = scans.reduce((acc, s) => acc + (s.critical_vulns || 0), 0);
+        const totalPkgs = scans.reduce((acc, s) => acc + (Number(s.total_dependencies) || 0), 0);
+        const totalLicAlerts = scans.reduce((acc, s) => acc + (Number(s.license_violations) || 0), 0);
+        const totalCritical = scans.reduce((acc, s) => acc + (Number(s.critical_vulns) || 0), 0);
 
         animateNumber('stat-packages', totalPkgs);
         animateNumber('stat-license-alerts', totalLicAlerts);
         animateNumber('stat-critical-cves', totalCritical);
-      } catch (e) {
-        ['stat-projects','stat-packages','stat-license-alerts','stat-critical-cves'].forEach(id => {
-          document.getElementById(id).textContent = '—';
-        });
+      } catch {
+        ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach((id) => setText(id, '—'));
       }
     }
 
     function animateNumber(id, target) {
-      const el = document.getElementById(id);
-      const start = parseInt(el.textContent) || 0;
-      if (start === target) return;
+      const node = byId(id);
+      if (!node) return;
+      const start = parseInt(node.textContent, 10) || 0;
+      if (start === target) { node.textContent = target.toLocaleString(); return; }
+      const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduceMotion || typeof requestAnimationFrame !== 'function') { node.textContent = target.toLocaleString(); return; }
       const duration = 600;
       const startTime = performance.now();
       function step(now) {
         const p = Math.min((now - startTime) / duration, 1);
-        el.textContent = Math.round(start + (target - start) * p).toLocaleString();
+        node.textContent = Math.round(start + (target - start) * p).toLocaleString();
         if (p < 1) requestAnimationFrame(step);
       }
       requestAnimationFrame(step);
     }
 
     // ── Load Scan History Tab
-    function renderHistoryRow(row) {
-      const tr = document.createElement('tr');
-      tr.className = 'scan-row';
-      tr.id = `history-row-${row.id}`;
-      tr.innerHTML = `
-        <td><strong>${row.project_name || '—'}</strong><br><small style="color:var(--text-muted);">${row.ref || 'main'}</small></td>
-        <td>${statusBadge(row.status)}</td>
-        <td>${row.total_dependencies ? row.total_dependencies.toLocaleString() : '—'}</td>
-        <td>${licenseLabel(row)}</td>
-        <td>${securityLabel(row)}</td>
-        <td style="text-transform: capitalize;"><span class="capsule">${row.trigger || 'manual'}</span></td>
-        <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(row.completed_at || row.started_at || row.queued_at)}</td>
-        <td>${scanActions(row)}</td>
-      `;
-      return tr;
-    }
-
     async function loadAllScansHistory() {
-      const loading = document.getElementById('scans-list-loading');
-      const container = document.getElementById('scans-list-container');
-      const tbody = document.getElementById('scans-list-tbody');
+      const loading = byId('scans-list-loading');
+      const container = byId('scans-list-container');
+      const tbody = byId('scans-list-tbody');
 
       loading.style.display = 'block';
       container.style.display = 'none';
 
       try {
-        const r = await fetch('/api/scans');
-        const { data } = await r.json();
+        const { data } = await api('/api/scans');
 
         loading.style.display = 'none';
-        tbody.innerHTML = '';
+        clear(tbody);
+        container.style.display = 'block';
 
-        if (!data || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No scans registered</td></tr>';
-          container.style.display = 'block';
+        if (!Array.isArray(data) || data.length === 0) {
+          emptyRow(tbody, 8, 'No scans registered');
           return;
         }
 
-        container.style.display = 'block';
         for (const scan of data) {
           tbody.appendChild(renderHistoryRow(scan));
-          if (['pending','queued','running'].includes(scan.status)) {
-            pollScanUntilDone(scan.id);
-          }
+          if (isActiveStatus(scan.status)) pollScanUntilDone(scan.id);
         }
-        lucide.createIcons();
+        refreshIcons();
       } catch (e) {
         loading.style.display = 'none';
+        reportError(e, 'Failed to load scan history');
       }
     }
 
     // ── Load Projects Tab
+    const CRITICALITY_STYLES = {
+      critical: 'color: var(--danger); background: rgba(239,68,68,0.1);',
+      high: 'color: var(--danger); background: rgba(239,68,68,0.1);',
+      medium: 'color: var(--warning); background: rgba(245,158,11,0.1);',
+    };
+
+    function renderProjectRow(p) {
+      const critStyle = Object.prototype.hasOwnProperty.call(CRITICALITY_STYLES, p.criticality)
+        ? CRITICALITY_STYLES[p.criticality]
+        : 'color: var(--success); background: rgba(16,185,129,0.1);';
+
+      // Only http/https URLs become links; local paths and anything else stay plain text.
+      const repoHref = safeExternalHref(p.repo_url);
+      const repoContent = repoHref
+        ? el('a', { href: repoHref, target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary); text-decoration: none;' }, p.repo_url)
+        : (p.repo_url || '—');
+
+      const ecosystems = (Array.isArray(p.ecosystems) ? p.ecosystems : [])
+        .map((e) => el('span', { className: 'capsule', style: 'margin-right:0.25rem;' }, e));
+
+      // Values travel in data-* attributes and are read back from dataset — never interpolated into code.
+      const scanButton = el('button', {
+        className: 'btn btn-sm',
+        type: 'button',
+        dataset: { action: 'scan-project', projectId: String(p.id ?? ''), projectName: String(p.name ?? '') },
+      }, icon('play', 'width:12px;height:12px;'), ' Scan Now');
+
+      return el('tr', null,
+        el('td', null, el('strong', null, p.name ?? '—')),
+        el('td', null, el('span', { className: 'status-badge', style: critStyle }, p.criticality ?? '—')),
+        el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted);' }, repoContent),
+        el('td', null, ecosystems.length ? ecosystems : el('span', { style: 'color:var(--text-muted)' }, '—')),
+        el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(p.created_at)),
+        el('td', null, scanButton));
+    }
+
     async function loadProjectsList() {
-      const loading = document.getElementById('projects-loading');
-      const container = document.getElementById('projects-container');
-      const tbody = document.getElementById('projects-list-tbody');
+      const loading = byId('projects-loading');
+      const container = byId('projects-container');
+      const tbody = byId('projects-list-tbody');
 
       loading.style.display = 'block';
       container.style.display = 'none';
 
       try {
-        const r = await fetch('/api/projects');
-        const { data } = await r.json();
+        const { data } = await api('/api/projects');
 
         loading.style.display = 'none';
-        tbody.innerHTML = '';
+        clear(tbody);
+        container.style.display = 'block';
 
-        if (!data || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No projects registered</td></tr>';
-          container.style.display = 'block';
+        if (!Array.isArray(data) || data.length === 0) {
+          emptyRow(tbody, 6, 'No projects registered');
           return;
         }
 
-        container.style.display = 'block';
-        for (const p of data) {
-          const tr = document.createElement('tr');
-          const ecosystemsHtml = (p.ecosystems || []).map(e => `<span class="capsule" style="margin-right:0.25rem;">${e}</span>`).join('');
-          
-          let critStyle = 'color: var(--success); background: rgba(16,185,129,0.1);';
-          if (p.criticality === 'high' || p.criticality === 'critical') {
-            critStyle = 'color: var(--danger); background: rgba(239,68,68,0.1);';
-          } else if (p.criticality === 'medium') {
-            critStyle = 'color: var(--warning); background: rgba(245,158,11,0.1);';
-          }
-
-          tr.innerHTML = `
-            <td><strong>${p.name}</strong></td>
-            <td><span class="status-badge" style="${critStyle}">${p.criticality}</span></td>
-            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${p.repo_url || '—'}</td>
-            <td>${ecosystemsHtml || '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(p.created_at)}</td>
-            <td>
-              <button class="btn btn-sm" onclick="triggerManualScan('${p.id}', '${p.name}')">
-                <i data-lucide="play" style="width:12px;height:12px;"></i> Scan Now
-              </button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        }
-        lucide.createIcons();
+        for (const p of data) tbody.appendChild(renderProjectRow(p));
+        refreshIcons();
       } catch (e) {
         loading.style.display = 'none';
+        reportError(e, 'Failed to load projects');
       }
     }
 
     async function triggerManualScan(projectId, name) {
       showToast(`Scheduling scan for "${name}"...`, 'success');
       try {
-        const r = await fetch('/api/scans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, trigger: 'manual' })
-        });
-        if (!r.ok) {
-          const err = await r.json();
-          throw new Error(err.message || 'Scan trigger failed');
-        }
+        await api('/api/scans', { method: 'POST', body: { projectId, trigger: 'manual' } });
         showToast('Scan queued successfully!');
         // Return to main dashboard view to display scanning progress
-        document.querySelector('#sidebar-nav button[data-view="dashboard"]').click();
+        await switchView('dashboard');
       } catch (e) {
-        showToast(e.message || 'Failed to trigger scan', 'error');
+        reportError(e, 'Failed to trigger scan');
       }
     }
 
     // ── Dropdowns Populator for Scans (Vulnerabilities and SBOM)
-    async function populateScansDropdown(selectId) {
-      const select = document.getElementById(selectId);
-      select.innerHTML = '<option value="">Loading completed scans...</option>';
+    async function populateScansDropdown(selectId, loader) {
+      const select = byId(selectId);
+      setPlaceholderOption(select, 'Loading completed scans...');
 
       try {
-        const r = await fetch('/api/scans');
-        const { data } = await r.json();
-        
-        // Filter to completed scans only
-        const completed = (data || []).filter(s => s.status === 'completed');
-        select.innerHTML = '';
+        const { data } = await api('/api/scans');
+        const completed = (Array.isArray(data) ? data : []).filter((s) => s.status === 'completed');
+        clear(select);
 
         if (completed.length === 0) {
-          select.innerHTML = '<option value="">No completed scans found</option>';
+          setPlaceholderOption(select, 'No completed scans found');
           return;
         }
 
         for (const scan of completed) {
-          const opt = document.createElement('option');
-          opt.value = scan.id;
-          opt.textContent = `${scan.project_name} - ${scan.ref} (${new Date(scan.completed_at).toLocaleString()})`;
-          select.appendChild(opt);
+          select.appendChild(el('option', { value: String(scan.id) },
+            `${scan.project_name} - ${scan.ref} (${formatDate(scan.completed_at)})`));
         }
-
-        // Trigger dynamic view loader for first index if any
-        select.dispatchEvent(new Event('change'));
       } catch (e) {
-        select.innerHTML = '<option value="">Failed to fetch scans</option>';
+        setPlaceholderOption(select, 'Failed to fetch scans');
+        reportError(e, 'Failed to fetch scans');
+        return;
       }
+      // Load the view for the first (pre-selected) scan.
+      await loader();
     }
 
     // ── Load Vulnerabilities Tab
+    function renderFinding(f) {
+      const badges = el('div');
+      let iconName;
+      let iconColor;
+      let iconBg;
+
+      if (f.finding_type === 'security') {
+        const sev = tagLevel(f.severity);
+        append(badges, [
+          el('span', { className: `tag tag-${sev}` }, f.severity ?? 'medium'),
+          ' ',
+          el('span', { className: `tag tag-${sev}` }, `CVSS ${f.cvss_score || '—'}`),
+        ]);
+        if (f.cve_id) append(badges, [' ', el('span', { className: 'capsule' }, f.cve_id)]);
+
+        iconName = 'shield-alert';
+        if (sev === 'critical' || sev === 'high') {
+          iconColor = 'var(--danger)';
+          iconBg = 'rgba(239,68,68,0.15)';
+        } else if (sev === 'medium') {
+          iconColor = 'var(--warning)';
+          iconBg = 'rgba(245,158,11,0.15)';
+        } else {
+          iconColor = 'var(--text-muted)';
+          iconBg = 'rgba(255,255,255,0.06)';
+        }
+      } else {
+        iconName = 'scale';
+        iconColor = 'var(--warning)';
+        iconBg = 'rgba(245,158,11,0.15)';
+        const riskText = String(f.risk_level || 'medium').toLowerCase();
+        append(badges, [
+          el('span', { className: 'tag tag-violation' }, 'License Alert'),
+          ' ',
+          el('span', { className: `tag tag-${tagLevel(riskText)}` }, `${riskText} risk`),
+        ]);
+        if (f.detected_license) append(badges, [' ', el('span', { className: 'capsule' }, f.detected_license)]);
+      }
+
+      const description = f.vuln_description
+        || `Package "${f.package_name}" is using license "${f.detected_license}" which triggers risk constraints under active policy "${f.applied_policy || 'Default prohibited list'}".`;
+
+      return el('div', { className: 'finding-item' },
+        el('div', { className: 'finding-icon', style: `background: ${iconBg}; color: ${iconColor};` }, icon(iconName)),
+        el('div', { className: 'finding-info' },
+          el('div', { className: 'finding-title-row' },
+            el('h4', { className: 'finding-title' }, f.vuln_title || f.normalized_license || 'Unknown Policy Risk'),
+            badges),
+          el('div', { className: 'finding-meta' },
+            el('span', null, 'Package: ', el('strong', null, `${f.package_name}@${f.package_version}`)),
+            el('span', null, 'Type: ', el('span', { className: 'capsule', style: 'text-transform: capitalize;' }, f.finding_type ?? '—')),
+            el('span', null, 'Status: ', el('span', { className: 'capsule', style: 'color:var(--danger);' }, f.status ?? '—'))),
+          el('p', { className: 'finding-description' }, description),
+          f.fix_version
+            ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, 'Fixed in: ', el('strong', null, f.fix_version))
+            : null));
+    }
+
     async function loadScanFindings() {
-      const scanId = document.getElementById('findings-scan-select').value;
-      const container = document.getElementById('findings-container');
-      const loading = document.getElementById('findings-loading');
+      const scanId = byId('findings-scan-select').value;
+      const container = byId('findings-container');
+      const loading = byId('findings-loading');
 
       if (!scanId) {
-        container.innerHTML = '<div class="empty-state"><i data-lucide="alert-triangle"></i><p>No scan selected</p><small>Select a completed scan above to view its findings.</small></div>';
-        lucide.createIcons();
+        clear(container).appendChild(emptyState('alert-triangle', 'No scan selected', 'Select a completed scan above to view its findings.'));
+        refreshIcons();
         return;
       }
 
@@ -993,91 +1294,62 @@
       container.style.display = 'none';
 
       try {
-        const r = await fetch(`/api/scans/${scanId}/findings`);
-        const { data } = await r.json();
+        const { data } = await api(apiPath('scans', scanId, 'findings'));
 
         loading.style.display = 'none';
         container.style.display = 'block';
+        clear(container);
 
-        if (!data || data.length === 0) {
-          container.innerHTML = '<div class="empty-state"><i data-lucide="shield-check" style="color:var(--success);"></i><p>Compliance Clean!</p><small>No vulnerabilities or license risks were found for this scan.</small></div>';
-          lucide.createIcons();
+        if (!Array.isArray(data) || data.length === 0) {
+          container.appendChild(emptyState('shield-check', 'Compliance Clean!', 'No vulnerabilities or license risks were found for this scan.', ' color:var(--success); opacity:1;'));
+          refreshIcons();
           return;
         }
 
-        container.innerHTML = '';
-        for (const f of data) {
-          const item = document.createElement('div');
-          item.className = 'finding-item';
-
-          let icon = 'bug';
-          let iconColor = '#ef4444';
-          let iconBg = 'rgba(239,68,68,0.15)';
-          let badgeHtml = '';
-
-          if (f.finding_type === 'security') {
-            const sev = (f.severity || 'medium').toLowerCase();
-            badgeHtml = `<span class="tag tag-${sev}">${f.severity}</span> <span class="tag tag-${sev}">CVSS ${f.cvss_score || '—'}</span>`;
-            if (f.cve_id) badgeHtml += ` <span class="capsule">${f.cve_id}</span>`;
-            
-            icon = 'shield-alert';
-            if (sev === 'critical' || sev === 'high') {
-              iconColor = 'var(--danger)';
-              iconBg = 'rgba(239,68,68,0.15)';
-            } else if (sev === 'medium') {
-              iconColor = 'var(--warning)';
-              iconBg = 'rgba(245,158,11,0.15)';
-            } else {
-              iconColor = 'var(--text-muted)';
-              iconBg = 'rgba(255,255,255,0.06)';
-            }
-          } else {
-            icon = 'scale';
-            iconColor = 'var(--warning)';
-            iconBg = 'rgba(245,158,11,0.15)';
-            const risk = (f.risk_level || 'medium').toLowerCase();
-            badgeHtml = `<span class="tag tag-violation">License Alert</span> <span class="tag tag-${risk}">${risk} risk</span>`;
-            if (f.detected_license) badgeHtml += ` <span class="capsule">${f.detected_license}</span>`;
-          }
-
-          const upgradeText = f.fix_version ? `<div style="margin-top:0.4rem; font-size:0.8rem; color:var(--success);">Fixed in: <strong>${f.fix_version}</strong></div>` : '';
-
-          item.innerHTML = `
-            <div class="finding-icon" style="background: ${iconBg}; color: ${iconColor};">
-              <i data-lucide="${icon}"></i>
-            </div>
-            <div class="finding-info">
-              <div class="finding-title-row">
-                <h4 class="finding-title">${f.vuln_title || f.normalized_license || 'Unknown Policy Risk'}</h4>
-                <div>${badgeHtml}</div>
-              </div>
-              <div class="finding-meta">
-                <span>Package: <strong>${f.package_name}@${f.package_version}</strong></span>
-                <span>Type: <span class="capsule" style="text-transform: capitalize;">${f.finding_type}</span></span>
-                <span>Status: <span class="capsule" style="color:var(--danger);">${f.status}</span></span>
-              </div>
-              <p class="finding-description">${f.vuln_description || `Package "${f.package_name}" is using license "${f.detected_license}" which triggers risk constraints under active policy "${f.applied_policy || 'Default prohibited list'}".`}</p>
-              ${upgradeText}
-            </div>
-          `;
-          container.appendChild(item);
-        }
-        lucide.createIcons();
+        for (const f of data) container.appendChild(renderFinding(f));
+        refreshIcons();
       } catch (e) {
         loading.style.display = 'none';
-        container.innerHTML = '<div class="empty-state"><p>Error loading findings</p></div>';
+        container.style.display = 'block';
+        clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, 'Error loading findings')));
+        reportError(e, 'Error loading findings');
       }
     }
 
     // ── Load SBOM Tab
+    const SBOM_FORMAT_LABELS = {
+      cyclonedx_json: 'CycloneDX (JSON)',
+      cyclonedx_xml: 'CycloneDX (XML)',
+      spdx_json: 'SPDX (JSON)',
+      spdx_tag_value: 'SPDX (Tag-Value)',
+    };
+
+    function renderSbomRow(doc) {
+      const formatLabel = Object.prototype.hasOwnProperty.call(SBOM_FORMAT_LABELS, doc.format) ? SBOM_FORMAT_LABELS[doc.format] : doc.format;
+      return el('tr', null,
+        el('td', null, el('strong', null, formatLabel ?? '—')),
+        el('td', null, el('span', { className: 'capsule' }, doc.specVersion ?? '—')),
+        el('td', null, formatBytes(doc.fileSizeBytes)),
+        el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, formatDate(doc.generatedAt)),
+        el('td', { style: 'font-family: monospace; font-size: 0.78rem; color: var(--text-muted);' }, `${String(doc.checksumSha256 ?? '').slice(0, 16)}...`),
+        el('td', null,
+          el('a', {
+            className: 'btn btn-sm',
+            href: apiPath('sbom', doc.id, 'download'),
+            target: '_blank',
+            rel: 'noopener',
+            style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
+          }, icon('download', 'width:12px;height:12px;'), ' Download')));
+    }
+
     async function loadScanSboms() {
-      const scanId = document.getElementById('sbom-scan-select').value;
-      const container = document.getElementById('sbom-manager-container');
-      const empty = document.getElementById('sbom-empty-state');
-      const loading = document.getElementById('sbom-loading');
-      const tbody = document.getElementById('sbom-documents-tbody');
-      const tableEmpty = document.getElementById('sbom-docs-empty');
-      const tableWrapper = document.getElementById('sbom-table-wrapper');
+      const scanId = byId('sbom-scan-select').value;
+      const container = byId('sbom-manager-container');
+      const empty = byId('sbom-empty-state');
+      const loading = byId('sbom-loading');
+      const tbody = byId('sbom-documents-tbody');
+      const tableEmpty = byId('sbom-docs-empty');
+      const tableWrapper = byId('sbom-table-wrapper');
 
       if (!scanId) {
         container.style.display = 'none';
@@ -1090,14 +1362,13 @@
       empty.style.display = 'none';
 
       try {
-        const r = await fetch(`/api/scans/${scanId}/sbom`);
-        const { data } = await r.json();
+        const { data } = await api(apiPath('scans', scanId, 'sbom'));
 
         loading.style.display = 'none';
         container.style.display = 'block';
-        tbody.innerHTML = '';
+        clear(tbody);
 
-        if (!data || data.length === 0) {
+        if (!Array.isArray(data) || data.length === 0) {
           tableEmpty.style.display = 'block';
           tableWrapper.style.display = 'none';
           return;
@@ -1105,265 +1376,441 @@
 
         tableEmpty.style.display = 'none';
         tableWrapper.style.display = 'block';
-
-        for (const doc of data) {
-          const tr = document.createElement('tr');
-          let formatLabel = doc.format;
-          if (doc.format === 'cyclonedx_json') formatLabel = 'CycloneDX (JSON)';
-          else if (doc.format === 'cyclonedx_xml') formatLabel = 'CycloneDX (XML)';
-          else if (doc.format === 'spdx_json') formatLabel = 'SPDX (JSON)';
-          else if (doc.format === 'spdx_tag_value') formatLabel = 'SPDX (Tag-Value)';
-
-          tr.innerHTML = `
-            <td><strong>${formatLabel}</strong></td>
-            <td><span class="capsule">${doc.specVersion}</span></td>
-            <td>${formatBytes(doc.fileSizeBytes)}</td>
-            <td style="color:var(--text-muted); font-size:0.85rem;">${new Date(doc.generatedAt).toLocaleString()}</td>
-            <td style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">${doc.checksumSha256.slice(0, 16)}...</td>
-            <td>
-              <a class="btn btn-sm" href="/api/sbom/${doc.id}/download" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;">
-                <i data-lucide="download" style="width:12px;height:12px;"></i> Download
-              </a>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        }
-        lucide.createIcons();
+        for (const doc of data) tbody.appendChild(renderSbomRow(doc));
+        refreshIcons();
       } catch (e) {
         loading.style.display = 'none';
+        reportError(e, 'Failed to load SBOM documents');
       }
     }
 
     async function generateNewSbom() {
-      const scanId = document.getElementById('sbom-scan-select').value;
-      const format = document.getElementById('sbom-format-select').value;
-      const genBtn = document.getElementById('generate-sbom-btn');
+      const scanId = byId('sbom-scan-select').value;
+      const format = byId('sbom-format-select').value;
+      const genBtn = byId('generate-sbom-btn');
 
       if (!scanId) return;
 
       genBtn.disabled = true;
-      genBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Generating...';
-      lucide.createIcons();
+      setButtonContent(genBtn, 'loader-2', 'Generating...', true);
 
       try {
-        const r = await fetch(`/api/scans/${scanId}/sbom`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format })
-        });
-        if (!r.ok) {
-          const err = await r.json();
-          throw new Error(err.message || 'Generation failed');
-        }
+        await api(apiPath('scans', scanId, 'sbom'), { method: 'POST', body: { format } });
         showToast('SBOM document generated successfully!');
         await loadScanSboms();
       } catch (e) {
-        showToast(e.message || 'Failed to generate SBOM', 'error');
+        reportError(e, 'Failed to generate SBOM');
       } finally {
         genBtn.disabled = false;
-        genBtn.innerHTML = '<i data-lucide="plus"></i> Generate Document';
-        lucide.createIcons();
+        setButtonContent(genBtn, 'plus', 'Generate Document');
       }
     }
 
     // ── Load Users & Roles Tab
+    function renderUserRow(u) {
+      const roles = (Array.isArray(u.roles) ? u.roles : []).map((role) => el('span', {
+        className: 'capsule',
+        style: 'background:rgba(139,92,246,0.1); color:var(--primary); font-weight:600; text-transform:capitalize; margin-right:0.25rem;',
+      }, role));
+      return el('tr', null,
+        el('td', null, el('strong', null, u.display_name || '—')),
+        // Plain text: only http/https may be used as href (no mailto: built from API data).
+        el('td', { style: 'color:var(--primary);' }, u.email || '—'),
+        el('td', null, roles),
+        el('td', null, el('span', { className: 'status-badge status-healthy', style: 'text-transform: capitalize;' }, u.status || 'active')),
+        el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(u.created_at)));
+    }
+
     async function loadUsersList() {
-      const loading = document.getElementById('users-loading');
-      const container = document.getElementById('users-container');
-      const tbody = document.getElementById('users-list-tbody');
+      const loading = byId('users-loading');
+      const container = byId('users-container');
+      const tbody = byId('users-list-tbody');
 
       loading.style.display = 'block';
       container.style.display = 'none';
 
       try {
-        const r = await fetch('/api/users');
-        const { data } = await r.json();
+        const { data } = await api('/api/users');
 
         loading.style.display = 'none';
         container.style.display = 'block';
-        tbody.innerHTML = '';
+        clear(tbody);
 
-        if (!data || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No users registered</td></tr>';
+        if (!Array.isArray(data) || data.length === 0) {
+          emptyRow(tbody, 5, 'No users registered');
           return;
         }
 
-        for (const u of data) {
-          const tr = document.createElement('tr');
-          const rolesHtml = (u.roles || []).map(role => `<span class="capsule" style="background:rgba(139,92,246,0.1); color:var(--primary); font-weight:600; text-transform:capitalize;">${role}</span>`).join('');
-          
-          tr.innerHTML = `
-            <td><strong>${u.display_name || '—'}</strong></td>
-            <td><a href="mailto:${u.email}" style="color:var(--primary); text-decoration:none;">${u.email}</a></td>
-            <td>${rolesHtml}</td>
-            <td><span class="status-badge status-healthy" style="text-transform: capitalize;">${u.status || 'active'}</span></td>
-            <td style="color:var(--text-muted); font-size:0.85rem;">${timeAgo(u.created_at)}</td>
-          `;
-          tbody.appendChild(tr);
-        }
+        for (const u of data) tbody.appendChild(renderUserRow(u));
       } catch (e) {
         loading.style.display = 'none';
+        reportError(e, 'Failed to load users');
       }
     }
 
     // ── Modal Handlers
     function openModal() {
-      document.getElementById('scanModal').classList.add('open');
+      byId('scanModal').classList.add('open');
+      const nameInput = byId('projectName');
+      if (nameInput) nameInput.focus();
     }
     function closeModal() {
-      document.getElementById('scanModal').classList.remove('open');
-      document.getElementById('projectName').value = '';
-      document.getElementById('repoPath').value = '';
+      const modal = byId('scanModal');
+      if (!modal) return;
+      modal.classList.remove('open');
+      byId('projectName').value = '';
+      byId('repoPath').value = '';
     }
-    document.getElementById('scanModal').addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) closeModal();
-    });
 
     // ── Launch Scan modal submission
     async function launchScan() {
-      const name = document.getElementById('projectName').value.trim();
-      const repoPath = document.getElementById('repoPath').value.trim();
-      const ecosystemsEl = document.getElementById('ecosystems');
-      const ecosystems = Array.from(ecosystemsEl.selectedOptions).map(o => o.value);
+      const name = byId('projectName').value.trim();
+      const repoPath = byId('repoPath').value.trim();
+      const ecosystems = Array.from(byId('ecosystems').selectedOptions).map((o) => o.value);
 
       if (!name) { showToast('Project name is required', 'error'); return; }
       if (!repoPath) { showToast('Repository path is required', 'error'); return; }
 
-      const launchBtn = document.getElementById('launch-btn');
+      const launchBtn = byId('launch-btn');
       launchBtn.disabled = true;
-      launchBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Creating...';
-      lucide.createIcons();
+      setButtonContent(launchBtn, 'loader-2', 'Creating...', true);
 
       try {
         // 1. Create project
-        const projR = await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, repoUrl: repoPath, ecosystems })
-        });
-        if (!projR.ok) {
-          const err = await projR.json();
-          throw new Error(err.message || 'Failed to create project');
-        }
-        const { data: project } = await projR.json();
-
+        const { data: project } = await api('/api/projects', { method: 'POST', body: { name, repoUrl: repoPath, ecosystems } });
         // 2. Queue scan
-        const scanR = await fetch('/api/scans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, trigger: 'manual' })
-        });
-        if (!scanR.ok) {
-          const err = await scanR.json();
-          throw new Error(err.message || 'Failed to queue scan');
-        }
-        const { data: scan } = await scanR.json();
+        await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual' } });
 
         closeModal();
         showToast(`Scan queued for "${name}". Results will appear shortly.`);
-
         // Force switch to Dashboard to view progress
-        document.querySelector('#sidebar-nav button[data-view="dashboard"]').click();
+        await switchView('dashboard');
       } catch (e) {
-        showToast(e.message || 'Launch failed', 'error');
+        reportError(e, 'Launch failed');
       } finally {
         launchBtn.disabled = false;
-        launchBtn.innerHTML = '<i data-lucide="play"></i> Launch Scanner';
-        lucide.createIcons();
+        setButtonContent(launchBtn, 'play', 'Launch Scanner');
       }
     }
 
-    // ── Sidebar view controller router
-    document.querySelectorAll('#sidebar-nav .nav-item').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        document.querySelectorAll('#sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+    // ── View router
+    const VIEWS = {
+      dashboard: {
+        title: 'OSS License & Security Dashboard',
+        subtitle: 'Real-time open source package compliance metrics',
+        headerActions: true,
+        load: () => Promise.all([loadScans(), updateStats()]),
+        refresh: () => Promise.all([loadScans(), updateStats()]),
+      },
+      scans: {
+        title: 'Scan History',
+        subtitle: 'Historical log of compliance taramaları',
+        load: () => loadAllScansHistory(),
+        refresh: () => loadAllScansHistory(),
+      },
+      findings: {
+        title: 'Vulnerabilities & Findings',
+        subtitle: 'Security vulnerabilities and license policy alerts',
+        load: () => populateScansDropdown('findings-scan-select', loadScanFindings),
+        refresh: () => loadScanFindings(),
+      },
+      projects: {
+        title: 'Projects',
+        subtitle: 'Manage registered local codebases and integration repositories',
+        load: () => loadProjectsList(),
+        refresh: () => loadProjectsList(),
+      },
+      sbom: {
+        title: 'SBOM Center',
+        subtitle: 'Software Bill of Materials (SBOM) generation and download registry',
+        load: () => populateScansDropdown('sbom-scan-select', loadScanSboms),
+        refresh: () => loadScanSboms(),
+      },
+      users: {
+        title: 'Users & Roles',
+        subtitle: 'Access management and role-based permissions',
+        load: () => loadUsersList(),
+        refresh: () => loadUsersList(),
+      },
+    };
 
-        const targetView = btn.getAttribute('data-view');
-        currentActiveView = targetView;
+    async function switchView(targetView) {
+      if (!Object.prototype.hasOwnProperty.call(VIEWS, targetView)) return;
+      const cfg = VIEWS[targetView];
 
-        // Hide all view-section divs, show target
-        document.querySelectorAll('.view-section').forEach(sec => sec.style.display = 'none');
-        document.getElementById(`view-${targetView}`).style.display = 'block';
-
-        // Update headers & fetch corresponding view resources
-        const pageTitle = document.getElementById('page-title');
-        const pageSubtitle = document.getElementById('page-subtitle');
-        const headerActions = document.querySelector('.header-actions');
-
-        if (targetView === 'dashboard') {
-          pageTitle.textContent = 'OSS License & Security Dashboard';
-          pageSubtitle.textContent = 'Real-time open source package compliance metrics';
-          headerActions.style.display = 'flex';
-          loadScans();
-          updateStats();
-        } else if (targetView === 'scans') {
-          pageTitle.textContent = 'Scan History';
-          pageSubtitle.textContent = 'Historical log of compliance taramaları';
-          headerActions.style.display = 'none';
-          loadAllScansHistory();
-        } else if (targetView === 'findings') {
-          pageTitle.textContent = 'Vulnerabilities & Findings';
-          pageSubtitle.textContent = 'Security vulnerabilities and license policy alerts';
-          headerActions.style.display = 'none';
-          populateScansDropdown('findings-scan-select');
-        } else if (targetView === 'projects') {
-          pageTitle.textContent = 'Projects';
-          pageSubtitle.textContent = 'Manage registered local codebases and integration repositories';
-          headerActions.style.display = 'none';
-          loadProjectsList();
-        } else if (targetView === 'sbom') {
-          pageTitle.textContent = 'SBOM Center';
-          pageSubtitle.textContent = 'Software Bill of Materials (SBOM) generation and download registry';
-          headerActions.style.display = 'none';
-          populateScansDropdown('sbom-scan-select');
-        } else if (targetView === 'users') {
-          pageTitle.textContent = 'Users & Roles';
-          pageSubtitle.textContent = 'Access management and role-based permissions';
-          headerActions.style.display = 'none';
-          loadUsersList();
-        }
+      document.querySelectorAll('#sidebar-nav .nav-item').forEach((b) => {
+        const active = b.dataset.view === targetView;
+        b.classList.toggle('active', active);
+        if (active) b.setAttribute('aria-current', 'page');
+        else b.removeAttribute('aria-current');
       });
-    });
+      currentActiveView = targetView;
+
+      document.querySelectorAll('.view-section').forEach((sec) => { sec.style.display = 'none'; });
+      byId(`view-${targetView}`).style.display = 'block';
+
+      setText('page-title', cfg.title);
+      setText('page-subtitle', cfg.subtitle);
+      document.querySelector('.header-actions').style.display = cfg.headerActions ? 'flex' : 'none';
+
+      await cfg.load();
+    }
 
     // ── Global refresher
     async function refreshAll() {
-      const icon = document.getElementById('refresh-icon');
-      icon.classList.add('spin');
-      
-      if (currentActiveView === 'dashboard') {
-        await Promise.all([loadScans(), updateStats(), checkHealth()]);
-      } else if (currentActiveView === 'scans') {
-        await Promise.all([loadAllScansHistory(), checkHealth()]);
-      } else if (currentActiveView === 'findings') {
-        await Promise.all([loadScanFindings(), checkHealth()]);
-      } else if (currentActiveView === 'projects') {
-        await Promise.all([loadProjectsList(), checkHealth()]);
-      } else if (currentActiveView === 'sbom') {
-        await Promise.all([loadScanSboms(), checkHealth()]);
-      } else if (currentActiveView === 'users') {
-        await Promise.all([loadUsersList(), checkHealth()]);
+      const refreshIcon = byId('refresh-icon');
+      if (refreshIcon) refreshIcon.classList.add('spin');
+      try {
+        await Promise.all([VIEWS[currentActiveView].refresh(), checkHealth()]);
+      } finally {
+        const iconAfter = byId('refresh-icon');
+        if (iconAfter) iconAfter.classList.remove('spin');
       }
-      
-      icon.classList.remove('spin');
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Auth (AC-P02-4): 401 setup_required -> setup form, 401 unauthenticated
+    // -> login form. Password values are never stored or logged; the fields
+    // are cleared after each attempt.
+    // ════════════════════════════════════════════════════════════════════
+
+    const MIN_PASSWORD_LENGTH = 12;
+    const MAX_PASSWORD_LENGTH = 1024;
+
+    function setAuthMessage(text, kind) {
+      const box = byId('auth-error');
+      if (!box) return;
+      box.textContent = text ? String(text) : '';
+      box.className = `auth-message ${kind === 'info' ? 'info' : 'error'}`;
+    }
+
+    /** Clears data rendered for the previous session so it does not linger in the DOM. */
+    function clearAppData() {
+      ['scans-tbody', 'scans-list-tbody', 'projects-list-tbody', 'users-list-tbody', 'sbom-documents-tbody'].forEach((id) => clear(byId(id)));
+      ['findings-scan-select', 'sbom-scan-select'].forEach((id) => clear(byId(id)));
+      const findings = byId('findings-container');
+      if (findings) clear(findings).appendChild(emptyState('alert-triangle', 'No scan selected', 'Select a completed scan above to view its dependency findings.'));
+      ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach((id) => setText(id, '—'));
+      setText('current-user-name', '');
+      setText('last-updated', '');
+    }
+
+    function showAuth(mode, notice) {
+      const wasInApp = currentUser !== null;
+      currentUser = null;
+      stopAllPolling();
+      closeModal();
+      if (wasInApp) clearAppData();
+
+      const appRoot = byId('app-root');
+      const screen = byId('auth-screen');
+      if (!appRoot || !screen) return;
+      appRoot.hidden = true;
+      screen.hidden = false;
+
+      if (authMode === mode && byId('auth-form')) {
+        if (notice) setAuthMessage(notice, 'info');
+        return;
+      }
+      authMode = mode;
+      renderAuthForm(screen, mode, notice);
+    }
+
+    function renderAuthForm(screen, mode, notice) {
+      const isSetup = mode === 'setup';
+
+      const password = el('input', {
+        type: 'password',
+        id: 'auth-password',
+        name: 'password',
+        className: 'form-control',
+        autocomplete: isSetup ? 'new-password' : 'current-password',
+        maxlength: MAX_PASSWORD_LENGTH,
+        required: true,
+        'aria-describedby': isSetup ? 'auth-password-hint auth-error' : 'auth-error',
+      });
+      const confirmField = isSetup
+        ? el('input', {
+          type: 'password',
+          id: 'auth-password-confirm',
+          name: 'password-confirm',
+          className: 'form-control',
+          autocomplete: 'new-password',
+          maxlength: MAX_PASSWORD_LENGTH,
+          required: true,
+          'aria-describedby': 'auth-error',
+        })
+        : null;
+      const message = el('p', { id: 'auth-error', className: 'auth-message error', role: 'alert', 'aria-live': 'assertive' });
+      const submit = el('button', { type: 'submit', className: 'btn', id: 'auth-submit' },
+        icon(isSetup ? 'key-round' : 'log-in'), isSetup ? ' Set password & continue' : ' Sign in');
+
+      const form = el('form', { id: 'auth-form', novalidate: true, 'aria-labelledby': 'auth-title' },
+        el('div', { className: 'form-group' },
+          el('label', { for: 'auth-password' }, isSetup ? 'New password' : 'Password'),
+          password,
+          isSetup ? el('small', { id: 'auth-password-hint', className: 'auth-hint' },
+            `At least ${MIN_PASSWORD_LENGTH} characters. The server validates it again.`) : null),
+        isSetup
+          ? el('div', { className: 'form-group' }, el('label', { for: 'auth-password-confirm' }, 'Confirm password'), confirmField)
+          : null,
+        message,
+        el('div', { className: 'form-actions' }, submit));
+
+      form.addEventListener('submit', fire(async (ev) => {
+        ev.preventDefault();
+        const value = password.value;
+
+        if (isSetup) {
+          if (value.length < MIN_PASSWORD_LENGTH) {
+            setAuthMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, 'error');
+            password.focus();
+            return;
+          }
+          if (value.length > MAX_PASSWORD_LENGTH) {
+            setAuthMessage(`Password must be at most ${MAX_PASSWORD_LENGTH} characters.`, 'error');
+            password.focus();
+            return;
+          }
+          if (confirmField && value !== confirmField.value) {
+            setAuthMessage('Passwords do not match.', 'error');
+            confirmField.focus();
+            return;
+          }
+        } else if (!value) {
+          setAuthMessage('Password is required.', 'error');
+          password.focus();
+          return;
+        }
+
+        submit.disabled = true;
+        setAuthMessage('', 'info');
+        try {
+          await api(isSetup ? '/api/auth/setup' : '/api/auth/login', {
+            method: 'POST',
+            body: { password: value },
+            authRedirect: false,
+          });
+          // Setup 201 already sets the session cookie (auto login); no separate login call.
+          await enterApp();
+        } catch (e) {
+          if (e && e.authRedirect) return;
+          if (e && e.code === 'setup_already_done') {
+            showAuth('login', 'A password has already been set. Please sign in.');
+          } else if (!isSetup && e && e.code === 'setup_required') {
+            showAuth('setup', 'No password has been set yet. Create one to continue.');
+          } else {
+            setAuthMessage(e && e.message ? e.message : 'Request failed', 'error');
+            password.focus();
+          }
+        } finally {
+          password.value = '';
+          if (confirmField) confirmField.value = '';
+          submit.disabled = false;
+        }
+      }));
+
+      const card = el('section', { className: 'auth-card', 'aria-labelledby': 'auth-title' },
+        el('div', { className: 'logo-container' },
+          el('div', { className: 'logo-icon' }, icon('shield-alert')),
+          el('div', { className: 'logo-text' }, 'Compliance Hub')),
+        el('h2', { className: 'modal-title', id: 'auth-title' }, isSetup ? 'Set administrator password' : 'Sign in'),
+        el('p', { className: 'modal-subtitle' }, isSetup
+          ? 'No password has been set for this installation yet. Choose one to finish setup; you will be signed in automatically.'
+          : 'Enter your password to continue.'),
+        form);
+
+      clear(screen).appendChild(card);
+      if (notice) setAuthMessage(notice, 'info');
+      refreshIcons();
+      password.focus();
+    }
+
+    async function enterApp() {
+      const { data } = await api('/api/auth/me');
+      currentUser = data || {};
+      authMode = null;
+
+      const screen = byId('auth-screen');
+      clear(screen).hidden = true;
+      byId('app-root').hidden = false;
+
+      const label = currentUser.displayName || currentUser.email || 'Signed in';
+      setText('current-user-name', label);
+      const nameEl = byId('current-user-name');
+      if (nameEl) nameEl.title = currentUser.email ? String(currentUser.email) : '';
+
+      await switchView('dashboard');
+    }
+
+    async function logout() {
+      const btn = byId('logout-btn');
+      if (btn) btn.disabled = true;
+      try {
+        await api('/api/auth/logout', { method: 'POST', authRedirect: false });
+        // Only this browser session is closed; other sessions are not affected.
+        showAuth('login', 'You have been signed out of this browser session.');
+      } catch (e) {
+        if (e && e.status === 401) showAuth('login', 'Your session had already ended. Please sign in again.');
+        else reportError(e, 'Logout failed');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // ── Event wiring (no inline handlers)
+    function bindHandlers() {
+      document.querySelectorAll('#sidebar-nav .nav-item').forEach((btn) => {
+        btn.addEventListener('click', fire(() => switchView(btn.dataset.view)));
+      });
+      byId('refresh-btn').addEventListener('click', fire(refreshAll));
+      byId('new-scan-btn').addEventListener('click', fire(openModal));
+      byId('add-project-btn').addEventListener('click', fire(openModal));
+      byId('modal-close-btn').addEventListener('click', fire(closeModal));
+      byId('modal-cancel-btn').addEventListener('click', fire(closeModal));
+      byId('launch-btn').addEventListener('click', fire(launchScan));
+      byId('generate-sbom-btn').addEventListener('click', fire(generateNewSbom));
+      byId('logout-btn').addEventListener('click', fire(logout));
+      byId('findings-scan-select').addEventListener('change', fire(loadScanFindings));
+      byId('sbom-scan-select').addEventListener('change', fire(loadScanSboms));
+
+      byId('scanModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) closeModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && byId('scanModal').classList.contains('open')) closeModal();
+      });
+
+      // Delegated: per-project "Scan Now" buttons carry their values in data-* attributes.
+      byId('projects-list-tbody').addEventListener('click', fire((e) => {
+        const target = e.target instanceof Element ? e.target.closest('button[data-action="scan-project"]') : null;
+        if (!target) return undefined;
+        return triggerManualScan(target.dataset.projectId, target.dataset.projectName);
+      }));
     }
 
     // ── Initialize App
     async function init() {
+      refreshIcons();
+      bindHandlers();
       await checkHealth();
-      await loadScans();
-      await updateStats();
+      try {
+        await enterApp();
+      } catch (e) {
+        if (e && e.authRedirect) return; // setup/login form is already shown
+        showAuth('login', `Could not verify the session: ${e && e.message ? e.message : 'unknown error'}`);
+      }
     }
 
-    init();
+    fire(init)();
 
     // Auto-refresh stats/scans every 30 seconds
-    setInterval(async () => {
-      if (currentActiveView === 'dashboard') {
+    setInterval(fire(async () => {
+      if (currentUser && currentActiveView === 'dashboard') {
         await loadScans();
         await updateStats();
       }
-    }, 30000);
+    }), 30000);
   </script>
 </body>
 </html>

@@ -5,7 +5,7 @@ direction="${1:-up}"
 migrations_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/migrations" && pwd)"
 
 if [[ "$direction" != "up" && "$direction" != "down" ]]; then
-  echo "Usage: DATABASE_URL=postgres://user:pass@host:5432/db $0 [up|down]" >&2
+  echo "Usage: DATABASE_URL=postgres://<user>@<host>:5432/<database> $0 [up|down]  (password via PGPASSWORD or pgpass)" >&2
   exit 64
 fi
 

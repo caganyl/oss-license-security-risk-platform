@@ -33,6 +33,7 @@
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "jsdom": "^26.1.0",
+    "lucide": "^1.48.0",
     "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",

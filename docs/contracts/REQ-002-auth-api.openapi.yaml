@@ -1,10 +1,14 @@
 openapi: 3.0.3
 info:
   title: OSS Risk Platform - REQ-002 Auth API Contract (F1 / P-01, P-02, P-04)
-  version: 0.2.2-draft
+  version: 0.2.3-draft
   description: |
     Status: Proposed. Accepted DEGILDIR; Accepted yalniz contract'in tamami icin acik insan onayiyla yapilir.
 
+    0.2.3 (2026-10-09): Guvenlik incelemesi (docs/quality/security-reports/REQ-002-security-review.md)
+    sonrasi kullanici kararlari islendi: K11 (M-3 / D-19) /api/users/* yalniz oturum cereziyle, Bearer ->
+    403 forbidden; K12 (D-20) POST /api/scans projenin repo_url'i bos/tanimsizsa 400 project_source_missing
+    (yeni kod); K13 (L-3, M-1) tum yanitlarda guvenlik basliklari, HTML yanitinda CSP.
     0.2.2 (2026-10-09): Setup akisi guncellenmis ADR-001 karar 2'ye uyduruldu (kullanici karari):
     kurtarma sonrasi tek adaya parola atanir (yeni kullanici yok, 201 + Set-Cookie); kullanici yoksa yeni
     kullanici olusturulur (201); gecersiz kullanici durumunda 500 setup_state_invalid (yeni kod).
@@ -44,12 +48,47 @@ info:
       govde siniri asimi -> 413 payload_too_large; beklenmeyen hata -> 500 internal_error (genel mesaj,
       stack trace / ham hata mesaji yok). Bkz. `components.responses.*`.
     - 401 govdesi kullanici yok / parola yanlis ayrimi yapmaz.
+    - Kullanici yonetimi oturum gerektirir (K11, M-3 / D-19): /api/users altindaki TUM uc noktalar
+      (GET/POST /api/users, GET/PATCH/DELETE /api/users/{id}, PUT /api/users/{id}/roles ve ileride
+      eklenecekler) yalniz `ossrisk_session` cereziyle cagrilabilir. Bu path'ler bu dosyada tek tek
+      tanimlanmaz. Davranis mevcut requireSession ile aynidir: once kimlik dogrulama (gecersiz Bearer/cerez
+      -> 401 unauthenticated / setup_required); gecerli Bearer (API anahtari) -> 403 code=forbidden,
+      `components.responses.SessionRequired`; RBAC ve controller calismaz, kayit degismez. Authorization
+      basligi varsa yalniz Bearer degerlendirildigi icin ayni istekte gecerli cerez olmasi sonucu
+      degistirmez. Cerezli degistiren isteklerde Origin kurali gecerlidir.
+    - Guvenlik basliklari (K13, L-3 / M-1): TUM yanitlarda (JSON, HTML, statik dosya, /health, 204 ve tum
+      hata yanitlari; Host reddi dahil) `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+      `Referrer-Policy: no-referrer` bulunur. HTML yanitlarinda (GET /, public/*.html) ayrica
+      `Content-Security-Policy` bulunur; zorunlu direktifler (degerleri sabit):
+        default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+      script-src'ye 'unsafe-inline', 'unsafe-eval', nonce/hash, data:/blob: veya harici koken EKLENMEZ.
+      style-src: 'self' (gerekirse 'unsafe-inline'), harici kaynak yok. font-src (ve gerekirse img-src):
+      kesin degeri frontend belirler; yalniz 'self' (gerekirse data:), harici kaynak yok (Google Fonts
+      kaldirilabilir). HTML disi yanitlarda ayni CSP serbesttir (oneri). Basliklar middleware zincirinin
+      en basinda (Host kontrolunden once) set edilir. Bkz. `components.headers.*` ve `x-security-headers`.
+    - Referrer-Policy: no-referrer altinda tarayici fetch() disi (ornek <form>) degistiren isteklerde
+      `Origin: null` gonderebilir; Origin: null -> 403 origin_rejected. Degistiren istekler yalniz fetch()
+      ile yapilir. Tarayici davranisi dogrulanmasi gerekiyor (bkz. md Acik noktalar 5).
   x-status: Proposed
   x-req: REQ-002
   x-adr: [ADR-001, ADR-002]
+  x-security-review: docs/quality/security-reports/REQ-002-security-review.md
   x-decisions:
     date: '2026-10-09'
     source: Kullanici karari (ana oturum araciligiyla iletildi); contract Accepted onayi degildir.
+    items: [K1, K2, K3, K4, K5, K6, K7, K8, K9, K10, K11 (M-3/D-19), K12 (D-20), K13 (L-3/M-1)]
+  x-session-only-prefixes:
+    - /api/users
+  x-security-headers:
+    all-responses:
+      X-Content-Type-Options: nosniff
+      X-Frame-Options: DENY
+      Referrer-Policy: no-referrer
+    html-responses:
+      Content-Security-Policy:
+        required: "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        style-src: "'self' (gerekirse 'unsafe-inline'); harici kaynak yok"
+        font-src: "frontend belirler; yalniz 'self' (gerekirse data:); harici kaynak yok"
 servers:
   - url: http://127.0.0.1:3001
     description: Varsayilan yerel bind (HOST=127.0.0.1, PORT=3001). TLS yok (kapsam disi).
@@ -493,6 +532,13 @@ paths:
         Taramanin etkin kaynagi (worker ile ayni oncelik: entegrasyon repo_url, yoksa proje repo_url)
         kuyruga alinmadan once ADR-002 siniflandirmasi ve (yerel yol ise) SCAN_ROOTS kontrolunden
         gecer (AC-P04-3/4/5/6). Basarisizsa 400 doner ve scans satiri OLUSTURULMAZ.
+        Bu uc noktayla olusturulan taramalarin entegrasyonu yoktur; etkin kaynak projenin repo_url'idir.
+        K12 / D-20: projenin repo_url'i NULL, bos string veya yalniz bosluk (yalniz bosluk kismi oneri) ise
+        400 code=project_source_missing, sabit mesaj "Project has no repository URL or local path";
+        siniflandirma atlanmaz, scans satiri ve kuyruk isi olusmaz. Kontrol sirasi: govde dogrulamasi
+        (invalid_request) -> proje varligi (404 not_found) -> kaynak bos mu (project_source_missing) ->
+        ADR-002 siniflandirmasi (repo_url_not_allowed / path_not_allowed).
+        POST /api/projects bu karardan etkilenmez (repoUrl bos proje olusturmak kabul edilmeye devam eder).
         Global security, 401 ve Origin kurallari gecerlidir.
       requestBody:
         required: true
@@ -518,7 +564,7 @@ paths:
                     type: object
                     additionalProperties: true
         '400':
-          $ref: '#/components/responses/ScanSourceRejected'
+          $ref: '#/components/responses/ScanRequestRejected'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -561,6 +607,30 @@ components:
       description: 'ossrisk_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
       required: true
       schema: { type: string }
+    # K13 (L-3, M-1): asagidaki uc baslik TUM yanitlarda zorunludur (bkz. info.description Genel kurallar).
+    # Her yanit tanimina tek tek eklenmemistir; kural globaldir.
+    XContentTypeOptions:
+      description: Tum yanitlarda zorunlu (K13).
+      required: true
+      schema: { type: string, enum: [nosniff] }
+    XFrameOptions:
+      description: Tum yanitlarda zorunlu (K13); CSP frame-ancestors 'none' ile birlikte.
+      required: true
+      schema: { type: string, enum: [DENY] }
+    ReferrerPolicy:
+      description: Tum yanitlarda zorunlu (K13).
+      required: true
+      schema: { type: string, enum: [no-referrer] }
+    ContentSecurityPolicy:
+      description: |
+        HTML yanitlarinda zorunlu (K13); diger yanitlarda serbest. Zorunlu direktifler (degerleri sabit):
+        default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+        style-src: 'self' (gerekirse 'unsafe-inline'), harici kaynak yok.
+        font-src (ve gerekirse img-src): kesin degeri frontend belirler; yalniz 'self' (gerekirse data:), harici kaynak yok.
+        script-src'ye 'unsafe-inline', 'unsafe-eval', nonce/hash, data:/blob: veya harici koken eklenmez.
+      required: true
+      schema: { type: string }
+      example: "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
   schemas:
     ErrorBody:
@@ -600,6 +670,7 @@ components:
             - too_many_attempts
             - internal_error
             - setup_state_invalid
+            - project_source_missing
       additionalProperties: true
 
     HealthUnhealthy:
@@ -720,7 +791,17 @@ components:
             host:
               value: { error: Forbidden, message: Host not allowed, code: host_rejected }
             forbidden:
-              value: { error: Forbidden, message: Session authentication required, code: forbidden }
+              value: { error: Forbidden, message: This endpoint requires a browser session, code: forbidden }
+    SessionRequired:
+      description: |
+        K11 / M-3 / D-19: yalniz oturum cereziyle cagrilabilen uca (anahtar yonetimi, logout, /api/users/*)
+        gecerli Bearer API anahtariyla gelindi. Mevcut requireSession davranisi; mesaj sabittir.
+        RBAC ve controller calismaz, hicbir kayit degismez.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Forbidden, message: This endpoint requires a browser session, code: forbidden }
     NotFound:
       description: Kaynak veya /api rotasi bulunamadi (JSON; Express varsayilan HTML 404'u yerine).
       content:
@@ -772,3 +853,23 @@ components:
               value: { error: Bad Request, message: Repository URL is not allowed; only https URLs are accepted, code: repo_url_not_allowed }
             validation:
               value: { error: Bad Request, message: Project name is required, code: invalid_request }
+    ScanRequestRejected:
+      description: |
+        POST /api/scans 400 yaniti. ScanSourceRejected'daki tum kodlara (path_not_allowed, repo_url_not_allowed,
+        invalid_request) ek olarak K12 / D-20: projenin repo_url'i NULL / bos / yalniz bosluk ->
+        code=project_source_missing, mesaj SABIT "Project has no repository URL or local path" (proje adi, id
+        veya baska ayrinti tasimaz). Hicbir 400 durumunda scans satiri veya kuyruk isi olusmaz.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          examples:
+            sourceMissing:
+              value: { error: Bad Request, message: Project has no repository URL or local path, code: project_source_missing }
+            path:
+              value: { error: Bad Request, message: Local path is not under an allowed scan root, code: path_not_allowed }
+            url:
+              summary: http://, ssh://, git@host:path (scp) vb.
+              value: { error: Bad Request, message: Repository URL is not allowed; only https URLs are accepted, code: repo_url_not_allowed }
+            validation:
+              value: { error: Bad Request, message: projectId is required, code: invalid_request }

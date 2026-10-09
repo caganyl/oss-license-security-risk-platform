@@ -1,10 +1,12 @@
 # REQ-002 Auth API Contract (F1 — P-01, P-02, P-04)
 
 - **Status:** Proposed
-- **Sürüm:** 0.2.2-draft
+- **Sürüm:** 0.2.3-draft
 - **Tarih:** 2026-10-09
 - **Makine okunur contract:** `docs/contracts/REQ-002-auth-api.openapi.yaml` (OpenAPI 3.0.3)
-- **İlgili:** REQ-002 (AC-P01-1…10, AC-P02-2/4, AC-P04-2…6, AC-P09-3), ADR-001, ADR-002
+- **İlgili:** REQ-002 (AC-P01-1…10, AC-P02-2/4, AC-P04-2…6, AC-P09-3), ADR-001, ADR-002,
+  güvenlik incelemesi `docs/quality/security-reports/REQ-002-security-review.md`
+  (M-1, M-3, L-3), kullanıcı kararları D-19, D-20
 
 > **UYARI — paralel implementation başlatılmamalı.** Bu contract "Proposed"
 > durumundadır (dayandığı ADR-001 ve ADR-002 `Accepted`).
@@ -35,6 +37,9 @@ contract'ın bütün olarak `Accepted` yapılması ayrıca açık insan onayı i
 | K8 | P-04 hata kodları | SCAN_ROOTS dışı yerel yol → `400 path_not_allowed`; https dışı (SSH dahil) veya kabul edilmeyen yerel biçim → `400 repo_url_not_allowed` |
 | K9 | Hata gövdeleri | Tüm hata yanıtları JSON (`{error, message, code}`); `/health` ham DB mesajı döndürmez |
 | K10 | Setup ve kurtarma (ADR-001 karar 2) | Tek aday (kurtarma sonrası) → parola o kullanıcıya, 201 + `Set-Cookie`; kullanıcı yoksa yeni kullanıcı, 201; parolalı kullanıcı varsa 409; geçersiz kullanıcı durumu → `500 setup_state_invalid` |
+| K11 | Kullanıcı yönetimi (M-3 / D-19) | `/api/users` altındaki tüm uç noktalar yalnız oturum çereziyle; Bearer → `403 forbidden` (mevcut `requireSession` davranışı) |
+| K12 | Kaynaksız tarama (D-20) | `POST /api/scans`: projenin `repo_url`'i boş/tanımsız → `400 project_source_missing`, sabit mesaj `Project has no repository URL or local path` |
+| K13 | Güvenlik başlıkları (L-3, M-1) | Tüm yanıtlarda `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; HTML yanıtında CSP (bkz. Genel kurallar) |
 
 ## Kapsam
 
@@ -58,12 +63,81 @@ konusu değildir; yalnız ortak `401`/`403`/JSON hata davranışını devralırl
 | `GET /api/auth/api-keys` | yalnız çerez | 200 metadata listesi | 401, 403 forbidden, 500 |
 | `DELETE /api/auth/api-keys/{id}` | yalnız çerez | 204 | 401, 403 forbidden / origin_rejected, 404 not_found, 500 |
 | `POST /api/projects` | çerez veya Bearer | 201 (mevcut) | **400 path_not_allowed / repo_url_not_allowed** / invalid_request, 401, 403, 500 |
-| `POST /api/scans` | çerez veya Bearer | 201 (mevcut) | **400 path_not_allowed / repo_url_not_allowed** / invalid_request, 401, 403, 404 not_found, 500 |
+| `POST /api/scans` | çerez veya Bearer | 201 (mevcut) | **400 project_source_missing / path_not_allowed / repo_url_not_allowed** / invalid_request, 401, 403, 404 not_found, 500 |
+| `/api/users`, `/api/users/*` (tüm metotlar) | **yalnız çerez** (K11) | mevcut | 401 unauthenticated / setup_required, **403 forbidden (Bearer)** / origin_rejected, 404 not_found, 500 |
 | diğer tüm `/api/*` | çerez veya Bearer | mevcut | 401 unauthenticated / setup_required, 403, 404 not_found, 500 internal_error |
 
 **Muaf olanlar yalnızca:** `GET /health`, `POST /api/auth/login`,
 `POST /api/auth/setup`, statik `public/` dosyaları ve `GET /` (AC-P01-1, ADR-001
 karar 9). Ayrı bir `GET /api/auth/status` yoktur.
+
+## Genel kurallar
+
+Aşağıdaki kurallar tüm uç noktalar için geçerlidir; OpenAPI dosyasında
+`info.description` → "Genel kurallar" bölümünde ve `components` altında da
+tanımlıdır.
+
+### Kullanıcı yönetimi oturum gerektirir (K11 — M-3 / D-19)
+
+- `/api/users` altındaki **tüm** uç noktalar (bugün: `GET /api/users`,
+  `POST /api/users`, `GET /api/users/{id}`, `PATCH /api/users/{id}`,
+  `PUT /api/users/{id}/roles`, `DELETE /api/users/{id}`; ileride eklenecekler
+  dahil) yalnız oturum çereziyle çağrılabilir. Bu path'lerin istek/yanıt şemaları
+  bu contract'ta tanımlı değildir; yalnız kimlik kuralı ve hata yanıtı tanımlanır.
+- Davranış, anahtar yönetimi ve logout'taki mevcut `requireSession` ile
+  **aynıdır**:
+  1. Önce kimlik doğrulama çalışır: geçersiz/iptal edilmiş/desene uymayan
+     Bearer veya geçersiz çerez → `401 unauthenticated` (parola yoksa
+     `setup_required`).
+  2. Geçerli **Bearer** (API anahtarı) ile gelen istek → `403 forbidden`; RBAC
+     (`guard(...)`) ve controller çalışmaz, hiçbir kayıt değişmez. `Authorization`
+     başlığı varsa yalnız Bearer değerlendirildiği için (öncelik kuralı) aynı
+     istekte geçerli bir çerez bulunması sonucu değiştirmez.
+  3. Geçerli çerezle gelen değiştiren istekler (`POST/PATCH/PUT/DELETE`) için
+     Origin kuralı geçerlidir (`403 origin_rejected`).
+- Hata yanıtı (JSON, `ErrorBody`):
+  `{ "error": "Forbidden", "message": "This endpoint requires a browser session", "code": "forbidden" }`.
+  Mesaj, mevcut `requireSession` mesajıdır ve sabittir; istemciler `code` ile
+  dallanır. OpenAPI: `components.responses.SessionRequired`.
+- Kendi hesabını devre dışı bırakma / silme / admin rolünü kaldırma yasağı
+  (M-3'te önerilen ek koruma) bu sürümde kullanıcı kararına konu olmadı;
+  contract'a eklenmedi (bkz. Açık noktalar 6).
+
+### Güvenlik başlıkları (K13 — L-3, M-1)
+
+- **Tüm yanıtlarda** (JSON, HTML, statik dosya, `/health`, `204` ve tüm hata
+  yanıtları; Host reddi dahil) şu başlıklar bulunur:
+
+  | Başlık | Değer |
+  | --- | --- |
+  | `X-Content-Type-Options` | `nosniff` |
+  | `X-Frame-Options` | `DENY` |
+  | `Referrer-Policy` | `no-referrer` |
+
+- **HTML yanıtlarında** (`GET /`, `public/` altındaki `.html` dosyaları)
+  ayrıca `Content-Security-Policy` bulunur. Zorunlu direktifler (değerleri
+  sabit):
+
+  ```
+  default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+  ```
+
+  - `script-src` yalnız `'self'`'tir: `'unsafe-inline'`, `'unsafe-eval'`,
+    nonce/hash, `data:`/`blob:` veya harici köken **eklenmez**. Sonuç: inline
+    `<script>` bloğu, inline olay işleyicisi (`onclick=` vb.) ve `javascript:`
+    URL'si çalışmaz.
+  - `style-src`: `'self'` (gerekirse `'unsafe-inline'`); **harici kaynak yok**.
+  - `font-src` (ve gerekirse `img-src`): kesin değeri frontend belirler; yalnız
+    `'self'` (gerekirse `data:`) — **harici kaynak yok** (Google Fonts
+    kaldırılabilir veya yerele alınabilir).
+  - `style-src` ve `font-src`'nin kesin değeri frontend implementation'ında
+    sabitlenir ve handoff'a yazılır; yukarıdaki zorunlu direktifler
+    gevşetilemez.
+  - HTML dışı yanıtlarda aynı CSP başlığının bulunması serbesttir (öneri: tek
+    middleware ile tüm yanıtlara aynı başlık); zorunlu olan HTML yanıtıdır.
+- Başlıklar middleware zincirinin **en başında** (Host kontrolünden önce)
+  set edilir; böylece `403 host_rejected` dahil erken dönen yanıtlar da taşır.
+- CORS başlığı yine hiç verilmez.
 
 ## Kimlik doğrulama kuralları
 
@@ -94,8 +168,8 @@ karar 9). Ayrı bir `GET /api/auth/status` yoktur.
 - **Öncelik (öneri):** `Authorization` başlığı varsa yalnız Bearer değerlendirilir,
   çerez yok sayılır; geçersiz/iptal edilmiş anahtar veya Bearer dışı şema →
   `401 unauthenticated`.
-- **Anahtar yönetimi ve logout** yalnız çerezle; `Authorization` ile çağrı →
-  `403 forbidden`.
+- **Anahtar yönetimi, logout ve `/api/users/*` (K11)** yalnız çerezle;
+  `Authorization` ile çağrı → `403 forbidden`.
 - **401 gövdesi:** parola hiç belirlenmemişse `code: setup_required`, aksi halde
   `unauthenticated` (login'de yanlış parola: `invalid_credentials`). Kullanıcı
   yok / parola yanlış ayrımı yapılmaz. Hatalı login `Set-Cookie` üretmez.
@@ -171,9 +245,19 @@ karar 9). Ayrı bir `GET /api/auth/status` yoktur.
   (ve `HOST` farklıysa `http://<HOST>:<PORT>`). Uyuşmazsa, `Origin: null` ise
   veya ikisi de yoksa `403 origin_rejected`. Bearer isteklerine uygulanmaz.
 - CORS başlığı hiç verilmez.
-- Middleware sırası (ADR-001 karar 8): Host → statik/`/health` → login/setup →
-  çerez/Bearer doğrulama → `req.user` → router'lar ve RBAC → `/api` 404 →
-  merkezi JSON error handler.
+- Middleware sırası (ADR-001 karar 8, 0.2.3 eki): **güvenlik başlıkları** →
+  Host → statik/`/health` → login/setup → çerez/Bearer doğrulama → `req.user` →
+  router'lar (`/api/users` için `requireSession` RBAC'tan önce) ve RBAC →
+  `/api` 404 → merkezi JSON error handler. Başlık middleware'inin başa eklenmesi
+  ADR-001 karar 8'deki sıralamayı değiştirmez, yalnız önüne ekler.
+- **`Referrer-Policy: no-referrer` ile Origin kontrolü etkileşimi:** tarayıcı,
+  bu politika altında bazı isteklerde `Origin: null` gönderebilir ve `Referer`
+  hiç göndermez; `Origin: null` bu contract'a göre `403 origin_rejected` alır.
+  Fetch standardına göre `fetch()` ile (varsayılan `mode: 'cors'`) yapılan
+  same-origin `POST/PATCH/PUT/DELETE` isteklerinde gerçek köken gönderilir;
+  HTML `<form>` gönderiminde ise `null` gönderilir. Bu nedenle değiştiren
+  istekler yalnız `fetch()` ile yapılır (bkz. Frontend yükümlülükleri). Tarayıcı
+  davranışı bu oturumda doğrulanmadı — **doğrulanması gerekiyor** (Açık noktalar 5).
 
 ## Hata gövdesi (K9)
 
@@ -205,12 +289,13 @@ karar 9). Ayrı bir `GET /api/auth/status` yoktur.
 | 400 | `invalid_password` | setup: parola yok / < 12 / > 1024 |
 | 400 | `path_not_allowed` | P-04: yerel yol SCAN_ROOTS dışı / tanımsız kök / traversal / yok |
 | 400 | `repo_url_not_allowed` | P-04: https dışı şema (SSH dahil), kabul edilmeyen yerel biçim |
+| 400 | `project_source_missing` | `POST /api/scans`: projenin `repo_url`'i boş/tanımsız (K12 / D-20); sabit mesaj `Project has no repository URL or local path` |
 | 401 | `unauthenticated` | geçersiz/eksik/süresi dolmuş kimlik |
 | 401 | `setup_required` | parola hiç belirlenmemiş |
 | 401 | `invalid_credentials` | login: yanlış parola |
 | 403 | `origin_rejected` | Origin/Referer reddi |
 | 403 | `host_rejected` | Host reddi |
-| 403 | `forbidden` | RBAC reddi, çerez-only uca Bearer |
+| 403 | `forbidden` | RBAC reddi, çerez-only uca Bearer (anahtar yönetimi, logout, `/api/users/*`) |
 | 404 | `not_found` | anahtar iptalinde bulunamayan id, tanımsız `/api` rotası, mevcut 404'ler |
 | 409 | `setup_already_done` | setup tekrar |
 | 409 | `conflict` | mevcut kodun kodsuz 409'ları için varsayılan |
@@ -249,6 +334,24 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
 - Not: UNC/göreli/aygıt yolları 0.1.0'da `path_not_allowed` idi; K8 gereği
   `repo_url_not_allowed`'a taşındı (bkz. Açık noktalar 1).
 
+### Kaynaksız proje ile tarama — `project_source_missing` (K12 / D-20)
+
+- `POST /api/scans` ile oluşturulan taramaların entegrasyonu yoktur; etkin
+  kaynak projenin `repo_url`'idir. Bu değer `NULL`, boş string veya yalnız
+  boşluktan oluşuyorsa (yalnız boşluk kısmı öneri) istek
+  `400 project_source_missing` ile reddedilir.
+- Sabit gövde:
+  `{ "error": "Bad Request", "message": "Project has no repository URL or local path", "code": "project_source_missing" }`.
+  Mesaj proje adı, id veya başka ayrıntı taşımaz.
+- Sıra: istek gövdesi doğrulaması (`projectId is required` → `invalid_request`)
+  → proje varlığı (`404 not_found`) → kaynak boş mu (`project_source_missing`)
+  → ADR-002 sınıflandırması / SCAN_ROOTS (`repo_url_not_allowed` /
+  `path_not_allowed`).
+- Ret durumunda `scans` satırı oluşmaz, kuyruğa iş eklenmez.
+- `POST /api/projects` bu karardan etkilenmez: `repoUrl` boş/`null` proje
+  oluşturmak mevcut davranışla kabul edilmeye devam eder; kaynak kontrolü
+  yalnız tarama isteğinde yapılır.
+
 ## Backend yükümlülükleri
 
 - Mock `req.user` middleware'i ve controller'lardaki sabit UUID geri dönüşleri
@@ -265,6 +368,15 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
   (21 karakter). Bearer doğrulaması desen kontrolü + `key_hash` araması;
   `key_prefix` aramada/karşılaştırmada kullanılmaz.
 - Varsayılan bind `127.0.0.1` (AC-P01-9); loopback dışı `HOST`'ta uyarı.
+- K11: `/api/users` router'ına `requireSession()` RBAC `guard`'larından önce
+  eklenir (router seviyesinde; tek tek route'a değil, ileride eklenecek
+  route'lar da kapsansın). Bearer → `403 forbidden`, mevcut mesaj korunur.
+- K12: `scanController.createScan` içinde `repo_url` boş/tanımsızken
+  `resolveScanSource` atlanmaz; `400 project_source_missing` döner
+  (bugünkü kod boş `repo_url`'de kontrolü atlayıp taramayı kuyruğa alıyor).
+- K13: güvenlik başlıkları zincirin başında tek middleware ile; HTML
+  yanıtlarına CSP. Statik dosyalar (`express.static`) ve erken dönen hata
+  yanıtları dahil.
 
 ## Frontend (`public/index.html`) yükümlülükleri
 
@@ -288,11 +400,39 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
   gösterir; iptal butonu `DELETE /api/auth/api-keys/{id}` çağırır.
 - Sunucu `message` dahil tüm dinamik metinler `textContent` (veya tek merkezi
   kaçışlama fonksiyonu) ile yazılır; kaçışlanmamış `innerHTML` yok (AC-P02-2).
+- **CSP uyumu (K13):**
+  - Inline `<script>` bloğu ayrı bir `public/` dosyasına taşınır; inline olay
+    işleyicileri (`onclick=` vb.) `addEventListener` ile değiştirilir;
+    `javascript:` URL'si, `eval`/`new Function`/string `setTimeout` kullanılmaz.
+  - Harici betik yok: lucide sabit sürümle `public/vendor/` altından servis
+    edilir (M-1).
+  - Harici stil/font yok: Google Fonts kaldırılır veya yerele alınır;
+    `preconnect` bağlantıları kaldırılır.
+  - `style-src` için `'unsafe-inline'` gerekip gerekmediği (inline `style=`
+    öznitelikleri, `<style>` bloğu) frontend tarafından belirlenir; kesin CSP
+    değeri handoff'a yazılır.
+- **Değiştiren istekler yalnız `fetch()` ile** yapılır (HTML `<form>` POST
+  yok; `Referrer-Policy: no-referrer` altında form gönderimi `Origin: null`
+  üretir ve `403 origin_rejected` alır). `fetch` çağrılarında `mode` değeri
+  `cors` (varsayılan) dışına çekilmez.
+- `POST /api/scans` `400 project_source_missing` → kullanıcıya "projede repo
+  URL'si veya yerel yol yok" anlamında hata gösterilir (sunucu mesajı
+  `textContent` ile). Kullanıcı yönetimi ekranı varsa Bearer kullanmaz
+  (UI zaten çerezle çalışır).
 
 ## Versiyonlama ve migration etkisi
 
 - URL'de sürüm öneki yok (`/api`). Contract sürümü `info.version`; breaking
   değişiklik yeni contract sürümü + insan onayı gerektirir.
+- 0.2.2 → 0.2.3 değişiklikleri (güvenlik incelemesi kararları, 2026-10-09):
+  K11 `/api/users/*` yalnız oturum (Bearer → `403 forbidden`); K12 yeni kod
+  `400 project_source_missing` (`ErrorBody.code` enum'una eklendi); K13 tüm
+  yanıtlarda güvenlik başlıkları ve HTML yanıtında CSP. **Davranış
+  değişikliği:** Bearer ile `/api/users` kullanan istemciler ve `repo_url`'i
+  boş projeler için `POST /api/scans` çağıranlar (önceden `201`, şimdi `400`)
+  etkilenir; F1 implementation'ı henüz merge edilmediği için dış tüketici
+  kırılması beklenmez. `ErrorBody.code` enum'una ekleme, enum'u kapalı
+  doğrulayan istemciler için genişletmedir. Migration etkisi yoktur.
 - 0.2.1 → 0.2.2 değişiklikleri: setup akışı güncellenmiş ADR-001 karar 2'ye
   uyduruldu (K10): kurtarma sonrası tek adaya parola atanır (yeni kullanıcı
   yok, 201 + `Set-Cookie`); kullanıcı yoksa yeni kullanıcı (201); geçersiz
@@ -366,6 +506,31 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
   kullanıcı bilgili URL, UNC, göreli yol → 400 `repo_url_not_allowed`; her
   durumda kayıt/kuyruk yok. SCAN_ROOTS altındaki geçerli yol → 201 (AC-P04-2).
 - DB'de parola/anahtar özetinin düz metinle eşleşmemesi.
+- K11 (`/api/users`): geçerli Bearer ile `GET /api/users`, `GET /api/users/{id}`,
+  `POST /api/users`, `PATCH /api/users/{id}`, `PUT /api/users/{id}/roles`,
+  `DELETE /api/users/{id}` → 403 `forbidden`, mesaj
+  `This endpoint requires a browser session`; ardından DB'de kullanıcı sayısı,
+  `status`, roller değişmemiş; aynı istekte geçerli çerez de olsa 403;
+  geçersiz Bearer → 401; geçerli çerezle `GET /api/users` → 200; çerezli
+  `PATCH` çapraz Origin ile → 403 `origin_rejected`. Route tablosu testi
+  `/api/users` altındaki her route'un Bearer ile 403 döndüğünü doğrular.
+- K12: `repo_url` `NULL` olan proje için `POST /api/scans` → 400
+  `project_source_missing`, sabit mesaj; `repo_url` `''` → aynı; `scans` satırı
+  ve kuyruk işi oluşmaz; bilinmeyen `projectId` → 404 (400 değil);
+  `repoUrl`'siz `POST /api/projects` → 201 (değişmedi).
+- K13: `GET /`, statik bir `.js` dosyası, `GET /api/auth/me` (200 ve 401),
+  `/health`, yabancı Host ile 403, bozuk JSON ile 400 yanıtlarının hepsinde
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`; `GET /` yanıtında CSP'nin zorunlu
+  direktifleri (`default-src 'self'`, `script-src 'self'`, `object-src 'none'`,
+  `base-uri 'none'`, `frame-ancestors 'none'`, `form-action 'self'`) var,
+  `script-src`'de `'unsafe-inline'`/`'unsafe-eval'` ve CSP'nin hiçbir
+  direktifinde `https:`/harici köken yok.
+- K13 (frontend, statik analiz): `public/index.html` inline `<script>` içeriği,
+  `on*=` öznitelikleri ve harici `<script src>` / `<link href>` içermez.
+- K13 + Origin (tarayıcı, manuel veya E2E): başlıklar açıkken gerçek
+  tarayıcıda setup, login, logout, API anahtarı oluşturma/iptal ve tarama
+  başlatma çalışır (`403 origin_rejected` alınmaz); konsolda CSP ihlali yok.
 
 ## Açık noktalar
 
@@ -387,5 +552,23 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
    login'de > 1024 parola için scrypt'siz 401, `name` üst sınırı 100, parola
    uzunluğunun `string.length` ile ölçülmesi, liste sıralaması.
 4. P-04 kod adları (`path_not_allowed`, `repo_url_not_allowed`) ADR-002 ile
-   aynıdır. `repoUrl` boş projelerin ve `POST /api/scans` `ref` doğrulamasının (ADR-002
-   deseni) istek anında yapılıp yapılmayacağı açık.
+   aynıdır. `repoUrl` boş projelerle tarama K12 ile kapandı
+   (`project_source_missing`). `POST /api/scans` `ref` doğrulamasının (ADR-002
+   deseni) istek anında yapılıp yapılmayacağı hâlâ açık.
+5. **`Referrer-Policy: no-referrer` ↔ Origin kontrolü (doğrulanması gerekiyor):**
+   Fetch standardına göre bu politika `fetch()` dışı (ör. `<form>`) değiştiren
+   isteklerde `Origin: null` üretir; contract `Origin: null`'u reddeder. UI
+   bugün `<form>` kullanmadığı ve `fetch` kullandığı için sorun beklenmez,
+   ancak gerçek tarayıcıda doğrulanmalıdır (Test yükümlülükleri, K13 + Origin).
+   Sorun çıkarsa iki seçenek vardır ve ikisi de **insan kararı** ister:
+   (a) `Referrer-Policy: same-origin` (çapraz kökene yine referrer gitmez);
+   (b) `fetch` çağrılarına istek bazında `referrerPolicy: 'same-origin'`.
+   Kullanıcı kararı (`no-referrer`) contract'ta değiştirilmedi.
+6. **M-3 ek koruması:** isteği yapanın kendi hesabını devre dışı bırakması,
+   silmesi veya `admin` rolünü kaldırması (oturumla bile) bu sürümde
+   yasaklanmadı; güvenlik raporu bunu önerir. Gerekirse ayrı kullanıcı kararı
+   ve contract sürümü gerekir.
+7. **İzlenebilirlik:** D-19 ve D-20 kararları REQ-002 dokümanında henüz
+   yer almıyor; product-analyst'in REQ-002'ye eklemesi (ve K11'in ADR-001'deki
+   oturum/anahtar yetki ayrımıyla ilişkisinin solution-architect tarafından
+   gerekirse ADR'ye işlenmesi) önerilir.

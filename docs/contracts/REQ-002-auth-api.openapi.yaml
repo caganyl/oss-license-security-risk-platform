@@ -1,0 +1,738 @@
+openapi: 3.0.3
+info:
+  title: OSS Risk Platform - REQ-002 Auth API Contract (F1 / P-01, P-02, P-04)
+  version: 0.2.1-draft
+  description: |
+    Status: Proposed. Accepted DEGILDIR; Accepted yalniz contract'in tamami icin acik insan onayiyla yapilir.
+
+    0.2.1 (2026-10-09): API anahtari bicimi Accepted ADR-001 karar 6'ya uyduruldu: anahtar
+    `ossr_<P>_<S>` (P = 16 kucuk harf hex, S = 43 base64url, toplam 65 karakter), keyPrefix = `ossr_<P>`
+    (21 karakter). Dogrulama tam anahtarin SHA-256 ozetiyle; onek arama/karsilastirmada kullanilmaz.
+    0.2.0 (2026-10-09): Kullanicinin 2026-10-09 tarihli kararlari islendi (setup sonrasi otomatik giris,
+    logout yalniz mevcut oturum, /me korunur, oturum 12 sa bosta / 7 gun mutlak, parola en az 12 karakter,
+    tek aktif API anahtari - yeni anahtar oncekini iptal eder, DELETE ile iptal,
+    P-04 hata kodlari, tum hatalar JSON, /health ham DB mesaji dondurmez).
+
+    UYARI: Contract "Proposed" durumundadir (dayandigi ADR-001 ve ADR-002 Accepted).
+    Contract insan tarafindan Accepted yapilip docs/ownership/REQ-002.json status=approved olmadan
+    backend (src/) ve frontend (public/index.html) paralel implementation'i BASLATILMAMALIDIR.
+
+    Iliskili: REQ-002 (AC-P01-1..10, AC-P02-2/4, AC-P04-2..6, AC-P09-3), ADR-001, ADR-002.
+    Aciklama ve davranis kurallari: docs/contracts/REQ-002-auth-api.md
+
+    Genel kurallar (tum uc noktalar):
+    - Kimlik dogrulama: `ossrisk_session` oturum cerezi VEYA `Authorization: Bearer ossr_<16 hex>_<43 base64url>`.
+      API anahtari query string ile kabul edilmez.
+    - Global `security` tum /api/* uc noktalarina uygulanir. Bu dosyada tanimlanmayan mevcut korumali
+      uc noktalar (/api/projects GET, /api/scans GET, /api/scans/{id}, /api/findings/*, /api/users/*,
+      /api/scans/{scanId}/sbom, /api/scans/{scanId}/reports ...) tek tek yeniden tanimlanmaz; hepsi
+      gecerli kimlik olmadan `components.responses.Unauthorized` (401) doner.
+    - Muaf uc noktalar YALNIZCA: GET /health, POST /api/auth/login, POST /api/auth/setup,
+      statik public/ dosyalari ve GET / (bunlarda `security: []`).
+    - Host basligi her istekte (muaf uclar ve statik dosyalar dahil) izin listesinde olmali; degilse
+      403 code=host_rejected.
+    - Cerezle dogrulanan POST/PUT/PATCH/DELETE ile login/setup isteklerinde Origin (yoksa Referer kokeni)
+      izinli kokenlerden biri olmali; degilse veya ikisi de yoksa 403 code=origin_rejected.
+      Bearer ile dogrulanan isteklere Origin kontrolu uygulanmaz.
+    - CORS basligi hic verilmez.
+    - TUM hata yanitlari (4xx/5xx, /api disi muaf uclar ve Host reddi dahil) `Content-Type: application/json`
+      ve `components.schemas.ErrorBody` govdesiyle doner; HTML/duz metin hata govdesi YOKTUR.
+      Tanimsiz /api rotasi -> 404 not_found; bozuk JSON govde -> 400 invalid_request;
+      govde siniri asimi -> 413 payload_too_large; beklenmeyen hata -> 500 internal_error (genel mesaj,
+      stack trace / ham hata mesaji yok). Bkz. `components.responses.*`.
+    - 401 govdesi kullanici yok / parola yanlis ayrimi yapmaz.
+  x-status: Proposed
+  x-req: REQ-002
+  x-adr: [ADR-001, ADR-002]
+  x-decisions:
+    date: '2026-10-09'
+    source: Kullanici karari (ana oturum araciligiyla iletildi); contract Accepted onayi degildir.
+servers:
+  - url: http://127.0.0.1:3001
+    description: Varsayilan yerel bind (HOST=127.0.0.1, PORT=3001). TLS yok (kapsam disi).
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: public
+    description: Kimlik dogrulamadan muaf uc noktalar
+  - name: auth
+    description: Oturum ve API anahtari
+  - name: p04
+    description: SCAN_ROOTS / repo_url dogrulamasi (yalniz 400 davranisi)
+
+paths:
+  /health:
+    get:
+      tags: [public]
+      operationId: getHealth
+      summary: Saglik kontrolu (muaf, /api disi)
+      security: []
+      responses:
+        '200':
+          description: Saglikli
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, database]
+                properties:
+                  status: { type: string, enum: [healthy] }
+                  database: { type: string, enum: [connected] }
+        '403':
+          $ref: '#/components/responses/HostRejected'
+        '500':
+          description: |
+            Sagliksiz (DB baglantisi basarisiz). Govde SABITTIR; ham DB hata mesaji (err.message),
+            baglanti dizesi, host/port, kullanici adi veya stack trace TASIMAZ. Ayrinti yalniz sunucu
+            log'una yazilir (sir icermeyecek sekilde).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthUnhealthy'
+              example:
+                status: unhealthy
+                database: disconnected
+                error: Internal Server Error
+                message: Database unavailable
+                code: internal_error
+
+  /api/auth/setup:
+    post:
+      tags: [public, auth]
+      operationId: setupPassword
+      summary: Ilk acilista tek yerel parolayi belirler ve otomatik giris yapar (AC-P01-4)
+      description: |
+        Muaf uc nokta. Yalnizca hicbir kullanicida password_hash dolu degilken basarilidir.
+        Parola belirlendikten sonra (oturum olsa bile) her zaman 409 doner.
+        Eszamanli iki istekte ikincisi 409 doner (DB kismi benzersiz indeksi, ADR-001 karar 2).
+        Origin/Referer ve Host kontrolu uygulanir.
+
+        Otomatik giris (karar 2026-10-09): 201 yaniti, parolanin atandigi ayni islemin sonunda
+        login ile ayni kurallarla yeni bir oturum olusturur ve `Set-Cookie` ile oturum cerezini
+        HER ZAMAN set eder. Istemcinin ayrica POST /api/auth/login cagirmasi gerekmez.
+        Parola atamasi ile oturum kaydi ayni transaction'dadir; oturum olusturulamazsa parola da
+        atanmamis olur (500 internal_error) ve setup tekrar denenebilir.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '201':
+          description: Parola belirlendi ve oturum acildi. Govde yok.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+        '400':
+          description: |
+            code=invalid_password. Mesajlar SABITTIR (istemci gosterebilir):
+            - password alani yok veya string degil: "Password is required"
+            - uzunluk < 12: "Password must be at least 12 characters"
+            - uzunluk > 1024: "Password must be at most 1024 characters"
+            Bozuk JSON govde -> 400 invalid_request (bkz. components.responses.BadRequest).
+            400 durumunda parola atanmaz, Set-Cookie yoktur.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              examples:
+                tooShort:
+                  value: { error: Bad Request, message: Password must be at least 12 characters, code: invalid_password }
+                tooLong:
+                  value: { error: Bad Request, message: Password must be at most 1024 characters, code: invalid_password }
+                missing:
+                  value: { error: Bad Request, message: Password is required, code: invalid_password }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Parola zaten belirlenmis. Set-Cookie yoktur.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example: { error: Conflict, message: Setup already completed, code: setup_already_done }
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/login:
+    post:
+      tags: [public, auth]
+      operationId: login
+      summary: Parola ile oturum acar
+      description: |
+        Muaf uc nokta. Origin/Referer ve Host kontrolu uygulanir.
+        Her basarili login yeni oturum tokeni uretir (session fixation yok); suresi dolmus oturumlar temizlenir.
+        Diger aktif oturumlar etkilenmez.
+        Parola string degilse veya 1024 karakteri asiyorsa scrypt calistirilmadan 401 invalid_credentials (oneri).
+        Brute-force: art arda 5 hatali denemeden sonra 429 + Retry-After; bekleme 30 sn'den baslar,
+        her seferinde iki katina cikar (ust sinir 900 sn), basarili login'de sifirlanir. Bekleme suresince
+        dogru parola da 429 alir. Sayac bellek icidir, restartta sifirlanir (ADR-001 karar 11).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, writeOnly: true }
+      responses:
+        '204':
+          description: Giris basarili. Govde yok.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookie'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            invalid_credentials (Set-Cookie YOK, AC-P01-6) veya setup_required (parola hic belirlenmemis).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              examples:
+                invalid:
+                  value: { error: Unauthorized, message: Invalid credentials, code: invalid_credentials }
+                setup:
+                  value: { error: Unauthorized, message: Initial password setup required, code: setup_required }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          description: Cok fazla hatali deneme.
+          headers:
+            Retry-After:
+              description: Saniye cinsinden bekleme (delta-seconds tamsayi).
+              schema: { type: integer, minimum: 1, maximum: 900 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example: { error: Too Many Requests, message: Too many failed attempts, code: too_many_attempts }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Yalniz mevcut oturumu kapatir
+      description: |
+        Yalniz oturum cereziyle; Origin kontrolu uygulanir.
+        Karar 2026-10-09 / ADR-001 karar 3: YALNIZ istegi yapan oturum (cerezdeki tokenin sessions satiri) silinir;
+        ayni kullanicinin diger oturumlari ve API anahtarlari ETKILENMEZ.
+        Cerez Max-Age=0 ile temizlenir.
+        Authorization basligi ile cagrilirsa 403 forbidden.
+        Gecersiz/suresi dolmus cerezle cagri 401 unauthenticated doner (silinecek oturum yok).
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Mevcut oturum kapatildi.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookie'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Dogrulanmis kullaniciyi doner
+      description: |
+        Karar 2026-10-09: bu uc nokta contract'ta kalir. Cerez veya Bearer ile.
+        UI acilista bunu cagirir: 200 -> uygulama; 401 setup_required -> setup formu;
+        401 unauthenticated -> login formu. Mevcut AuthenticatedUser tipinden sessionId haric alanlari doner.
+        Cerezle cagri oturumun last_seen_at degerini gunceller (diger korumali uclarla ayni).
+      responses:
+        '200':
+          description: Kullanici
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/HostRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/api-keys:
+    post:
+      tags: [auth]
+      operationId: createApiKey
+      summary: CLI/CI icin API anahtari olusturur (onceki aktif anahtari iptal eder)
+      description: |
+        Yalniz oturum cereziyle; Bearer ile 403 forbidden (sizmis CI anahtari yeni anahtar uretemez).
+        Origin kontrolu uygulanir. `key` duz metni YALNIZ bu yanitta bir kez doner; DB'de yalniz SHA-256
+        ozeti ve keyPrefix saklanir; log'a yazilmaz.
+
+        Tek aktif anahtar (karar 2026-10-09 / ADR-001 karar 7; secilen davranis: OTOMATIK IPTAL, 409 DEGIL):
+        Kullanicinin aktif (revoked_at IS NULL) anahtari varsa, yeni anahtar olusturulurken o anahtar
+        ayni transaction icinde revoked_at=now() ile iptal edilir; istek her zaman 201 doner.
+        Bu uc nokta "aktif anahtar zaten var" icin 409 DONDURMEZ.
+        Eszamanli iki olusturma istegi sunucuda serilestirilir (ornegin kullanici satiri
+        SELECT ... FOR UPDATE ile kilitlenir); sonuc olarak en son tamamlanan istek aktif kalir,
+        digeri iptal edilmis olur. "Tek aktif" DB'de kismi benzersiz indeksle
+        (api_keys(user_id) WHERE revoked_at IS NULL) ayrica zorlanir.
+        Iptal edilen eski anahtarla sonraki istekler 401 unauthenticated alir.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                  description: Istege bagli gosterim adi (api_keys.name, ADR-001 sema). Ust sinir oneridir.
+      responses:
+        '201':
+          description: Anahtar olusturuldu; varsa onceki aktif anahtar iptal edildi.
+          headers:
+            Cache-Control:
+              required: true
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CreatedApiKey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [auth]
+      operationId: listApiKeys
+      summary: API anahtari metadata listesi (anahtar degeri veya ozeti asla donmez)
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: |
+            Liste (iptal edilmisler dahil, en yeni once - oneri). En fazla bir ogede revokedAt null'dir.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/api-keys/{id}:
+    delete:
+      tags: [auth]
+      operationId: revokeApiKey
+      summary: API anahtarini iptal eder
+      description: |
+        Karar 2026-10-09: F1 kapsamindadir. Yalniz oturum cereziyle; Bearer ile 403 forbidden;
+        Origin kontrolu uygulanir. Satir silinmez, revoked_at=now() doldurulur.
+        Yalniz istegi yapan kullaniciya ait anahtar iptal edilebilir.
+        Zaten iptal edilmis anahtar icin 204 (idempotent - oneri). Iptal edilen anahtarla sonraki
+        istekler 401 unauthenticated alir. Aktif anahtar iptal edilince kullanicinin aktif anahtari
+        kalmaz; yenisi POST /api/auth/api-keys ile olusturulur.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Iptal edildi (veya zaten iptal edilmisti).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            Anahtar yok, baska kullaniciya ait veya id gecerli UUID degil (ayrim yapilmaz - oneri).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example: { error: Not Found, message: API key not found, code: not_found }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/projects:
+    post:
+      tags: [p04]
+      operationId: createProject
+      summary: Proje kaydi (mevcut davranis + P-04 400)
+      description: |
+        Istek/yanit semasi mevcut src/controllers/projectController.ts'ten minimal belgelenmistir;
+        bu contract yalniz P-04 400 davranisini ve JSON hata govdesini ekler. repoUrl doluysa
+        ADR-002 siniflandirmasindan ve (yerel yol ise) SCAN_ROOTS kontrolunden gecer; basarisizsa
+        proje kaydedilmez. Siniflandirma kurallari: components.responses.ScanSourceRejected.
+        Global security, 401 ve Origin kurallari gecerlidir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+                description: { type: string, nullable: true }
+                criticality: { type: string, description: 'project_criticality enum; varsayilan medium' }
+                repoUrl:
+                  type: string
+                  nullable: true
+                  description: |
+                    Kabul edilen iki bicim: (a) https:// uzak URL; (b) SCAN_ROOTS altinda, surucu harfiyle
+                    baslayan mutlak Windows yolu (ornek C:\repos\app). Diger her bicim 400 (ADR-002).
+                scanSchedule: { type: string, nullable: true }
+                tags: { type: array, items: { type: string } }
+                ecosystems: { type: array, items: { type: string }, description: 'tech_ecosystem enum degerleri' }
+      responses:
+        '201':
+          description: Olusturuldu (mevcut davranis).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    description: id, name, description, criticality, repo_url, scan_schedule, tags, created_at, updated_at, ecosystems
+                    additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ScanSourceRejected'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/scans:
+    post:
+      tags: [p04]
+      operationId: createScan
+      summary: Tarama istegi (mevcut davranis + P-04 400)
+      description: |
+        Istek/yanit semasi mevcut src/controllers/scanController.ts'ten minimal belgelenmistir.
+        Taramanin etkin kaynagi (worker ile ayni oncelik: entegrasyon repo_url, yoksa proje repo_url)
+        kuyruga alinmadan once ADR-002 siniflandirmasi ve (yerel yol ise) SCAN_ROOTS kontrolunden
+        gecer (AC-P04-3/4/5/6). Basarisizsa 400 doner ve scans satiri OLUSTURULMAZ.
+        Global security, 401 ve Origin kurallari gecerlidir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId]
+              properties:
+                projectId: { type: string }
+                ref: { type: string, description: 'varsayilan main' }
+                refType: { type: string, description: 'varsayilan branch' }
+                trigger: { type: string, description: 'scan_trigger enum; varsayilan manual' }
+      responses:
+        '201':
+          description: Kuyruga alindi (mevcut davranis; scans satiri).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ScanSourceRejected'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: ossrisk_session
+      description: |
+        32 bayt rastgele, base64url (43 karakter). DB'de yalniz SHA-256 hex ozeti.
+        Sureler (karar 2026-10-09): bosta kalma 12 saat (last_seen_at + 12 sa), mutlak 7 gun
+        (created_at + 7 gun = expires_at). Hangisi once dolarsa oturum gecersizdir.
+        Her basarili dogrulanmis istek last_seen_at'i gunceller; mutlak sure uzatilmaz (kayan pencere yok).
+        Gecersiz/suresi dolmus cerez -> 401 unauthenticated.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 'ossr_<P>_<S>; P = 8 bayt CSPRNG kucuk harf hex (16), S = bagimsiz 32 bayt CSPRNG base64url dolgusuz (43); regex ^ossr_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$ (65 karakter)'
+      description: |
+        Yalniz `Authorization: Bearer <anahtar>`; query string kabul edilmez.
+        Dogrulama (ADR-001 karar 6): deger once regex ile kontrol edilir (uymazsa ozet hesaplanmadan
+        401 unauthenticated); ardindan TAM anahtar metninin (UTF-8) SHA-256 hex ozeti api_keys.key_hash ile
+        aranir (revoked_at IS NULL). key_prefix arama anahtari olarak veya karsilastirmada KULLANILMAZ.
+        Authorization basligi varsa yalniz Bearer degerlendirilir, cerez yok sayilir (oneri);
+        gecersiz/iptal edilmis anahtar veya Bearer disi sema -> 401 unauthenticated.
+
+  headers:
+    SetSessionCookie:
+      description: 'ossrisk_session=<token>; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800 (Secure ve Domain YOK)'
+      required: true
+      schema: { type: string }
+    ClearSessionCookie:
+      description: 'ossrisk_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
+      required: true
+      schema: { type: string }
+
+  schemas:
+    ErrorBody:
+      type: object
+      description: |
+        Tek hata govdesi semasi. Mevcut src/middleware/rbac.ts govdesini ({error, message}) `code` ile
+        genisletir. `code` TUM hata yanitlarinda ZORUNLUDUR: kodsuz firlatilan mevcut hatalara merkezi
+        JSON error handler HTTP durumuna gore varsayilan kod atar (400 invalid_request, 401 unauthenticated,
+        403 forbidden, 404 not_found, 409 conflict, 413 payload_too_large, 5xx internal_error).
+        Mevcut kodun 400/404 mesajlari ("Project name is required", "projectId is required" ...) korunur.
+        Mevcut RBAC 403 ek alanlari (required, userRoles) korunabilir.
+      required: [error, message, code]
+      properties:
+        error: { type: string, description: 'HTTP durum adi', example: Unauthorized }
+        message:
+          type: string
+          description: |
+            Insan okunur. Parola, token, anahtar, cerez, kanonik/gercek yol, SCAN_ROOTS icerigi,
+            ham DB/sistem hata mesaji veya stack trace ICERMEZ.
+        code:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_password
+            - path_not_allowed
+            - repo_url_not_allowed
+            - unauthenticated
+            - setup_required
+            - invalid_credentials
+            - origin_rejected
+            - host_rejected
+            - forbidden
+            - not_found
+            - setup_already_done
+            - conflict
+            - payload_too_large
+            - too_many_attempts
+            - internal_error
+      additionalProperties: true
+
+    HealthUnhealthy:
+      type: object
+      description: /health 500 govdesi; ErrorBody alanlarini da tasir. Tum alan degerleri sabittir.
+      required: [status, database, error, message, code]
+      properties:
+        status: { type: string, enum: [unhealthy] }
+        database: { type: string, enum: [disconnected] }
+        error: { type: string, enum: [Internal Server Error] }
+        message: { type: string, enum: [Database unavailable] }
+        code: { type: string, enum: [internal_error] }
+      additionalProperties: false
+
+    PasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 12
+          maxLength: 1024
+          writeOnly: true
+          description: |
+            En az 12, en fazla 1024 karakter (karar 2026-10-09). Trim edilmez.
+            Uzunluk JS string.length ile olculur (oneri). Ihlal -> 400 invalid_password.
+
+    CurrentUser:
+      type: object
+      required: [id, email, displayName, roles]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        displayName: { type: string }
+        roles:
+          type: array
+          items: { type: string, enum: [admin] }
+          description: F1'de tek rol admin (AC-P01-8).
+
+    CreatedApiKey:
+      type: object
+      required: [id, key, keyPrefix, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        key:
+          type: string
+          minLength: 65
+          maxLength: 65
+          pattern: '^ossr_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$'
+          description: |
+            Duz metin `ossr_<P>_<S>` (ADR-001 karar 6); YALNIZ bu yanitta bir kez. Ilk 21 karakteri keyPrefix'e esittir.
+        keyPrefix:
+          $ref: '#/components/schemas/KeyPrefix'
+        createdAt: { type: string, format: date-time }
+
+    KeyPrefix:
+      type: string
+      minLength: 21
+      maxLength: 21
+      pattern: '^ossr_[0-9a-f]{16}$'
+      description: |
+        `ossr_<P>` (21 karakter); P gizli kisimdan (S) BAGIMSIZ uretilmis 8 bayt rastgele degerin
+        kucuk harf hex gosterimidir (64 bit). Gosterilmesi S'nin 256 bit entropisinden bir sey eksiltmez.
+        YALNIZ gosterim icindir (UI listesi, denetim kaydi, log korelasyonu); kimlik dogrulamada, arama
+        anahtari olarak veya karsilastirmada KULLANILMAZ. DB api_keys.key_prefix bu degeri saklar (ADR-001 karar 6).
+
+    ApiKeyMetadata:
+      type: object
+      required: [id, keyPrefix, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, nullable: true }
+        keyPrefix:
+          $ref: '#/components/schemas/KeyPrefix'
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+
+  responses:
+    BadRequest:
+      description: Bozuk JSON govde veya genel dogrulama hatasi.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Bad Request, message: Malformed JSON body, code: invalid_request }
+    Unauthorized:
+      description: |
+        Gecerli oturum cerezi veya API anahtari yok (AC-P01-1/3). Parola hic belirlenmemisse code=setup_required,
+        aksi halde code=unauthenticated (ADR-001 karar 9). Tum korumali /api uc noktalari icin gecerlidir.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          examples:
+            unauthenticated:
+              value: { error: Unauthorized, message: Authentication required, code: unauthenticated }
+            setupRequired:
+              value: { error: Unauthorized, message: Initial password setup required, code: setup_required }
+    HostRejected:
+      description: Host basligi izin listesinde degil (DNS rebinding korumasi).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Forbidden, message: Host not allowed, code: host_rejected }
+    Forbidden:
+      description: |
+        origin_rejected (izinsiz/eksik Origin ve Referer), host_rejected, veya forbidden
+        (RBAC reddi ya da cerez-only uca Bearer ile erisim).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          examples:
+            origin:
+              value: { error: Forbidden, message: Origin not allowed, code: origin_rejected }
+            host:
+              value: { error: Forbidden, message: Host not allowed, code: host_rejected }
+            forbidden:
+              value: { error: Forbidden, message: Session authentication required, code: forbidden }
+    NotFound:
+      description: Kaynak veya /api rotasi bulunamadi (JSON; Express varsayilan HTML 404'u yerine).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Not Found, message: Resource not found, code: not_found }
+    PayloadTooLarge:
+      description: Istek govdesi body-parser sinirini asiyor.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Payload Too Large, message: Request body too large, code: payload_too_large }
+    InternalError:
+      description: |
+        Beklenmeyen sunucu hatasi. Mesaj sabittir; ham hata mesaji, SQL, yol veya stack trace donmez.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example: { error: Internal Server Error, message: Internal server error, code: internal_error }
+    ScanSourceRejected:
+      description: |
+        P-04 / ADR-002 reddi; proje kaydedilmez / tarama kuyruga alinmaz (karar 2026-10-09).
+        Siniflandirma (repoUrl / etkin repo_url degeri):
+        1) `https://` ile baslayan ve kullanici bilgisi icermeyen URL -> uzak kaynak, kabul.
+        2) Surucu harfiyle baslayan mutlak Windows yolu (`X:\...`) -> yerel tarama yolu; SCAN_ROOTS
+           kontrolunden gecer. Basarisizsa code=path_not_allowed:
+           SCAN_ROOTS tanimsiz/bos (AC-P04-6); realpath sonrasi hicbir kokun altinda degil (AC-P04-3);
+           '..', symlink, junction, subst ile kok disina cikiyor (AC-P04-4); yol yok veya dizin degil.
+        3) Diger her bicim -> code=repo_url_not_allowed. SSH ACIKCA reddedilir (ADR-002): `ssh://...` ve
+           scp bicimli `git@host:path` (ornek `git@github.com:org/repo.git`) her zaman 400 repo_url_not_allowed.
+           Ayrica: https disi diger semalar (http://, git://, file://), `ext::`/`fd::` transport, '-' ile baslayan deger,
+           kullanici bilgisi iceren URL (`https://user@...`), goreli yol, UNC (`\\server\share`) veya
+           aygit yolu (`\\?\`, `\\.\`) gibi kabul edilmeyen yerel yol bicimleri, siniflandirilamayan bicim.
+        `message` kanonik yolu veya SCAN_ROOTS icerigini TASIMAZ.
+        Ayni yanit mevcut kodun genel 400 dogrulama hatalari icin de kullanilir (ornek "Project name is
+        required", "projectId is required"); bunlar code=invalid_request ile doner.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          examples:
+            path:
+              value: { error: Bad Request, message: Local path is not under an allowed scan root, code: path_not_allowed }
+            url:
+              summary: http://, ssh://, git@host:path (scp) vb.
+              value: { error: Bad Request, message: Repository URL is not allowed; only https URLs are accepted, code: repo_url_not_allowed }
+            validation:
+              value: { error: Bad Request, message: Project name is required, code: invalid_request }

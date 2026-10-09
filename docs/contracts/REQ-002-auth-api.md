@@ -1,7 +1,7 @@
 # REQ-002 Auth API Contract (F1 — P-01, P-02, P-04)
 
 - **Status:** Proposed
-- **Sürüm:** 0.2.1-draft
+- **Sürüm:** 0.2.2-draft
 - **Tarih:** 2026-10-09
 - **Makine okunur contract:** `docs/contracts/REQ-002-auth-api.openapi.yaml` (OpenAPI 3.0.3)
 - **İlgili:** REQ-002 (AC-P01-1…10, AC-P02-2/4, AC-P04-2…6, AC-P09-3), ADR-001, ADR-002
@@ -34,6 +34,7 @@ contract'ın bütün olarak `Accepted` yapılması ayrıca açık insan onayı i
 | K7 | Anahtar biçimi / `keyPrefix` | ADR-001 karar 6: anahtar `ossr_<P>_<S>` (P = 16 küçük harf hex / 64 bit, S = bağımsız 43 karakter base64url / 256 bit, toplam 65); `keyPrefix` = `ossr_<P>` (21 karakter), yalnız gösterim |
 | K8 | P-04 hata kodları | SCAN_ROOTS dışı yerel yol → `400 path_not_allowed`; https dışı (SSH dahil) veya kabul edilmeyen yerel biçim → `400 repo_url_not_allowed` |
 | K9 | Hata gövdeleri | Tüm hata yanıtları JSON (`{error, message, code}`); `/health` ham DB mesajı döndürmez |
+| K10 | Setup ve kurtarma (ADR-001 karar 2) | Tek aday (kurtarma sonrası) → parola o kullanıcıya, 201 + `Set-Cookie`; kullanıcı yoksa yeni kullanıcı, 201; parolalı kullanıcı varsa 409; geçersiz kullanıcı durumu → `500 setup_state_invalid` |
 
 ## Kapsam
 
@@ -49,7 +50,7 @@ konusu değildir; yalnız ortak `401`/`403`/JSON hata davranışını devralırl
 | Method / path | Kimlik | Başarılı | Hatalar (code) |
 | --- | --- | --- | --- |
 | `GET /health` | muaf | 200 `{status:healthy, database:connected}` | 403 host_rejected, 500 internal_error (sabit gövde, ham DB mesajı yok) |
-| `POST /api/auth/setup` | muaf | 201 + `Set-Cookie` (otomatik giriş) | 400 invalid_password / invalid_request, 403 origin_rejected/host_rejected, 409 setup_already_done, 413, 500 |
+| `POST /api/auth/setup` | muaf | 201 + `Set-Cookie` (otomatik giriş) | 400 invalid_password / invalid_request, 403 origin_rejected/host_rejected, 409 setup_already_done, 413, 500 setup_state_invalid / internal_error |
 | `POST /api/auth/login` | muaf | 204 + `Set-Cookie` | 400 invalid_request, 401 invalid_credentials / setup_required, 403 origin_rejected/host_rejected, 413, 429 too_many_attempts + `Retry-After`, 500 |
 | `POST /api/auth/logout` | yalnız çerez | 204 + çerez temizleme (yalnız mevcut oturum) | 401 unauthenticated, 403 forbidden (Bearer) / origin_rejected, 500 |
 | `GET /api/auth/me` | çerez veya Bearer | 200 `{data:{id,email,displayName,roles}}` | 401 unauthenticated / setup_required, 403 host_rejected, 500 |
@@ -98,8 +99,26 @@ karar 9). Ayrı bir `GET /api/auth/status` yoktur.
 - **401 gövdesi:** parola hiç belirlenmemişse `code: setup_required`, aksi halde
   `unauthenticated` (login'de yanlış parola: `invalid_credentials`). Kullanıcı
   yok / parola yanlış ayrımı yapılmaz. Hatalı login `Set-Cookie` üretmez.
-- **Setup (K1, K5):**
+- **Setup (K1, K5, K10):**
   - Parola en az **12**, en fazla 1024 karakter; trim edilmez.
+  - Akış (ADR-001 karar 2, tek transaction): aday = `admin` rollü,
+    `password_hash IS NULL`, `status='active'`, `deleted_at IS NULL` kullanıcı;
+    adaylar önce `FOR UPDATE` ile kilitlenir. Dallar sırayla:
+    1. Parolası olan kullanıcı var → `409 setup_already_done`, hiçbir şey değişmez.
+    2. `admin` rol satırı yok → `500 setup_state_invalid`.
+    3. Tam olarak bir aday (SQL kurtarma sonrası durum) → parola **o kullanıcıya**
+       atanır; yeni kullanıcı oluşturulmaz; id, roller, geçmiş kayıtlar ve API
+       anahtarları korunur → `201` + `Set-Cookie`.
+    4. Hiç kullanıcı yok → yeni yerel kullanıcı + `admin` `user_roles` →
+       `201` + `Set-Cookie`.
+    5. Birden fazla aday **veya** kullanıcı var ama aday yok (yalnız
+       inactive/silinmiş ya da admin rolsüz) → `500 setup_state_invalid`;
+       transaction geri alınır, parola atanmaz, kullanıcı oluşturulmaz; durum
+       parola içermeden log'lanır.
+  - `setup_state_invalid` mesajı sabittir ve iç ayrıntı (kullanıcı sayısı, id,
+    rol, durum) taşımaz:
+    `Setup cannot proceed: user state requires manual repair (see db/README.md)`.
+  - 4. dalda eşzamanlı ikinci istek kısmi benzersiz indekse takılır → `409`.
   - İhlalde `400`, `code: invalid_password`, sabit mesajlar:
     - alan yok / string değil → `Password is required`
     - uzunluk < 12 → `Password must be at least 12 characters`
@@ -198,6 +217,7 @@ karar 9). Ayrı bir `GET /api/auth/status` yoktur.
 | 413 | `payload_too_large` | body sınırı |
 | 429 | `too_many_attempts` | login brute-force |
 | 500 | `internal_error` | beklenmeyen hata, `/health` sağlıksız |
+| 500 | `setup_state_invalid` | setup: birden fazla aday, aday yok ama kullanıcı var, `admin` rol satırı eksik |
 
 ## P-04 — 400 davranışı (ADR-002, K8)
 
@@ -273,6 +293,10 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
 
 - URL'de sürüm öneki yok (`/api`). Contract sürümü `info.version`; breaking
   değişiklik yeni contract sürümü + insan onayı gerektirir.
+- 0.2.1 → 0.2.2 değişiklikleri: setup akışı güncellenmiş ADR-001 karar 2'ye
+  uyduruldu (K10): kurtarma sonrası tek adaya parola atanır (yeni kullanıcı
+  yok, 201 + `Set-Cookie`); kullanıcı yoksa yeni kullanıcı (201); geçersiz
+  kullanıcı durumunda yeni kod `500 setup_state_invalid`.
 - 0.2.0 → 0.2.1 değişiklikleri: API anahtarı biçimi Accepted ADR-001 karar 6'ya
   uyduruldu: anahtar `ossr_<16 hex>_<43 base64url>` (65 karakter, desen
   `^ossr_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$`); `keyPrefix` = `ossr_<16 hex>`
@@ -304,6 +328,21 @@ kayıttan/kuyruktan **önce** sınıflandırılır:
 - Setup: 11 karakter → 400 `invalid_password` + `Password must be at least 12 characters`;
   12 karakter → 201 + `Set-Cookie`, ardından aynı çerezle `/api/auth/me` → 200;
   1025 karakter → 400; ikinci kez → 409, `Set-Cookie` yok.
+- Setup dalları (ADR-001 karar 2):
+  - Boş `users` → 201 + `Set-Cookie`, tek kullanıcı + `admin` rolü oluşur.
+  - Kurtarma sonrası (önce setup + API anahtarı oluştur, sonra kurtarma SQL
+    adımıyla `password_hash`/`password_changed_at` NULL ve oturumlar silinir) →
+    setup 201 + `Set-Cookie`; **kullanıcı id'si aynı kalır**, **kullanıcı sayısı
+    artmaz**, roller ve geçmiş kayıt atıfları korunur, kurtarma öncesi oluşturulan
+    **API anahtarı Bearer ile 200 almaya devam eder**; eski oturum çerezi 401.
+  - İki aday (iki admin, ikisi de parolasız/aktif) → 500 `setup_state_invalid`,
+    sabit mesaj; hiçbir kullanıcıda `password_hash` dolmaz; kullanıcı sayısı değişmez.
+  - Yalnız inactive / silinmiş / admin rolsüz kullanıcı varken → 500
+    `setup_state_invalid`, yeni kullanıcı oluşmaz.
+  - `admin` rol satırı yok → 500 `setup_state_invalid`.
+  - `setup_state_invalid` gövdesi kullanıcı id'si, sayı veya rol ayrıntısı içermez;
+    `Set-Cookie` yok.
+  - Eşzamanlı iki setup (hem kurtarma hem boş DB dalında) → biri 201, diğeri 409.
 - Logout: iki ayrı login ile iki oturum; birinden logout → o çerez 401, diğeri
   hâlâ 200; API anahtarı hâlâ geçerli.
 - API anahtarı: ikinci `POST` → 201, ilk anahtar 401, ikinci 200; listede tek

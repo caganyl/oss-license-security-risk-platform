@@ -1,10 +1,13 @@
 openapi: 3.0.3
 info:
   title: OSS Risk Platform - REQ-002 Auth API Contract (F1 / P-01, P-02, P-04)
-  version: 0.2.1-draft
+  version: 0.2.2-draft
   description: |
     Status: Proposed. Accepted DEGILDIR; Accepted yalniz contract'in tamami icin acik insan onayiyla yapilir.
 
+    0.2.2 (2026-10-09): Setup akisi guncellenmis ADR-001 karar 2'ye uyduruldu (kullanici karari):
+    kurtarma sonrasi tek adaya parola atanir (yeni kullanici yok, 201 + Set-Cookie); kullanici yoksa yeni
+    kullanici olusturulur (201); gecersiz kullanici durumunda 500 setup_state_invalid (yeni kod).
     0.2.1 (2026-10-09): API anahtari bicimi Accepted ADR-001 karar 6'ya uyduruldu: anahtar
     `ossr_<P>_<S>` (P = 16 kucuk harf hex, S = 43 base64url, toplam 65 karakter), keyPrefix = `ossr_<P>`
     (21 karakter). Dogrulama tam anahtarin SHA-256 ozetiyle; onek arama/karsilastirmada kullanilmaz.
@@ -103,12 +106,25 @@ paths:
     post:
       tags: [public, auth]
       operationId: setupPassword
-      summary: Ilk acilista tek yerel parolayi belirler ve otomatik giris yapar (AC-P01-4)
+      summary: Ilk acilista veya kurtarma sonrasi tek yerel parolayi belirler ve otomatik giris yapar (AC-P01-4)
       description: |
-        Muaf uc nokta. Yalnizca hicbir kullanicida password_hash dolu degilken basarilidir.
-        Parola belirlendikten sonra (oturum olsa bile) her zaman 409 doner.
-        Eszamanli iki istekte ikincisi 409 doner (DB kismi benzersiz indeksi, ADR-001 karar 2).
-        Origin/Referer ve Host kontrolu uygulanir.
+        Muaf uc nokta. Origin/Referer ve Host kontrolu uygulanir. Ilk acilisi ve parola kurtarma
+        (ADR-001 karar 12) sonrasini ayni akisla karsilar. Tum akis TEK transaction'dadir (ADR-001 karar 2):
+        admin rolune sahip, password_hash IS NULL, status='active', deleted_at IS NULL aday kullanici
+        satirlari once kilitlenir (FOR UPDATE), ardindan su dallar degerlendirilir (sirayla):
+          1. Parolasi olan (password_hash IS NOT NULL) bir kullanici varsa -> 409 setup_already_done;
+             hicbir sey degismez (oturum olsa bile). Kilitte bekleyen eszamanli ikinci istek de 409 alir.
+          2. `admin` rol satiri yoksa -> 500 setup_state_invalid.
+          3. Tam olarak BIR aday varsa (kurtarma sonrasi durum) -> parola O kullaniciya atanir
+             (password_hash, password_changed_at). Yeni kullanici OLUSTURULMAZ; kullanici id'si, rolleri,
+             gecmis kayitlari ve API anahtarlari aynen kalir. Yanit 201 + Set-Cookie.
+          4. Hic kullanici yoksa (users bos) -> yeni yerel kullanici (status='active') + admin user_roles
+             kaydi olusturulur. Yanit 201 + Set-Cookie.
+          5. Birden fazla aday varsa VEYA kullanici var ama hic aday yoksa (yalniz inactive/silinmis ya da
+             admin rolsuz kullanicilar) -> 500 setup_state_invalid. Transaction geri alinir, parola ATANMAZ,
+             yeni kullanici olusturulmaz; durum parola log'lanmadan sunucu log'una yazilir. Elle duzeltme gerekir.
+        Kilitlenecek satirin olmadigi 4. dalda eszamanli iki istekten ikincisi "en fazla bir kullanicida
+        password_hash dolu" kismi benzersiz indeksine takilir ve 409 setup_already_done doner.
 
         Otomatik giris (karar 2026-10-09): 201 yaniti, parolanin atandigi ayni islemin sonunda
         login ile ayni kurallarla yeni bir oturum olusturur ve `Set-Cookie` ile oturum cerezini
@@ -124,7 +140,9 @@ paths:
               $ref: '#/components/schemas/PasswordRequest'
       responses:
         '201':
-          description: Parola belirlendi ve oturum acildi. Govde yok.
+          description: |
+            Parola belirlendi (mevcut tek adaya atandi veya yeni kullanici olusturuldu) ve oturum acildi.
+            Govde yok; iki dal istemci acisindan ayirt edilmez.
           headers:
             Set-Cookie:
               $ref: '#/components/headers/SetSessionCookie'
@@ -159,7 +177,24 @@ paths:
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '500':
-          $ref: '#/components/responses/InternalError'
+          description: |
+            setup_state_invalid: birden fazla aday, kullanici var ama aday yok, veya admin rol satiri eksik.
+            Mesaj SABITTIR ve ic ayrinti (kullanici sayisi, id, rol, durum) TASIMAZ:
+            "Setup cannot proceed: user state requires manual repair (see db/README.md)".
+            Parola atanmaz, Set-Cookie yoktur. Diger beklenmeyen hatalar (ornek oturum olusturulamamasi)
+            -> internal_error; bu durumda da parola atanmamis olur.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              examples:
+                stateInvalid:
+                  value:
+                    error: Internal Server Error
+                    message: 'Setup cannot proceed: user state requires manual repair (see db/README.md)'
+                    code: setup_state_invalid
+                internal:
+                  value: { error: Internal Server Error, message: Internal server error, code: internal_error }
 
   /api/auth/login:
     post:
@@ -564,6 +599,7 @@ components:
             - payload_too_large
             - too_many_attempts
             - internal_error
+            - setup_state_invalid
       additionalProperties: true
 
     HealthUnhealthy:

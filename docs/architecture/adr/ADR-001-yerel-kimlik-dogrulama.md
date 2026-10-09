@@ -14,9 +14,10 @@ parola + oturum çerezi, CLI/CI için API anahtarı, RBAC kodu kalır, tek rol `
 Kısıtlar: tek Windows makine, tek kullanıcı, HTTP (TLS yok), varsayılan bind
 `127.0.0.1`, Docker yok, PostgreSQL var. Bağımlılık listesi yalnızca `dotenv`,
 `express`, `pg`, `exceljs`, `pdfkit`; yeni paket eklememe eğilimi var.
-`db/schema.sql` sabit UUID'li bir admin kullanıcısı tohumluyor; mevcut
-`finding_reviews.reviewer_id` / `projects.owner_id` kayıtları bu kullanıcıya bağlı
-olabilir.
+Ne `db/schema.sql` ne de migration'lar kullanıcı tohumlar: önceki sabit UUID'li
+tohum admin kullanıcısı ve ona ait `user_roles` satırı kullanıcı kararıyla
+kaldırılmıştır (commit `9405ff9`). Yalnız rol tohumları (`admin` dahil) durur.
+İlk kullanıcıyı yalnız setup akışı oluşturur.
 
 ## Karar
 
@@ -28,14 +29,39 @@ olabilir.
    **Parola uzunluğu: en az 12, en fazla 1024 karakter** (alt sınır kullanıcı
    kararıdır; üst sınır scrypt DoS'una karşı).
 2. **Kullanıcı kaydı ve setup:** Parola `users.password_hash` kolonunda tutulur.
-   İlk açılış (setup) şu sırayla çalışır: tek transaction içinde, parola özeti dolu
-   bir kullanıcı yoksa → `admin` rolüne sahip en eski aktif kullanıcıya (ör. mevcut
-   tohum kullanıcı) parola atanır; böyle bir kullanıcı yoksa yeni bir yerel
-   kullanıcı + `user_roles` (`admin`) kaydı oluşturulur. Mevcut kayıtların
-   atıfları korunur. `users` üzerinde "en fazla bir kullanıcıda `password_hash`
-   dolu" kısmi benzersiz indeksi, eşzamanlı iki setup isteğini DB seviyesinde
-   engeller (ikincisi `409`). Parola belirlendikten sonra setup her zaman `409`
-   döner (AC-P01-4).
+   Setup (`POST /api/auth/setup`) hem ilk açılışı hem de kurtarma (karar 12)
+   sonrasını aynı akışla karşılar (kullanıcı kararı 2026-10-09, seçenek (b)).
+   Tümü **tek transaction** içinde çalışır:
+   1. **Kilit:** aday satırlar kilitlenir —
+      `SELECT u.id FROM users u JOIN user_roles ur … JOIN roles r … WHERE
+      r.name = 'admin' AND u.password_hash IS NULL AND u.status = 'active' AND
+      u.deleted_at IS NULL FOR UPDATE OF u`. Eşzamanlı ikinci setup aynı satırda
+      bekler; ilki commit edince satırın koşulu yeniden değerlendirilir ve satır
+      artık aday değildir.
+   2. **Parolası olan kullanıcı varsa** (`password_hash IS NOT NULL`, kilitten
+      **sonra** okunur) → `409 setup_already_done`; hiçbir şey değişmez
+      (AC-P01-4). Kilitlenen eşzamanlı istek de bu adımda `409` alır.
+   3. **Tam olarak bir aday varsa** → yeni parola özeti **o kullanıcıya** yazılır
+      (`password_hash`, `password_changed_at`). Yeni kullanıcı oluşturulmaz; geçmiş
+      kayıtlar (`finding_reviews.reviewer_id`, `projects.owner_id` vb.), rol ve
+      API anahtarları aynı kullanıcıda kalır. Kurtarma (karar 12) sonrası yol
+      budur.
+   4. **Birden fazla aday varsa** (veri bozukluğu) → setup açık bir hatayla durur,
+      transaction geri alınır, **parola atanmaz**; durum log'lanır (parola
+      log'lanmadan). Elle düzeltme gerekir.
+   5. **Hiç kullanıcı yoksa** (`users` boş) → **yeni bir yerel kullanıcı**
+      (`status='active'`, parola özeti dolu) ve tohumlanmış `admin` rolüne bağlanan
+      `user_roles` kaydı oluşturulur. İlk kurulum yolu budur (kullanıcı tohumu
+      yoktur).
+   6. **Kullanıcı var ama aday yok ve parolası olan da yok** (ör. yalnız
+      `inactive`/silinmiş veya admin rolsüz kullanıcılar) → 4. maddedeki gibi açık
+      hatayla durur; sessizce yeni kullanıcı oluşturulmaz.
+   - `admin` rol satırı yoksa setup açık hatayla durur (rol tohumu şema
+     bütünlüğünün parçasıdır).
+   - Son savunma hattı: `users` üzerinde "en fazla bir kullanıcıda `password_hash`
+     dolu" kısmi benzersiz indeksi. Kilitlenecek satır olmayan yolda (5. madde)
+     eşzamanlı iki setup'tan ikincisinin yazması bu indekse takılır ve `409`
+     olarak döner. Parola belirlendikten sonra setup her zaman `409` döner.
    **Setup sonrası otomatik giriş:** başarılı setup, aynı transaction'da bir
    `sessions` satırı oluşturur ve yanıtta oturum çerezini (`Set-Cookie`) verir;
    kullanıcı ayrıca login olmaz. Setup'a login ile aynı Host/Origin kontrolleri
@@ -123,6 +149,8 @@ olabilir.
       Adım tek transaction'dır: ilgili kullanıcının `password_hash` ve
       `password_changed_at` alanları `NULL` yapılır ve **tüm `sessions` satırları
       silinir**; böylece setup yeniden açılır ve uygulama `setup_required` döner.
+      Bu adımdan sonra setup, karar 2 madde 3 gereği yeni parolayı **aynı
+      kullanıcıya** atar (yeni kullanıcı oluşturulmaz).
       API anahtarlarına dokunulmaz (kurtarma ele geçirme anlamına gelmez); ele
       geçirme şüphesinde yeni parolayla girildikten sonra anahtar
       `DELETE /api/auth/api-keys/{id}` ile iptal edilir. Adım makineye ve DB'ye
@@ -171,6 +199,15 @@ gizli kısmın entropisini birbirinden ayırır.
   (şema genişlemeye açık).
 - **Oturumlu parola değiştirme / e-posta ile kurtarma:** F1'de gereksiz; e-posta
   altyapısı yok. Reddedildi (F1 dışı).
+- **Kurtarmada eski kullanıcıyı devre dışı bırakıp setup'ta yeni kullanıcı
+  oluşturmak (seçenek (a)):** Kurtarma adımı eski kullanıcıyı `inactive` yapar ve
+  API anahtarlarını iptal ederdi. Geçmiş kayıtların atıfları pasif kullanıcıda
+  kalır, CI anahtarı her kurtarmada yeniden üretilmek zorunda kalır ve
+  `users.email UNIQUE` yüzünden yeni kullanıcıya farklı e-posta gerekir.
+  Reddedildi (kullanıcı kararı 2026-10-09).
+- **Mevcut hâli kabul edip sonuçları belgelemek (seçenek (c)):** Kurtarma sonrası
+  setup ikinci bir aktif admin oluşturur; eski kullanıcının rolü ve API anahtarı
+  geçerli kalır, atıflar ikiye bölünür. Reddedildi (kullanıcı kararı 2026-10-09).
 
 ## Sonuçlar / Uygulama etkisi
 
@@ -186,14 +223,19 @@ gizli kısmın entropisini birbirinden ayırır.
   `200`; geçerli Bearer → `200`; geçersiz/iptal edilmiş Bearer → `401`; biçime
   uymayan Bearer → `401`; yanlış parola → `401` ve `Set-Cookie` yok; setup →
   `Set-Cookie` ile oturum açılır; setup ikinci kez → `409`; parola < 12 → `400`;
+  boş DB'de setup yeni kullanıcı + `admin` rolü oluşturur; kurtarma SQL adımı
+  sonrası setup aynı kullanıcıya (aynı `id`) parola atar, kullanıcı sayısı artmaz
+  ve mevcut API anahtarı çalışmaya devam eder; birden fazla aday ve "kullanıcı var
+  ama aday yok" durumlarında açık hata, parola atanmaz; `admin` rolü yokken açık
+  hata; eşzamanlı iki setup'ta biri başarılı, diğeri `409`;
   çapraz `Origin` ile POST → `403`; yabancı `Host` → `400/403`; logout sonrası aynı
   çerez `401`, ikinci oturum hâlâ geçerli; yeni anahtar üretimi eskisini iptal
   eder; `DELETE /api/auth/api-keys/{id}` sonrası anahtar `401`; boşta 12 sa / mutlak
   7 gün sınırı (saat enjeksiyonuyla); varsayılan bind `127.0.0.1`; DB'de özetin
   düz metinle eşleşmediği; `key_prefix`'in anahtarın gizli kısmını içermediği.
   Testler ayrı test DB'sinde (AC-G-5).
-- **Migration (database-engineer):** aşağıdaki şema değişiklikleri; mevcut tohum
-  kullanıcı korunur (yalnızca kolon eklenir). Çalıştırma yöntemi ADR-003 (d).
+- **Migration (database-engineer):** aşağıdaki şema değişiklikleri. Migration'lar
+  kullanıcı tohumlamaz; `users` için yalnızca kolon/indeks eklenir. Çalıştırma yöntemi ADR-003 (d).
 - **Contract (contract-broker):** `docs/contracts/REQ-002-auth-api.md` ve
   `REQ-002-auth-api.openapi.yaml` bu karara göre güncellenmelidir: setup `201` +
   `Set-Cookie` kesinleşti; logout yalnız mevcut oturum (contract şu an "tüm
@@ -214,8 +256,8 @@ gizli kısmın entropisini birbirinden ayırır.
 ## Kanıt (Evidence)
 
 - Repo incelemesi: `src/app.ts` (mock `req.user`), `db/schema.sql` ve
-  `db/migrations/001_initial_core_schema.up.sql` (tohum kullanıcı, `users`,
-  `user_roles`), `docs/contracts/REQ-002-auth-api.md` açık noktaları 1–8.
+  `db/migrations/001_initial_core_schema.up.sql` (`users`, `roles`, `user_roles`;
+  yalnız rol tohumları — kullanıcı tohumu commit `9405ff9` ile kaldırıldı), `docs/contracts/REQ-002-auth-api.md` açık noktaları 1–8.
 - Dış kaynak: OWASP Password Storage Cheat Sheet (scrypt asgari parametreleri) —
   genel bilgi, doğrulanması önerilir. NotebookLM veya Obsidian kaynağı kullanılmadı.
 
@@ -235,7 +277,8 @@ yalnız özet olarak saklanır), AC-G-3/4/5.
 - **Karar sahibi:** proje sahibi (kullanıcı). Açık kalan insan kararları
   (API anahtarı rotasyon/iptal kapsamı, parola kurtarma/değiştirme, oturum
   süreleri, parola alt sınırı, setup sonrası otomatik giriş, logout kapsamı,
-  anahtar öneki) **2026-10-09** tarihinde verildi ve bu ADR'ye işlendi; durum
+  anahtar öneki, kurtarma sonrası setup'ın aynı kullanıcıya parola ataması —
+  seçenek (b)) **2026-10-09** tarihinde verildi ve bu ADR'ye işlendi; durum
   `Accepted`. Kararlar ana oturum aracılığıyla iletilmiştir; kullanıcının bu
   dosyayı gözden geçirip commit etmesi kaydı kesinleştirir.
 - Bu karar **güvenlik sınırını ve veri modelini** değiştirir. Implementation

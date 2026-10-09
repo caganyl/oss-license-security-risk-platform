@@ -10,7 +10,19 @@ import { assertRemoteUrl } from '../lib/scanSource';
  * a shell, and cleanup on success and on failure.
  */
 
-export type CloneRepoFn = (url: string, ref: string | null, dest: string, token: string | null) => Promise<void>;
+/**
+ * Clone injection point of the scan worker. `signal` (optional, ADR-004
+ * Karar 7) aborts the clone: the git process tree is killed and its `close`
+ * awaited before the call rejects with `signal.reason`. Four-argument
+ * implementations stay valid.
+ */
+export type CloneRepoFn = (
+  url: string,
+  ref: string | null,
+  dest: string,
+  token: string | null,
+  signal?: AbortSignal,
+) => Promise<void>;
 
 export type WorkspaceLogger = Pick<Console, 'warn'>;
 
@@ -112,7 +124,8 @@ function headerScopeFor(url: string): string {
  * the raw and the base64 form. LFS smudge is skipped (GIT_LFS_SKIP_SMUDGE) in
  * addition to the emptied filters in `buildGitCloneArgs`.
  */
-export const cloneRepo: CloneRepoFn = async (url, ref, dest, token) => {
+export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
+  signal?.throwIfAborted();
   assertRemoteUrl(url);
   const args = buildGitCloneArgs(url, ref, dest);
 
@@ -147,22 +160,37 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token) => {
   });
 
   let timedOut = false;
+  let killing: Promise<void> | null = null;
+  const kill = () => {
+    killing ??= killProcessTree(child.pid, () => child.kill('SIGKILL'));
+  };
   const timer = setTimeout(() => {
     timedOut = true;
-    killProcessTree(child.pid, () => child.kill('SIGKILL'));
+    kill();
   }, timeoutMs);
+  // Job abort (time limit or shutdown): same tree kill as the clone timeout.
+  const onAbort = () => kill();
+  signal?.addEventListener('abort', onAbort, { once: true });
 
-  const exitCode = await new Promise<number | null>((resolve, reject) => {
-    child.once('error', (err) => {
-      clearTimeout(timer);
-      reject(new Error(`git could not be started: ${err.message}`));
+  let exitCode: number | null;
+  try {
+    exitCode = await new Promise<number | null>((resolve, reject) => {
+      child.once('error', (err) => {
+        reject(new Error(`git could not be started: ${err.message}`));
+      });
+      child.once('close', (code) => {
+        resolve(code);
+      });
     });
-    child.once('close', (code) => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+    // The workspace is removed after this call: wait for taskkill as well so
+    // no git-remote-https.exe keeps a file lock (ADR-004 implementer warning 5).
+    if (killing) await killing;
+  }
 
+  if (signal?.aborted) throw signal.reason;
   if (timedOut) throw new Error(`git clone timed out after ${Math.round(timeoutMs / 1000)} s`);
   if (exitCode !== 0) {
     const detail = scrubSecrets(stderr, secrets).trim().slice(-MAX_ERROR_DETAIL);
@@ -174,13 +202,19 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token) => {
  * On Windows `child.kill()` leaves `git-remote-https.exe` running and its file
  * locks break cleanup, so the whole tree is killed with taskkill (no shell).
  */
-function killProcessTree(pid: number | undefined, fallback: () => void): void {
+function killProcessTree(pid: number | undefined, fallback: () => void): Promise<void> {
   if (process.platform !== 'win32' || pid === undefined) {
     fallback();
-    return;
+    return Promise.resolve();
   }
-  const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: false, windowsHide: true, stdio: 'ignore' });
-  killer.once('error', fallback);
+  return new Promise<void>((resolve) => {
+    const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: false, windowsHide: true, stdio: 'ignore' });
+    killer.once('error', () => {
+      fallback();
+      resolve();
+    });
+    killer.once('close', () => resolve());
+  });
 }
 
 /**

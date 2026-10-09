@@ -47,9 +47,12 @@ export interface RetryPolicy {
    * Mirrors system_settings key: scan.max_retries
    */
   maxAttempts: number;
-  /** Base delay between retries in milliseconds (exponential back-off base). */
+  /**
+   * Wait before the first retry in milliseconds; doubles per retry
+   * (`backoffSeconds` in retryPolicy.ts, REQ-003 D-40). No env override.
+   */
   initialBackoffMs: number;
-  /** Cap on retry delay in milliseconds. */
+  /** Cap on the retry wait in milliseconds (REQ-003 D-40). */
   maxBackoffMs: number;
 }
 
@@ -90,11 +93,8 @@ export interface WorkerConfig {
    * Lower = lower latency; higher = fewer idle DB round-trips.
    */
   pollIntervalMs: number;
-  /**
-   * Unique identifier for this worker instance, written to scans.worker_id.
-   * Defaults to hostname + PID if not set via env.
-   */
-  workerId: string;
+  // scans.worker_id is the per-process run id (src/lib/runId.ts, REQ-003
+  // AC-P12-3); there is no worker-id environment variable any more.
 }
 
 export interface SandboxRunnerConfig {
@@ -122,8 +122,9 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
   retry: {
     // Mirrors system_settings scan.max_retries = 3
     maxAttempts: Number(process.env.SCAN_MAX_RETRIES) || 3,
-    initialBackoffMs: 5_000,
-    maxBackoffMs: 120_000,
+    // 30 s, 60 s, 120 s, ... capped at 10 min (REQ-003 D-40, ADR-004 Karar 8).
+    initialBackoffMs: 30_000,
+    maxBackoffMs: 600_000,
   },
 
   cleanup: {
@@ -134,8 +135,6 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
   worker: {
     maxConcurrentScans: Number(process.env.WORKER_MAX_CONCURRENT) || 4,
     pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS) || 5_000,
-    workerId: process.env.WORKER_ID
-      ?? `${process.env.HOSTNAME ?? 'worker'}-${process.pid}`,
   },
 
   parser: {

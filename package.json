@@ -2,14 +2,13 @@
   "name": "oss-license-security-risk-platform",
   "version": "1.0.0",
   "description": "OSS License & Security Risk Platform Backend",
-  "main": "dist/app.js",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/app.js",
-    "worker": "ts-node src/scanner/worker.ts",
-    "worker:prod": "node dist/scanner/worker.js",
-    "export-worker": "ts-node src/reports/worker.ts",
-    "export-worker:prod": "node dist/reports/worker.js",
+    "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.test.json",
     "lint": "eslint .",
     "test": "vitest run",

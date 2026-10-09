@@ -3,6 +3,21 @@ import type { Pool } from 'pg';
 import { HttpError } from '../lib/httpError';
 import { resolveScanSource } from '../lib/scanSource';
 
+/**
+ * `scans` columns returned by POST /api/scans and GET /api/scans/{id}: the F1
+ * row (`*` at the time) minus the queue-internal `timeout_at` and
+ * `next_attempt_at` (REQ-003 D-43, AC-G-8). An explicit list so a new column
+ * never leaks into the API by accident.
+ */
+const SCAN_RESPONSE_COLUMNS = [
+  'id', 'project_id', 'integration_id', 'trigger', 'status', 'ref', 'ref_type', 'pr_number',
+  'queued_at', 'started_at', 'completed_at',
+  'total_dependencies', 'total_vulnerabilities', 'critical_vulns', 'high_vulns', 'medium_vulns', 'low_vulns',
+  'license_violations', 'error_message', 'retry_count', 'worker_id', 'initiated_by', 'created_at', 'updated_at',
+] as const;
+const SCAN_RETURNING = SCAN_RESPONSE_COLUMNS.join(', ');
+const SCAN_SELECT = SCAN_RESPONSE_COLUMNS.map((c) => `s.${c}`).join(', ');
+
 export class ScanController {
   /** @param scanRoots Allowed local scan roots (SCAN_ROOTS, P-04); empty = no local paths. */
   constructor(
@@ -70,7 +85,7 @@ export class ScanController {
       const result = await this.db.query(`
         INSERT INTO scans (project_id, trigger, status, ref, ref_type, queued_at, initiated_by)
         VALUES ($1, COALESCE($2, 'manual')::scan_trigger, 'pending', $3, COALESCE($4, 'branch'), NOW(), $5)
-        RETURNING *
+        RETURNING ${SCAN_RETURNING}
       `, [
         projectId,
         trigger || 'manual',
@@ -96,7 +111,7 @@ export class ScanController {
     try {
       const { id } = req.params;
       const result = await this.db.query(`
-        SELECT s.*, p.name AS project_name
+        SELECT ${SCAN_SELECT}, p.name AS project_name
         FROM scans s
         JOIN projects p ON p.id = s.project_id
         WHERE s.id = $1

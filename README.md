@@ -39,15 +39,69 @@ Sistemin tüm gereksinimleri fonksiyonel, fonksiyonel olmayan ve güvenlik olmak
 *   **BOM ve SBOM Standartları:** Platform, uluslararası standart haline gelen ve ISO/IEC 5962:2021 olarak bilinen açık kaynaklı **SPDX** (JSON ve Tag/Value formatları) ile OWASP tarafından desteklenen tedarik zinciri odaklı genişletilmiş **CycloneDX** (JSON ve XML formatları) formatlarını kullanacak ve üretecektir [3, 25].
 *   **Entegrasyon Teknolojileri:** Kaynak kod yönetimi için ilk etapta **GitHub, GitLab, Azure DevOps** ve lokal dosya yükleme (Local upload) kullanılacaktır [26]. Gelecek fazlarda Bitbucket eklenecektir [26]. CI/CD otomasyon testleri için GitHub Actions, Azure DevOps Pipeline, GitLab CI ve Jenkins kullanılacaktır [27]. İletişim ve iş takibi adına Microsoft Teams, Slack, Jira ve ServiceNow ile entegre çalışacaktır [26].
 
-**Yerel Kurulum (tek kullanıcı, REQ-002 F1)**
+**Windows'ta Kurulum (tek kullanıcı, REQ-003 F2)**
 
-Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olarak yalnız `127.0.0.1` üzerinde dinler, giriş tek bir yerel parola ve oturum çereziyle yapılır, CLI/CI erişimi için API anahtarı üretilir.
+Uygulama tek yerel kullanıcı modeliyle, tek bir Node süreci olarak çalışır: `npm start` API'yi, tarama worker'ını ve rapor worker'ını birlikte başlatır. API varsayılan olarak yalnız `127.0.0.1` üzerinde dinler, giriş tek bir yerel parola ve oturum çereziyle yapılır, CLI/CI erişimi için API anahtarı üretilir. Komutların tamamı **PowerShell** içindir.
 
-1.  `.env.example` dosyasını `.env` olarak kopyalayın ve değerleri yalnız yerel `.env` içinde doldurun (`.env` git'e girmez). Parola gibi gizli değerler bağlantı URL'sine yazılmaz: `DATABASE_URL` parolasız tutulur (`postgres://<kullanici>@localhost:5432/<veritabani>`), parola `PGPASSWORD` ile verilir. Docker Compose için `POSTGRES_PASSWORD` zorunludur; `ENCRYPTION_KEY` yalnız şifreli repository token'ı çözülürken gerekir.
-2.  Veritabanını başlatın ve migration'ları uygulayın (`docker compose up -d db`, ardından `db/README.md`).
-3.  `npm install`, `npm run build`, `npm start`. `DATABASE_URL` tanımlı değilse API değerini yazmadan anlaşılır bir hatayla başlamaz.
-4.  Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
-5.  CLI/CI için API anahtarı, tarayıcıda giriş yaptıktan sonra API ile oluşturulur: `POST /api/auth/api-keys`. Bu uç nokta yalnız oturum çereziyle çalışır (Bearer ile `403 forbidden`) ve izin verilen bir `Origin` başlığı ister: `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>` veya `http://[::1]:<PORT>`. `Origin` yoksa ya da `null` ise istek `403 origin_rejected` alır; `Host` başlığı da aynı loopback adreslerinden biri olmalıdır (aksi halde `403 host_rejected`). Oturum çerezinin (`ossrisk_session`) değerini tarayıcının geliştirici araçlarından alın. İstek gövdesi isteğe bağlıdır ve yalnız en fazla 100 karakterlik bir `name` alanı alır:
+*Ön koşullar*
+
+- **Node.js 22 LTS veya üstü** (`node --version`).
+- **Git for Windows 2.32 veya üstü** (`git --version`). Yalnız uzak (`https`) repo taraması için gerekir; git yoksa uygulama yine başlar ve uyarı yazar.
+- **PostgreSQL 15 veya üstü**, Windows kurulum paketiyle (EDB installer).
+- **Gerekmeyenler:** Python, Docker, Git Bash ve `PATH` üzerinde `psql`.
+
+*PostgreSQL kurulumu*
+
+1. Kurulum sihirbazında yerel ayar (Locale) adımında **`C`** seçin. Türkçe yerel ayarlı Windows'ta varsayılan ayar küme oluşturmayı bozabilir veya büyük/küçük harf karşılaştırmalarını (`I`/`ı`) değiştirebilir.
+2. Kurulumla gelen **"SQL Shell (psql)"** kısayolunu (Başlat menüsü) veya **pgAdmin**'i açıp `postgres` kullanıcısıyla bağlanın; uygulama için bir kullanıcı ve veritabanı oluşturun (`PATH` ayarı gerekmez):
+
+    ```sql
+    CREATE USER ossrisk WITH PASSWORD '<güçlü-bir-parola>';
+    CREATE DATABASE ossrisk OWNER ossrisk;
+    ```
+
+*İlk kurulum*
+
+```powershell
+git clone <repo-adresi> oss-risk
+cd oss-risk
+Copy-Item .env.example .env
+notepad .env          # DATABASE_URL, PGPASSWORD (ve gerekirse SCAN_ROOTS, ENCRYPTION_KEY) doldurun
+npm ci
+npm run build
+npm run db:migrate
+npm start
+```
+
+- `.env` git'e girmez; gizli değerleri yalnız orada tutun. Parola bağlantı URL'sine yazılmaz: `DATABASE_URL` parolasız tutulur (`postgres://ossrisk@localhost:5432/ossrisk`), parola `PGPASSWORD` ile verilir. `ENCRYPTION_KEY` yalnız şifreli repository token'ı çözülürken gerekir. `DATABASE_URL` tanımlı değilse uygulama değeri yazmadan anlaşılır bir hatayla başlamaz.
+- `npm run db:migrate` derlenmiş çıktıyla (`dist/`) çalışır; bu yüzden önce `npm run build` gerekir. Göçler `npm start` sırasında **otomatik uygulanmaz**: bekleyen göç varsa uygulama `Bekleyen göç var: … Önce npm run db:migrate çalıştırın.` mesajıyla başlamaz. Göç aracının diğer komutları (`status`, `down --to <sürüm>`) `db/README.md`'dedir.
+- Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
+- **Durdurma:** uygulamanın çalıştığı pencerede **Ctrl+C**. Süren taramalar iptal edilip kuyruğa geri bırakılır, süren raporlar en fazla 10 sn beklenir, kapanış en geç 15 sn'de biter; ikinci Ctrl+C beklemeden çıkar. `npm` istemi kapanış bitmeden geri gelebilir; uygulama arka planda kapanışı tamamlar. cmd.exe'de çıkan "Terminate batch job (Y/N)?" sorusunun yanıtı kapanışı etkilemez (PowerShell önerilir). Pencereyi kapatmak da kapanış başlatır, ancak Windows süreci yaklaşık 10 sn sonra sonlandırır; yarım kalan taramalar sonraki başlangıçta otomatik kurtarılır.
+- **Tek örnek:** aynı veritabanına bağlı ikinci bir `npm start` `Bu veritabanına bağlı başka bir örnek çalışıyor veya bir göç sürüyor.` mesajıyla durur. Uygulama çalışırken `npm run db:migrate` da reddedilir; önce uygulamayı durdurun.
+
+*Güncelleme*
+
+```powershell
+git pull
+npm ci
+npm run build
+npm run db:migrate
+npm start
+```
+
+*Kurumsal vekil sunucu (proxy)*
+
+Ağınız internete vekil sunucuyla çıkıyorsa, `npm start`'tan önce aynı PowerShell oturumunda ortam değişkenlerini tanımlayın (PAC/otomatik yapılandırma desteklenmez):
+
+```powershell
+$env:HTTPS_PROXY = "http://proxy.sirket.local:8080"
+$env:NO_PROXY = "localhost,127.0.0.1"
+npm start
+```
+
+*CLI/CI erişimi*
+
+1.  CLI/CI için API anahtarı, tarayıcıda giriş yaptıktan sonra API ile oluşturulur: `POST /api/auth/api-keys`. Bu uç nokta yalnız oturum çereziyle çalışır (Bearer ile `403 forbidden`) ve izin verilen bir `Origin` başlığı ister: `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>` veya `http://[::1]:<PORT>`. `Origin` yoksa ya da `null` ise istek `403 origin_rejected` alır; `Host` başlığı da aynı loopback adreslerinden biri olmalıdır (aksi halde `403 host_rejected`). Oturum çerezinin (`ossrisk_session`) değerini tarayıcının geliştirici araçlarından alın. İstek gövdesi isteğe bağlıdır ve yalnız en fazla 100 karakterlik bir `name` alanı alır:
 
     ```bash
     curl -X POST http://127.0.0.1:3001/api/auth/api-keys \
@@ -61,11 +115,13 @@ Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olar
 
 **Tarama (Docker'sız, REQ-002 P-03/P-04)**
 
-Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` bulunmalıdır. Python gerekmez (REQ-003 P-10).
+Tarama worker'ı `npm start` ile aynı süreçte çalışır ve Docker kullanmaz; uzak repo taraması için makinede `git` 2.32 veya üstü bulunmalıdır. Python gerekmez (REQ-003 P-10).
+
+- **Yeniden deneme ve süre sınırı (REQ-003 P-13):** Geçici hatalar (clone hatası veya clone zaman aşımı, veritabanı hatası, yarıda kalmış tarama) beklemeyle yeniden denenir: 30 sn, 60 sn, 120 sn, … en fazla 10 dk. Toplam deneme sayısı `scan.max_retries` ayarıdır (varsayılan 3, ilk deneme dahil). Kalıcı hatalar (token çözülemedi, geçersiz kaynak/ref, ayrıştırıcı çökmesi/bellek sınırı, süre sınırı) hemen `failed` olur. Bir taramanın toplam süresi `scan.timeout_minutes` ayarıyla sınırlıdır (varsayılan 60 dk); aşılırsa tarama `Tarama süre sınırını aştı (60 dk).` mesajıyla `failed` olur.
 
 - **Uzak repo:** Yalnız `https://` adresleri kabul edilir. `http`, SSH (`ssh://`, `git@host:yol`), `file://`, kullanıcı bilgisi içeren URL ve benzeri biçimler `400 repo_url_not_allowed` döner. Repo, `os.tmpdir()` altında `ossrisk-scan-*` adlı geçici bir klasöre sığ (`--depth 1`) olarak clone edilir ve tarama bitince (hata alsa bile) silinir. Özel repo token'ı URL'ye yazılmaz, git'e ortam üzerinden verilir. `ENCRYPTION_KEY` yoksa ya da token çözülemiyorsa tarama `failed` olur. Clone zaman aşımı `SCAN_CLONE_TIMEOUT_MS` ile ayarlanır (varsayılan 5 dk).
-- **Clone sertleştirmesi:** Git LFS dosyaları indirilmez (yalnız işaretçi dosyaları gelir, LFS filtreleri çalışmaz) ve HTTP yönlendirmeleri izlenmez; yönlendiren bir sunucu taramayı `failed` yapar. Erişim token'ı yalnız repo adresinin hostuna gönderilir. Token ortam değişkeniyle (`GIT_CONFIG_COUNT`) iletildiği için `git` 2.31 veya üstü gerekir; daha eski sürümlerde token gönderilmez ve özel repo clone'u başarısız olur.
-- **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök API'nin ve worker'ın başlangıçta hata vermesine yol açar.
+- **Clone sertleştirmesi:** Git LFS dosyaları indirilmez (yalnız işaretçi dosyaları gelir, LFS filtreleri çalışmaz) ve HTTP yönlendirmeleri izlenmez; yönlendiren bir sunucu taramayı `failed` yapar. Erişim token'ı yalnız repo adresinin hostuna gönderilir. Token ortam değişkeniyle (`GIT_CONFIG_COUNT`) iletilir; desteklenen en düşük git sürümü 2.32'dir.
+- **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök uygulamanın başlangıçta açık bir hatayla durmasına yol açar.
 - **Ayrıştırıcılar:** Bağımlılık dosyaları TypeScript ayrıştırıcılarıyla (`src/scanner/parsers/`), tarama başına açılan bir `worker_threads` iş parçacığında okunur. İş parçacığının bellek sınırı 512 MiB'dir ve ortam değişkenlerini görmez. Sembolik bağlantı ve junction izlenmez, 32 MiB'den büyük dosya okunmaz; bu durumlar taramanın uyarılarına yazılır.
 - Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.
 

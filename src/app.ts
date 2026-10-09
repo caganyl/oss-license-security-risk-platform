@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -110,8 +109,17 @@ export function createApp(deps: AppDeps): express.Express {
  */
 export async function startServer(options: AppDeps): Promise<http.Server> {
   assertRequiredEnv();
-  const port = resolvePort(options.port);
-  const host = resolveHost(options.host);
+  return listenApp(options);
+}
+
+/**
+ * `startServer` without the environment check: the runtime (src/runtime.ts)
+ * has already checked its own environment (ADR-004 Karar 2 adım 1) and calls
+ * this as step 6. `env` resolves PORT/HOST/SCAN_ROOTS defaults.
+ */
+export async function listenApp(options: AppDeps, env: NodeJS.ProcessEnv = process.env): Promise<http.Server> {
+  const port = resolvePort(options.port, env);
+  const host = resolveHost(options.host, env);
   if (!isLoopbackHost(host)) {
     console.warn(
       `Warning: HOST=${host} exposes the API beyond this machine over plain HTTP; ` +
@@ -119,7 +127,7 @@ export async function startServer(options: AppDeps): Promise<http.Server> {
     );
   }
   // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
-  const scanRoots = await canonicalizeScanRoots(options.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS));
+  const scanRoots = await canonicalizeScanRoots(options.scanRoots ?? parseScanRoots(env.SCAN_ROOTS));
   const app = createApp({ ...options, port, host, scanRoots });
   const server = http.createServer(app);
   await new Promise<void>((resolve, reject) => {
@@ -132,24 +140,5 @@ export async function startServer(options: AppDeps): Promise<http.Server> {
   return server;
 }
 
-async function main(): Promise<void> {
-  try {
-    assertRequiredEnv();
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
-  }
-  // Imported lazily so importing this module (tests) never creates the global pool.
-  const { pool } = await import('./lib/db');
-  const server = await startServer({ db: pool });
-  const address = server.address();
-  const where = typeof address === 'object' && address ? `${address.address}:${address.port}` : String(address);
-  console.log(`OSS License & Security Risk Platform Backend listening on ${where}`);
-}
-
-if (require.main === module) {
-  main().catch((err: unknown) => {
-    console.error(`Server failed to start: ${(err as Error)?.message ?? 'unknown error'}`);
-    process.exit(1);
-  });
-}
+// The process entry point is src/main.ts (`npm start` = node dist/main.js,
+// REQ-003 AC-P12-3); this module only builds and listens.

@@ -1,20 +1,14 @@
 /**
  * Export job worker configuration.
  *
- * Configures the polling interval, worker ID, concurrency, and timeout settings
- * for the asynchronous compliance report and export queue.
+ * Polling interval, concurrency and timeout of the asynchronous report queue.
+ * The worker runs inside the single runtime process (REQ-003 P-12); it has
+ * no worker id of its own any more (AC-P12-3).
  */
 
 export interface ExportWorkerConfig {
   /**
-   * Unique identifier for this worker instance.
-   * Defaults to hostname + PID if not set via env.
-   */
-  workerId: string;
-
-  /**
-   * Maximum number of export jobs that this worker process may run
-   * concurrently.
+   * Maximum number of export jobs that this worker may run concurrently.
    */
   maxConcurrentExports: number;
 
@@ -30,9 +24,6 @@ export interface ExportWorkerConfig {
 }
 
 export const exportWorkerConfig: ExportWorkerConfig = {
-  workerId:
-    process.env.EXPORT_WORKER_ID ??
-    `${process.env.HOSTNAME ?? 'export-worker'}-${process.pid}`,
   maxConcurrentExports: Number(process.env.EXPORT_WORKER_MAX_CONCURRENT) || 4,
   pollIntervalMs: Number(process.env.EXPORT_WORKER_POLL_INTERVAL_MS) || 5000,
   timeoutMs: Number(process.env.EXPORT_WORKER_TIMEOUT_MS) || 10 * 60 * 1000, // 10 minutes default

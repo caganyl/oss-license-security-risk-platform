@@ -1,0 +1,5 @@
+-r requirements.txt
+shared==1.0.0
+shared-diff==2.0.0
+shared-range>=2.0
+pytest==8.1.1

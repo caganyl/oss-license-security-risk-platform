@@ -1,0 +1,5 @@
+[project]
+name = "optional-not-table"
+version = "0.1.0"
+dependencies = ["six==1.16.0"]
+optional-dependencies = ["ignored-because-not-a-table==1.0.0"]

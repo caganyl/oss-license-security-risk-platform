@@ -1,0 +1,4 @@
+[project]
+name = "invalid-utf8-pyproject"
+description = "contains an invalid UTF-8 byte: ÿ"
+dependencies = ["requests==2.31.0"]

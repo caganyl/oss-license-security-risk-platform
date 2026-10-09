@@ -1,0 +1,7 @@
+{
+  "name": "lock-number-version",
+  "version": "1.0.0",
+  "dependencies": {
+    "num-version": "^1.0.0"
+  }
+}

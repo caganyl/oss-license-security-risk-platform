@@ -1,0 +1,1 @@
+# CR-only line endings (converted by MANIFEST-bytes.md)alpha==1.0.0beta>=2.0gamma==3.0.0 # comment

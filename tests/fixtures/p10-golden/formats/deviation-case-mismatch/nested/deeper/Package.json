@@ -1,0 +1,7 @@
+{
+  "name": "nested-upper",
+  "version": "1.0.0",
+  "dependencies": {
+    "kind-of": "6.0.3"
+  }
+}

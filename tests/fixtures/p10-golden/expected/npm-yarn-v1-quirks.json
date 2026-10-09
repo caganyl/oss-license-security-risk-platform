@@ -1,0 +1,165 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "npm:strip-ansi@^6.0.1",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "strip-ansi-cjs",
+   "purl": "pkg:npm/strip-ansi-cjs@6.0.1",
+   "scope": "direct",
+   "version": "6.0.1"
+  },
+  {
+   "declared_range": "git+https://github.com/example/gitpkg.git#v1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "gitpkg",
+   "purl": "pkg:npm/gitpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "local",
+   "purl": "pkg:npm/local@0.0.1",
+   "scope": "transitive",
+   "version": "0.0.1"
+  },
+  {
+   "declared_range": ">=1.0.0 <2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "a-comma",
+   "purl": "pkg:npm/a-comma@1.5.2",
+   "scope": "direct",
+   "version": "1.5.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "unquoted-version",
+   "purl": "pkg:npm/unquoted-version@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "latest",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "tag-version",
+   "purl": "pkg:npm/tag-version",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "prerelease",
+   "purl": "pkg:npm/prerelease@2.0.0-rc.1",
+   "scope": "transitive",
+   "version": "2.0.0-rc.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "build-meta",
+   "purl": "pkg:npm/build-meta@1.0.0%2Bbuild.9",
+   "scope": "transitive",
+   "version": "1.0.0+build.9"
+  },
+  {
+   "declared_range": "~1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "@scope/pkg",
+   "purl": "pkg:npm/@scope/pkg@1.0.3",
+   "scope": "dev",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": "^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "dep-named-version",
+   "purl": "pkg:npm/dep-named-version",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "trailing-spaces",
+   "purl": "pkg:npm/trailing-spaces@1.1.1",
+   "scope": "transitive",
+   "version": "1.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "whitespace-line",
+   "purl": "pkg:npm/whitespace-line@3.0.0",
+   "scope": "transitive",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "version \"9.9.9",
+   "purl": "pkg:npm/version%20%229.9.9@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "last-entry",
+   "purl": "pkg:npm/last-entry@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-yarn-v1-quirks",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "762b8ba8832c5b65b169d56df63200d055c1ad2c2bc67c402ffde4d3d0494aa2",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 344
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "7e37f26d583c58e5af43d3ca120e869f49e190e488670ffbc54bebe4ac0d62c4",
+   "file_path": "yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 1186
+  }
+ ],
+ "total_deps": 14
+}

@@ -1,0 +1,4 @@
+﻿# comment first: tomllib still rejects the leading BOM
+[project]
+name = "bom-pyproject-comment-first"
+dependencies = ["requests==2.31.0"]

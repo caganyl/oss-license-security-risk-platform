@@ -1,0 +1,4 @@
+[project]
+name = "kept-dist-tools"
+version = "1.0.0"
+dependencies = ["kept-dist-tools-dep==1.0.0"]

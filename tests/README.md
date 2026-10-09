@@ -42,6 +42,7 @@ OSV/NVD çağrıları `fetch` taklidiyle, clone işlemi enjekte edilen sahte
 | `helpers/tokenCrypto.ts` | AES-256-GCM token şifreleme (test verisi, gerçek sır değil) |
 | `fixtures/p05-ranges-no-lockfile` | Kilit dosyasız iki `package.json` (aynı paketin iki aralığı) + `requirements.txt` |
 | `fixtures/p07-dev-scope` | devDependency, `requirements-dev.txt`, Poetry dev grubu |
+| `fixtures/p10-golden/formats` | REQ-003 P-10 biçim fixture'ları: her klasör ayrı tarama kökü; `deviation-*` golden dışı. Kapsam: `formats/README.md`, bayt dönüşümü: `formats/MANIFEST-bytes.md` |
 | `unit/` | Saf fonksiyonlar ve Python ayrıştırıcı çıktısı |
 | `integration/` | Gerçek PostgreSQL ile HTTP ve worker testleri, migration testi |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |

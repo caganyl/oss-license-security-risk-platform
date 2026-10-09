@@ -1,0 +1,8 @@
+{
+  "name": "lone-surrogate",
+  "version": "1.0.0",
+  "dependencies": {
+    "ok-dep": "1.0.0",
+    "bad-\ud800-name": "1.0.0"
+  }
+}

@@ -1,0 +1,39 @@
+# Quirks preserved from the Python parser (REQ-003 D-27, ADR-005 Karar 3/4)
+Requests==2.31.0
+requests==2.31.0
+nonepkg==None
+nonepkg
+hashed==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+continued==2.0.0 \
+    --hash=sha256:1111111111111111111111111111111111111111111111111111111111111111
+nospace==3.0.0\
+oldstyle (==1.0)
+wildcard==1.*
+multi==1.0,<2
+spaced-eq== 1.2.3
+triple===1.0.0+local
+local-version==1.0.0+cpu
+epoch==1!2.0.0
+star==*
+justname
+name-only-extras[a,b]
+extras-no-close[a==1.0
+weird-ext[a]]==1.0
+-
+--
+#==1.0
+;python_version<"3.9"
+==1.0
+türkçe-paket==1.0.0
+pkg_with.dots-and_underscores==0.1.0
+C:\local\wheel.whl
+/abs/path/pkg.tar.gz
+file:///tmp/pkg.tar.gz
+pkg @ file:///tmp/pkg.tar.gz
+pkg2>=1.0 # comment ; not a marker
+pkg3==1.0 ; python_version >= "3.8" # marker then comment
+UPPER_CASE==1.0
+lt-only<1.0
+gt-eq-spaces >= 1.0 , < 2.0
+arbitrary-eq===foobar
+pin-with-semicolon-only==1.0;

@@ -1,0 +1,23 @@
+{
+  "name": "fixture-npm-lock-v3",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "@babel/core": "^7.24.0",
+    "semver": "^7.6.0",
+    "alias-pkg": "npm:real-pkg@^2.0.0",
+    "my-workspace": "*"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.3"
+  }
+}

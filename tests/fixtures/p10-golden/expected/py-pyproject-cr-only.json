@@ -1,0 +1,38 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": "0.27.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "httpx",
+   "purl": "pkg:pypi/httpx@0.27.0",
+   "scope": "direct",
+   "version": "0.27.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-pyproject-cr-only",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "d567e8b65a7ce63e9721512607598f854bbb677523208b586b72c1c36f6abfa3",
+   "file_path": "pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 144
+  }
+ ],
+ "total_deps": 2
+}

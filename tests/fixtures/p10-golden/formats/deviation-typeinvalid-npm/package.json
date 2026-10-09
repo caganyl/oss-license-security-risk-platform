@@ -1,0 +1,17 @@
+{
+  "name": "deviation-typeinvalid-npm",
+  "version": "1.0.0",
+  "dependencies": {
+    "null-spec": null,
+    "int-spec": 1,
+    "float-spec": 1.5,
+    "float-int-spec": 1.0,
+    "exp-spec": 1e3,
+    "bool-spec": true,
+    "obj-spec": {
+      "version": "1.0.0"
+    },
+    "arr-spec": ["1.0.0"],
+    "big-int-spec": 12345678901234567890
+  }
+}

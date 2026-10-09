@@ -1,0 +1,9 @@
+{
+  "name": "fixture-npm-prototype-keys",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "__proto__": "^1.0.0",
+    "toString": "^2.0.0"
+  }
+}

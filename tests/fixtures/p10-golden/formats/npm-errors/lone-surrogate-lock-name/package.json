@@ -1,0 +1,7 @@
+{
+  "name": "lone-surrogate-lock-name",
+  "version": "1.0.0",
+  "dependencies": {
+    "ok-dep": "1.0.0"
+  }
+}

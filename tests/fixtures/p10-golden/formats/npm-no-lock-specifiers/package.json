@@ -1,0 +1,57 @@
+{
+  "name": "fixture-npm-no-lock-specifiers",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "caret": "^1.2.3",
+    "tilde": "~1.2.3",
+    "range": ">=1.0.0 <2.0.0",
+    "hyphen-range": "1.2.3 - 2.3.4",
+    "or-range": "^1.0.0 || ^2.0.0",
+    "exact": "1.2.3",
+    "exact-eq": "=1.2.3",
+    "exact-v": "v1.2.3",
+    "x-range": "1.2.x",
+    "star": "*",
+    "empty": "",
+    "blank": "   ",
+    "padded-exact": "  1.2.3  ",
+    "tag-latest": "latest",
+    "tag-next": "next",
+    "tarball-url": "https://example.invalid/pkg/-/pkg-1.0.0.tgz",
+    "git-url": "git+https://github.com/example/repo.git#v1.0.0",
+    "github-short": "github:example/repo",
+    "bare-github": "example/repo",
+    "file-path": "file:../local",
+    "link-path": "link:../linked",
+    "workspace-star": "workspace:*",
+    "workspace-caret": "workspace:^1.0.0",
+    "npm-alias": "npm:real-pkg@^2.0.0",
+    "npm-alias-exact": "npm:real-pkg@2.0.0",
+    "prerelease": "1.2.3-beta.1",
+    "build-meta": "1.2.3+build.1",
+    "fs-padded": "\u001c1.2.3\u001c",
+    "us-padded": "\u001f1.2.3",
+    "nel-padded": "\u00851.2.3",
+    "ls-padded": " 1.2.3",
+    "ideographic-padded": "　1.2.3　",
+    "bom-prefixed": "﻿1.2.3",
+    "zwsp-suffixed": "1.2.3​",
+    "arabic-indic-digits": "١.٢.٣",
+    "dupkey": "1.0.0",
+    "dupkey": "2.0.0",
+    "in-two-sections": "^1.0.0",
+    "Case-Dup": "^1.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "case-dup": "^2.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "in-two-sections": "^1.5.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "2.3.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Türkçe yol altında requirements.txt; ASCII dışı ad REQUIREMENT_RE ile ilk ASCII olmayan karakterde kesilir
+türkçe-paket==1.0.0
+requests==2.31.0
+çiçek==1.0.0

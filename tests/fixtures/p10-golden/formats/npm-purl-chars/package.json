@@ -1,0 +1,37 @@
+{
+  "name": "fixture-npm-purl-chars",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@scope/ad": "1.0.0",
+    "@Scope/UPPER": "1.0.0",
+    "bang!pkg": "1.0.0",
+    "it's-pkg": "1.0.0",
+    "paren(s)": "1.0.0",
+    "star*pkg": "1.0.0",
+    "tilde~pkg": "1.0.0",
+    "plus+pkg": "1.0.0",
+    "space pkg": "1.0.0",
+    "pct%pkg": "1.0.0",
+    "colon:pkg": "1.0.0",
+    "hash#pkg": "1.0.0",
+    "query?pkg": "1.0.0",
+    "amp&pkg": "1.0.0",
+    "eq=pkg": "1.0.0",
+    "semi;pkg": "1.0.0",
+    "comma,pkg": "1.0.0",
+    "dollar$pkg": "1.0.0",
+    "at@mid": "1.0.0",
+    "back\\slash": "1.0.0",
+    "quote\"pkg": "1.0.0",
+    "çiçek": "1.0.0",
+    "emoji-😀": "1.0.0",
+    "build-meta": "1.2.3+build.7",
+    "pre-release": "1.2.3-rc.1",
+    "v-prefixed": "v4.5.6"
+  },
+  "devDependencies": {
+    "Dup-Name": "1.0.0",
+    "dup-name": "1.0.0"
+  }
+}

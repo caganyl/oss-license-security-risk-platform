@@ -1,0 +1,85 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": ">=8",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "click",
+   "purl": "pkg:pypi/click",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==8.1.1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest@8.1.1",
+   "scope": "optional",
+   "version": "8.1.1"
+  },
+  {
+   "declared_range": "0.27.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "httpx",
+   "purl": "pkg:pypi/httpx@0.27.0",
+   "scope": "direct",
+   "version": "0.27.0"
+  },
+  {
+   "declared_range": "^4.3",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "anyio",
+   "purl": "pkg:pypi/anyio",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "24.1.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "black",
+   "purl": "pkg:pypi/black@24.1.0",
+   "scope": "dev",
+   "version": "24.1.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-pyproject-crlf",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "ab226145583b630cd20fa7c9b67f50d9c04441320ac5ff81d24707d7375f2b97",
+   "file_path": "pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 336
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "88a3710fc7efc992d06f575c5e0287cac465467d6ea7cde4e17537c972bc1de1",
+   "file_path": "poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 498
+  }
+ ],
+ "total_deps": 6
+}

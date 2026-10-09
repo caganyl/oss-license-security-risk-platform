@@ -1,0 +1,308 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "Requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": "==None",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "nonepkg",
+   "purl": "pkg:pypi/nonepkg@None",
+   "scope": "direct",
+   "version": "None"
+  },
+  {
+   "declared_range": "==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "hashed",
+   "purl": "pkg:pypi/hashed",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==2.0.0 \\",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "continued",
+   "purl": "pkg:pypi/continued",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==3.0.0\\",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "nospace",
+   "purl": "pkg:pypi/nospace@3.0.0%5C",
+   "scope": "direct",
+   "version": "3.0.0\\"
+  },
+  {
+   "declared_range": "(==1.0)",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "oldstyle",
+   "purl": "pkg:pypi/oldstyle",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.*",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "wildcard",
+   "purl": "pkg:pypi/wildcard",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.0,<2",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "multi",
+   "purl": "pkg:pypi/multi",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "== 1.2.3",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "spaced-eq",
+   "purl": "pkg:pypi/spaced-eq@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "===1.0.0+local",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "triple",
+   "purl": "pkg:pypi/triple@1.0.0%2Blocal",
+   "scope": "direct",
+   "version": "1.0.0+local"
+  },
+  {
+   "declared_range": "==1.0.0+cpu",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "local-version",
+   "purl": "pkg:pypi/local-version@1.0.0%2Bcpu",
+   "scope": "direct",
+   "version": "1.0.0+cpu"
+  },
+  {
+   "declared_range": "==1!2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "epoch",
+   "purl": "pkg:pypi/epoch@1%212.0.0",
+   "scope": "direct",
+   "version": "1!2.0.0"
+  },
+  {
+   "declared_range": "==*",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "star",
+   "purl": "pkg:pypi/star",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "justname",
+   "purl": "pkg:pypi/justname",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "name-only-extras",
+   "purl": "pkg:pypi/name-only-extras",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "[a==1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "extras-no-close",
+   "purl": "pkg:pypi/extras-no-close",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "]==1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "weird-ext",
+   "purl": "pkg:pypi/weird-ext",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "\u00fcrk\u00e7e-paket==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "t",
+   "purl": "pkg:pypi/t",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==0.1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pkg_with.dots-and_underscores",
+   "purl": "pkg:pypi/pkg-with.dots-and-underscores@0.1.0",
+   "scope": "direct",
+   "version": "0.1.0"
+  },
+  {
+   "declared_range": ":\\local\\wheel.whl",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "C",
+   "purl": "pkg:pypi/c",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ":///tmp/pkg.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "file",
+   "purl": "pkg:pypi/file",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "@ file:///tmp/pkg.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pkg",
+   "purl": "pkg:pypi/pkg",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ">=1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pkg2",
+   "purl": "pkg:pypi/pkg2",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pkg3",
+   "purl": "pkg:pypi/pkg3@1.0",
+   "scope": "direct",
+   "version": "1.0"
+  },
+  {
+   "declared_range": "==1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "UPPER_CASE",
+   "purl": "pkg:pypi/upper-case@1.0",
+   "scope": "direct",
+   "version": "1.0"
+  },
+  {
+   "declared_range": "<1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "lt-only",
+   "purl": "pkg:pypi/lt-only",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ">= 1.0 , < 2.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "gt-eq-spaces",
+   "purl": "pkg:pypi/gt-eq-spaces",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "===foobar",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "arbitrary-eq",
+   "purl": "pkg:pypi/arbitrary-eq@foobar",
+   "scope": "direct",
+   "version": "foobar"
+  },
+  {
+   "declared_range": "==1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pin-with-semicolon-only",
+   "purl": "pkg:pypi/pin-with-semicolon-only@1.0",
+   "scope": "direct",
+   "version": "1.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-requirements-quirks",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "a800dc30d30cbbadd967fbcaa8aa237841935f5039588ead68882d5062fe3a76",
+   "file_path": "requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 940
+  }
+ ],
+ "total_deps": 29
+}

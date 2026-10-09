@@ -1,0 +1,4 @@
+[project]
+name = "skipped-mypy-cache"
+version = "1.0.0"
+dependencies = ["skipped-mypy-cache-dep==1.0.0"]

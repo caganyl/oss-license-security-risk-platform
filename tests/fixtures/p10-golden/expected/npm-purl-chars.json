@@ -1,0 +1,288 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "@scope/ad",
+   "purl": "pkg:npm/@scope/ad@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "@Scope/UPPER",
+   "purl": "pkg:npm/@Scope/UPPER@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "bang!pkg",
+   "purl": "pkg:npm/bang%21pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "it's-pkg",
+   "purl": "pkg:npm/it%27s-pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "paren(s)",
+   "purl": "pkg:npm/paren%28s%29@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "star*pkg",
+   "purl": "pkg:npm/star%2Apkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "tilde~pkg",
+   "purl": "pkg:npm/tilde~pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "plus+pkg",
+   "purl": "pkg:npm/plus%2Bpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "space pkg",
+   "purl": "pkg:npm/space%20pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "pct%pkg",
+   "purl": "pkg:npm/pct%25pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "colon:pkg",
+   "purl": "pkg:npm/colon%3Apkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "hash#pkg",
+   "purl": "pkg:npm/hash%23pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "query?pkg",
+   "purl": "pkg:npm/query%3Fpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "amp&pkg",
+   "purl": "pkg:npm/amp%26pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "eq=pkg",
+   "purl": "pkg:npm/eq%3Dpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "semi;pkg",
+   "purl": "pkg:npm/semi%3Bpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "comma,pkg",
+   "purl": "pkg:npm/comma%2Cpkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "dollar$pkg",
+   "purl": "pkg:npm/dollar%24pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "at@mid",
+   "purl": "pkg:npm/at@mid@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "back\\slash",
+   "purl": "pkg:npm/back%5Cslash@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "quote\"pkg",
+   "purl": "pkg:npm/quote%22pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "\u00e7i\u00e7ek",
+   "purl": "pkg:npm/%C3%A7i%C3%A7ek@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "emoji-\ud83d\ude00",
+   "purl": "pkg:npm/emoji-%F0%9F%98%80@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.2.3+build.7",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "build-meta",
+   "purl": "pkg:npm/build-meta@1.2.3%2Bbuild.7",
+   "scope": "direct",
+   "version": "1.2.3+build.7"
+  },
+  {
+   "declared_range": "1.2.3-rc.1",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "pre-release",
+   "purl": "pkg:npm/pre-release@1.2.3-rc.1",
+   "scope": "direct",
+   "version": "1.2.3-rc.1"
+  },
+  {
+   "declared_range": "v4.5.6",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "v-prefixed",
+   "purl": "pkg:npm/v-prefixed@v4.5.6",
+   "scope": "direct",
+   "version": "v4.5.6"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "Dup-Name",
+   "purl": "pkg:npm/Dup-Name@1.0.0",
+   "scope": "dev",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-purl-chars",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "dbf0fb156a8be108e3d6996145184341c554e517d86ae153d1a4a50bea4889da",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 864
+  }
+ ],
+ "total_deps": 27
+}

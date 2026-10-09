@@ -1,0 +1,182 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==1.16.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "optional-not-table",
+   "name": "six",
+   "purl": "pkg:pypi/six@1.16.0",
+   "scope": "direct",
+   "version": "1.16.0"
+  },
+  {
+   "declared_range": ">=2.31",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==3.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "Flask",
+   "purl": "pkg:pypi/flask@3.0.0",
+   "scope": "direct",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": "===1.26.4",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "numpy",
+   "purl": "pkg:pypi/numpy@1.26.4",
+   "scope": "direct",
+   "version": "1.26.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "attrs",
+   "purl": "pkg:pypi/attrs",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ">=2.6",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "pydantic",
+   "purl": "pkg:pypi/pydantic",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "@ https://example.invalid/named_url-1.0.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "named-url",
+   "purl": "pkg:pypi/named-url",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "@ https://example.invalid/named_frag-1.0.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "named-frag",
+   "purl": "pkg:pypi/named-frag",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==4.10.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "typing_extensions",
+   "purl": "pkg:pypi/typing-extensions@4.10.0",
+   "scope": "direct",
+   "version": "4.10.0"
+  },
+  {
+   "declared_range": "== 1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "spaced",
+   "purl": "pkg:pypi/spaced@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.*",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "wildcard",
+   "purl": "pkg:pypi/wildcard",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==3.11",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "python",
+   "purl": "pkg:pypi/python@3.11",
+   "scope": "direct",
+   "version": "3.11"
+  },
+  {
+   "declared_range": "==8.1.1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest@8.1.1",
+   "scope": "optional",
+   "version": "8.1.1"
+  },
+  {
+   "declared_range": ">=0.3",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "ruff",
+   "purl": "pkg:pypi/ruff",
+   "scope": "optional",
+   "version": null
+  },
+  {
+   "declared_range": ">=7.2,<8",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "sphinx",
+   "purl": "pkg:pypi/sphinx",
+   "scope": "optional",
+   "version": null
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-pyproject-pep621",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "ee670515151cd6b3ffa8570d5987acca968d814166f3d276823d3f61a51289e5",
+   "file_path": "no-dependencies/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 141
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "82de36eb96fbe37409967a11afa5e5c8b9ac01845ecfc29a1504505f073e120d",
+   "file_path": "optional-not-table/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 150
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "5ea62384f78948cb51fa1a195011176a539ba7c80eafe198392a3439c82a6bf7",
+   "file_path": "pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 805
+  }
+ ],
+ "total_deps": 15
+}

@@ -1,0 +1,13 @@
+{
+  "name": "fixture-npm-lock-v3-versions",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "exact-in-lock": "^1.0.0",
+    "file-dep": "file:../file-dep",
+    "git-dep": "git+https://github.com/example/git-dep.git#v2.0.0",
+    "git-ver": "github:example/git-ver",
+    "tag-dep": "latest",
+    "unicode-digits": "^1.0.0"
+  }
+}

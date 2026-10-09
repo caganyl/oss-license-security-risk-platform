@@ -1,0 +1,115 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^7.22.13",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "@babel/code-frame",
+   "purl": "pkg:npm/@babel/code-frame@7.22.13",
+   "scope": "direct",
+   "version": "7.22.13"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "@babel/highlight",
+   "purl": "pkg:npm/@babel/highlight@7.22.20",
+   "scope": "transitive",
+   "version": "7.22.20"
+  },
+  {
+   "declared_range": "*",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "@types/node",
+   "purl": "pkg:npm/@types/node@20.12.7",
+   "scope": "dev",
+   "version": "20.12.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "chalk",
+   "purl": "pkg:npm/chalk@2.4.2",
+   "scope": "transitive",
+   "version": "2.4.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "ansi-styles",
+   "purl": "pkg:npm/ansi-styles@3.2.1",
+   "scope": "transitive",
+   "version": "3.2.1"
+  },
+  {
+   "declared_range": "^2.3.2",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "fsevents",
+   "purl": "pkg:npm/fsevents@2.3.3",
+   "scope": "optional",
+   "version": "2.3.3"
+  },
+  {
+   "declared_range": "^4.17.21",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "lodash",
+   "purl": "pkg:npm/lodash@4.17.21",
+   "scope": "direct",
+   "version": "4.17.21"
+  },
+  {
+   "declared_range": "^18.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "react",
+   "purl": "pkg:npm/react@18.2.0",
+   "scope": "peer",
+   "version": "18.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "string-width",
+   "purl": "pkg:npm/string-width@2.1.1",
+   "scope": "transitive",
+   "version": "2.1.1"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-yarn-v1-basic",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "6bbdbc503d4bdf30d1ca755788b0eb46c5243927f9ae342ae353d9fb0edc7de8",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 325
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e193f018d56bbabed015dedee63e13fff7faf0e71f582e266c2bd3e6d121397e",
+   "file_path": "yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 903
+  }
+ ],
+ "total_deps": 9
+}

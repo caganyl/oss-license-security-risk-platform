@@ -1,0 +1,88 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "\ufffd==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "caf",
+   "purl": "pkg:pypi/caf",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "valid-one",
+   "purl": "pkg:pypi/valid-one@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "\ufffd==2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "trunc",
+   "purl": "pkg:pypi/trunc",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==\ufffd1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pkg",
+   "purl": "pkg:pypi/pkg@%EF%BF%BD1.0",
+   "scope": "direct",
+   "version": "\ufffd1.0"
+  },
+  {
+   "declared_range": "\ufffdname>=1",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "latin",
+   "purl": "pkg:pypi/latin",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==\ufffd\ufffd\ufffd1.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "surrogate-bytes",
+   "purl": "pkg:pypi/surrogate-bytes@%EF%BF%BD%EF%BF%BD%EF%BF%BD1.0",
+   "scope": "direct",
+   "version": "\ufffd\ufffd\ufffd1.0"
+  },
+  {
+   "declared_range": "==2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "valid-two",
+   "purl": "pkg:pypi/valid-two@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-requirements-invalid-utf8",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "8f5aec45e3b0f26695b00859d3f0c34aa9355a71c5157b4b2a7faff15e4ff3cd",
+   "file_path": "requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 213
+  }
+ ],
+ "total_deps": 7
+}

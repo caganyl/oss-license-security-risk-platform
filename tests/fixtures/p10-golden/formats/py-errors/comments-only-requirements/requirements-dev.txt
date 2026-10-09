@@ -1,0 +1,4 @@
+# only comments and option lines
+
+-r requirements.txt
+--index-url https://example.invalid/simple

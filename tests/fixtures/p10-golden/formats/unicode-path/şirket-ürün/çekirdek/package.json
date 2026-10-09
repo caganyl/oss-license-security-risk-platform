@@ -1,0 +1,13 @@
+{
+  "name": "çekirdek",
+  "version": "1.0.0",
+  "dependencies": {
+    "çiçek": "1.0.0",
+    "ığdır-pkg": "2.0.0",
+    "öğrenci": "^3.0.0"
+  },
+  "devDependencies": {
+    "Çiçek": "1.0.0",
+    "ÖĞRENCİ-UPPER": "4.0.0"
+  }
+}

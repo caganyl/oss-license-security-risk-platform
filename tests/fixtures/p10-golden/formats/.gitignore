@@ -1,0 +1,6 @@
+# The repository root .gitignore ignores node_modules/, dist/ and __pycache__/
+# at any depth. The SKIP_DIRS fixture cases below must commit manifests inside
+# such folders (they prove those folders are skipped), so re-include them here.
+!node_modules/
+!dist/
+!__pycache__/

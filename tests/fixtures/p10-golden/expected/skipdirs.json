@@ -1,0 +1,147 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".github",
+   "name": "kept-dot-github",
+   "purl": "pkg:npm/kept-dot-github@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "b/Build",
+   "name": "kept-capital-build",
+   "purl": "pkg:npm/kept-capital-build@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "builds",
+   "name": "kept-builds",
+   "purl": "pkg:npm/kept-builds@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "root-dep",
+   "purl": "pkg:npm/root-dep@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "c/Node_Modules",
+   "name": "kept-capital-node-modules",
+   "purl": "pkg:pypi/kept-capital-node-modules@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "d/ENV",
+   "name": "kept-upper-env",
+   "purl": "pkg:pypi/kept-upper-env@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "my-env",
+   "name": "kept-my-env",
+   "purl": "pkg:pypi/kept-my-env@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "dist-tools",
+   "name": "kept-dist-tools-dep",
+   "purl": "pkg:pypi/kept-dist-tools-dep@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/skipdirs",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "261052790612a2336b78f288600a0a8bfe1facadc860a1a88cc1793a4944ebb7",
+   "file_path": ".github/package.json",
+   "filename": "package.json",
+   "size_bytes": 59
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "1b4fb023a7a66fa57ceb587a2c78ba1a82f19116f977926a4c84d323b315cf7d",
+   "file_path": "b/Build/package.json",
+   "filename": "package.json",
+   "size_bytes": 62
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "a56e11f76f43dc1be2fc1c2b4274ac274b2d1cee51cde67047efa613ac921e66",
+   "file_path": "builds/package.json",
+   "filename": "package.json",
+   "size_bytes": 55
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "0cac7539a713293be4745b08286476b3ccaad405bada0bb6ee7e41070579f8cf",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 104
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "47d0531e965df829f5924d07aa6484a715efaa4e977ff443bdbb004e1f6bc61d",
+   "file_path": "c/Node_Modules/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 33
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "27a81e537b2522ee5b4d30c04293bbcfae794c95033b51e62122bbf81b2add8b",
+   "file_path": "d/ENV/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 22
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "22eb78f86999267b9eb9b054bd70f1aa0adf54139d152977e022b2ffb1f1ac2c",
+   "file_path": "my-env/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 19
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "e2ef6af828ceb75c0c2fc9e8361220e64efaf9e7581cb7e7117a5792b04d5582",
+   "file_path": "dist-tools/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 99
+  }
+ ],
+ "total_deps": 8
+}

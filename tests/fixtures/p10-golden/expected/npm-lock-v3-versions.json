@@ -1,0 +1,265 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "exact-in-lock",
+   "purl": "pkg:npm/exact-in-lock@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "file:../file-dep",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "file-dep",
+   "purl": "pkg:npm/file-dep",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "git+https://github.com/example/git-dep.git#v2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "git-dep",
+   "purl": "pkg:npm/git-dep@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "git+https://github.com/example/git-ver.git#0123456789abcdef0123456789abcdef01234567",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "git-ver",
+   "purl": "pkg:npm/git-ver",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "latest",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tag-dep",
+   "purl": "pkg:npm/tag-dep",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "v-lower",
+   "purl": "pkg:npm/v-lower@v2.0.0",
+   "scope": "transitive",
+   "version": "v2.0.0"
+  },
+  {
+   "declared_range": "V2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "v-upper",
+   "purl": "pkg:npm/v-upper",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-zero",
+   "purl": "pkg:npm/leading-zero@01.02.03",
+   "scope": "transitive",
+   "version": "01.02.03"
+  },
+  {
+   "declared_range": "1.2",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "two-part",
+   "purl": "pkg:npm/two-part",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3.4",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "four-part",
+   "purl": "pkg:npm/four-part",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3-",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "dash-only",
+   "purl": "pkg:npm/dash-only",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "double-dash",
+   "purl": "pkg:npm/double-dash@1.2.3--",
+   "scope": "transitive",
+   "version": "1.2.3--"
+  },
+  {
+   "declared_range": "1.2.3+",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "plus-only",
+   "purl": "pkg:npm/plus-only",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pre-and-build",
+   "purl": "pkg:npm/pre-and-build@1.2.3-rc.1%2Bbuild.7",
+   "scope": "transitive",
+   "version": "1.2.3-rc.1+build.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-space",
+   "purl": "pkg:npm/leading-space@%201.2.3",
+   "scope": "transitive",
+   "version": " 1.2.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "trailing-newline",
+   "purl": "pkg:npm/trailing-newline@1.2.3%0A",
+   "scope": "transitive",
+   "version": "1.2.3\n"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-fs",
+   "purl": "pkg:npm/leading-fs@%1C1.2.3",
+   "scope": "transitive",
+   "version": "\u001c1.2.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-us",
+   "purl": "pkg:npm/leading-us@%1F1.2.3",
+   "scope": "transitive",
+   "version": "\u001f1.2.3"
+  },
+  {
+   "declared_range": "\ufeff1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-bom",
+   "purl": "pkg:npm/leading-bom",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "leading-nbsp",
+   "purl": "pkg:npm/leading-nbsp@%C2%A01.2.3",
+   "scope": "transitive",
+   "version": "\u00a01.2.3"
+  },
+  {
+   "declared_range": "1.2.3\u200b",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "trailing-zwsp",
+   "purl": "pkg:npm/trailing-zwsp",
+   "scope": "transitive",
+   "version": null
+  },
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "unicode-digits",
+   "purl": "pkg:npm/unicode-digits@%D9%A1.%D9%A2.%D9%A3",
+   "scope": "direct",
+   "version": "\u0661.\u0662.\u0663"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fullwidth-digits",
+   "purl": "pkg:npm/fullwidth-digits@%EF%BC%91.%EF%BC%92.%EF%BC%93",
+   "scope": "transitive",
+   "version": "\uff11.\uff12.\uff13"
+  },
+  {
+   "declared_range": "\u00b9.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "superscript-digit",
+   "purl": "pkg:npm/superscript-digit",
+   "scope": "transitive",
+   "version": null
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-lock-v3-versions",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "010f24f06447e90ff614092a1f8d8ded03576bbb87b8c95b1efb1edf6c9ae2c0",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 343
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "a2a57d194bb079f7c2f1934a1af74884237f86aa1ddb36100d4820dd50333480",
+   "file_path": "package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 2050
+  }
+ ],
+ "total_deps": 24
+}

@@ -1,0 +1,8 @@
+{
+  "name": "deviation-json-nan",
+  "version": "1.0.0",
+  "nanField": NaN,
+  "dependencies": {
+    "nan-dep": "1.0.0"
+  }
+}

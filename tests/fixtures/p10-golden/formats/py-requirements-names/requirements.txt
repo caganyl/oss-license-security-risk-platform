@@ -1,0 +1,5 @@
+shared==1.0.0
+only-main==1.0.0
+shared-diff==1.0.0
+shared-range>=1.0
+-r requirements-dev.txt

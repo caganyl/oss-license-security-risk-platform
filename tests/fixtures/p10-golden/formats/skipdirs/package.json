@@ -1,0 +1,7 @@
+{
+  "name": "fixture-skipdirs",
+  "version": "1.0.0",
+  "dependencies": {
+    "root-dep": "1.0.0"
+  }
+}

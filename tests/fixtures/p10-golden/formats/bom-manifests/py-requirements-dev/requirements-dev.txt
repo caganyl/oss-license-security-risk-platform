@@ -1,0 +1,2 @@
+﻿# comment first, so the BOM costs nothing here
+pytest==8.1.1

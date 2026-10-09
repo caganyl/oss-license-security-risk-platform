@@ -1,0 +1,8 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      ignored-pnpm-lock:
+        specifier: 1.0.0
+        version: 1.0.0

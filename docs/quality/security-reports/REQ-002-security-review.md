@@ -190,3 +190,102 @@
 ## Handoff notu
 
 Bu inceleme non-trivial'dır; `docs/handoffs/REQ-002.md` bu rapora atıfla ve merge kararı/risk kabulleriyle güncellenmelidir. Security Red Team handoff'u kendisi güncellemez; Delivery Lead / Integration-Release'e bildirilmiştir.
+
+## Yeniden doğrulama (2026-10-09)
+
+- Kapsam: `71f1792` (M-2, M-3, L-3), `2d0075d` (D-20), `262976f` (M-1) sonrası çalışma ağacı.
+- Yöntem: Yalnız Read/Grep (Bash rol hook'u bu oturumda da engelledi). `npm audit`, `npm test`, `git diff` çalıştırılamadı. Test sonucu (225/225) ve `npm audit` sonucu koordinatörün beyanıdır, doğrulanmadı.
+- İncelenen dosyalar: `src/scanner/workspace.ts`, `src/lib/scanSource.ts` (`assertRemoteUrl`), `src/routes/userRoutes.ts`, `src/middleware/authenticate.ts` (`requireSession`), `src/middleware/securityHeaders.ts`, `src/app.ts`, `src/controllers/scanController.ts`, `public/index.html`, `public/` (grep), `.gitignore`, `.env.example`, `package-lock.json` (grep).
+
+### Düzeltme: önceki rapordaki hatalı ifade
+
+Önceki raporda "API anahtarı ekranı" (İncelenmedi bölümü) ve L-3'te "Generate API Key butonu" ifadeleri geçiyordu; bunlar **hatalı**. `public/` altında (vendor hariç) `/api/auth/api-keys` çağıran veya API anahtarı üreten bir arayüz yok (grep: `api-keys`, `apiKey` eşleşmesi yok). Bu düzeltme M-1'in saldırı senaryosunu geçersiz kılmaz: senaryo bir butona değil, aynı origin'de çalışan betiğin oturum çereziyle `POST /api/auth/api-keys` uç noktasını doğrudan çağırabilmesine dayanıyordu. L-3'teki clickjacking örneği ise bu UI için geçerli değildi; kalan clickjacking yüzeyi (logout, tarama/SBOM başlatma vb.) zaten L-3 düzeltmesiyle kapandı.
+
+### Bulgu durumları
+
+| Bulgu | Durum | Gerekçe |
+| --- | --- | --- |
+| M-1 / D-17 | **Kapandı** | `index.html` yalnız `/vendor/lucide-1.48.0.min.js` ve `/app.js` yüklüyor (sabit sürüm, same-origin). Inline `<script>`, `on*=` handler, harici URL ve Google Fonts yok. CSP `script-src 'self'` inline betiği engelliyor. `public/` (vendor hariç) içinde `innerHTML`/`insertAdjacentHTML`/`eval`/`new Function` yok. Vendored dosyanın bütünlüğü (resmi 1.48.0 paketiyle hash eşleşmesi) doğrulanmadı; bkz. N-3. |
+| M-2 / D-18 | **Kapandı** (güvenilmeyen repo içeriği tehdidi için) | `filter.lfs.smudge/clean/process` boş ve `required=false`; git boş filtre komutunu "filtre yok" sayar. Ek olarak `GIT_LFS_SKIP_SMUDGE=1`. `http.followRedirects=false`. Token yalnız `http.https://<host>[:port]/.extraHeader` ile hosta sınırlı. Ayrıntı: aşağıdaki 1. ve 2. madde. Kalan risk kullanıcının kendi global/system git yapılandırmasından geliyor; N-1 (Low) olarak ayrıldı. Git sürüm kontrolü ve `core.hooksPath` önerisi uygulanmadı (N-1 kapsamında). |
+| M-3 / K11 | **Kapandı** | `router.use(requireSession())` tüm rotalardan ve `guard()`'dan önce çalışıyor; `/api/users` altındaki eşleşmeyen yollar da (ör. `/api/users/x/y`) 403 alıyor. `Authorization` başlığı varsa çerez yok sayıldığından Bearer+çerez kombinasyonu da 403. `createUserRouter` yalnız `app.ts:93`'te mount ediliyor. "Kendi hesabını devre dışı bırakma/silme/admin rolünü kaldırma yasağı" uygulanmadı; artık yalnız oturum sahibi kendi kendini kilitleyebilir (Origin korumalı). Info düzeyinde kalıntı, bkz. N-4. |
+| D-20 | **Kapandı** | `repo_url` `null` veya boşsa `INSERT`'ten önce `HttpError(400, …, 'project_source_missing')`; ardından `resolveScanSource` ile kaynak yeniden doğrulanıyor. `scans` satırı oluşmuyor. |
+| L-3 / K13 | **Kapandı** | `securityHeaders()` `app.ts:60`'ta Host kontrolünden önce ilk middleware. Ayrıntı: aşağıdaki 3. madde. |
+| npm audit | **Kısmen** (risk kabulü D-24) | Lock'ta `proxy-addr` 2.0.8 ve `brace-expansion` 1.1.21 çözülmüş; critical/high'ın kapandığı beyanı bununla tutarlı, ancak `npm audit` bu oturumda çalıştırılamadı. `exceljs` 4.4.0 → `uuid` 8.3.2 kaynaklı 2 moderate açık; D-24 ile F2'ye bırakıldı. Kabul ve hedef faz handoff'a yazılmalı. |
+
+### Özellikle istenen kontroller
+
+1. **Host kapsamlı `extraHeader`'ın türetilmesi (`headerScopeFor`):** Değer `new URL(url)` üzerinden `protocol//host/` olarak üretiliyor. `cloneRepo` önce `assertRemoteUrl` çağırıyor ve bu fonksiyon `username`/`password` dolu URL'yi, boş user-info'yu (`https://@host`) ve authority içinde `@` bulunan değeri reddediyor. Bu kontrol, `https://evil\@github.com` gibi ters eğik çizgi ayrıştırma farkını da kapsıyor (`\` ayraç değil, `@` yakalanıyor). Kaçış analizi:
+   - **Kullanıcı bilgisi:** Reddediliyor. Kaçış yok.
+   - **Büyük harf:** WHATWG URL ve git'in `url_normalize`'ı host'u küçük harfe çeviriyor. Anahtar ve clone URL'si eşleşiyor.
+   - **Port:** `URL.host` varsayılan olmayan portu koruyor. `:443` her iki tarafta da düşüyor. Eşleşiyor.
+   - **IDN, `0x7f.1` gibi IPv4 kısaltmaları, percent-encoded host:** Node normalize ediyor, git etmiyor. Sonuç uyuşmazlık, yani başlık **gönderilmiyor**: fail-closed. Token başka bir hosta gitmiyor; yalnız clone kimlik doğrulamasında başarısız oluyor.
+   - **Yönlendirme:** `followRedirects=false` olduğundan clone, istenen hosttan ayrılamıyor.
+   - **Sonuç:** Token'ın amaçlanan host dışına gitmesini sağlayan bir yol bulunamadı.
+2. **`GIT_CONFIG_COUNT` ve global/system config:** `GIT_CONFIG_COUNT` yalnız ortamdan gelen `GIT_CONFIG_KEY_n/VALUE_n` girdilerini yönetiyor. `0` veya `1` olarak ezilmesi, üst süreçten miras kalan bu girdileri etkisiz kılıyor; bu doğru. Ancak system ve global config'i **devre dışı bırakmıyor**:
+   - Kullanıcının global/system config'indeki kapsamsız `http.extraHeader` git tarafından listeye **ekleniyor**. Bu başlık, taranan her hosta bizim token'ımızla birlikte gidiyor.
+   - `url.<base>.insteadOf` clone hedefini değiştirebiliyor. Hedef başka bir hosta yeniden yazılırsa bizim hosta sınırlı başlığımız eşleşmiyor (token sızmıyor, fail-closed). Ancak clone, doğrulanan URL'den farklı bir hosta gidiyor. SSH'a yeniden yazma `GIT_ALLOW_PROTOCOL=https` ile engelleniyor.
+   - `http.proxy`, `http.sslVerify=false`, `include.path`, `core.hooksPath` / `init.templateDir` (clone sırasında `post-checkout` hook'u çalışır) de uygulanıyor.
+   - Miras alınan `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_GLOBAL`, `GIT_SSL_NO_VERIFY`, `GIT_DIR` gibi ortam değişkenleri `sanitizedChildEnv` tarafından temizlenmiyor; yalnız sır adlı olanlar temizleniyor.
+
+   Bu girdilerin hepsi kullanıcının kendi (güvenilir) ortamından geliyor; saldırgan kontrollü repo içeriği bunları değiştiremiyor. Bu yüzden ayrı bir Low bulgu olarak açıldı (N-1).
+3. **CSP'nin statik dosyalara ve hata yanıtlarına gelmesi:** `securityHeaders()` zincirin ilk elemanı. Başlıklar şu yanıtlara geliyor:
+   - `express.static` dosyaları (`/`, `/app.js`, `/vendor/*`) ve `app.get('/')`.
+   - `/health` (200/500) ve `403 host_rejected`.
+   - `/api` 404 ve `errorHandler` yanıtları. Body-parser hataları (bozuk JSON, limit aşımı) da `errorHandler`'a düştüğü için bunlara dahil.
+
+   `src/` içinde bu başlıkları kaldıran veya ezen bir `setHeader`/`removeHeader` yok. `/api` dışındaki eşleşmeyen yollarda ve dizin yönlendirmelerinde Express'in `finalhandler` / `serve-static` modülü CSP'yi `default-src 'none'` ile eziyor. Bu daha sıkı bir politika; `X-Frame-Options: DENY`, `nosniff` ve `Referrer-Policy` korunuyor. Sorun değil (Info, N-2).
+4. **`requireSession`'ın kapsamı:** Router seviyesinde `router.use` ile eklendiği için GET/POST/PATCH/PUT/DELETE dahil `/api/users` altındaki her yol ve eşleşmeyen alt yollar kapsanıyor. `authenticate` önce çalışıyor (`app.ts:89`), dolayısıyla `req.user` her zaman dolu; `authMethod !== 'session'` olduğunda 403 dönüyor. Açık yol bulunamadı.
+
+### Low bulguların güncel durumu
+
+- **L-1:** Açık. `loginThrottle`/`authController`'da uçuştaki deneme sayacı veya serileştirme yok.
+- **L-2:** Açık (bilinen, D-11/D-15). `db/README.md`'de isteğe bağlı `api_keys` iptal adımı yok.
+- **L-4:** Açık. `common.py`'de `followlinks=False` veya reparse point/junction filtresi yok.
+- **L-5:** Açık. `worker.ts:446`'da `stdoutData` hâlâ sınırsız.
+- **L-6:** Açık (F3'e bırakılmış ürün kararı). Değişiklik yok.
+- **L-7:** **Kısmen.** `.env.example` eklendi; yer tutucular boş ve sır içermiyor (AC-P09-2 karşılandı). Ancak `.gitignore` hâlâ yalnız `.env`'i kapsıyor; `.env.local`/`.env.production` gibi varyantlar ignore edilmiyor. Kapanış için `.env.*` + `!.env.example` gerekli. `ENCRYPTION_KEY` satırında güçlü rastgele değer önerisi (I-2) de yok.
+
+### Yeni bulgular
+
+#### N-1 — Clone, kullanıcının global/system git yapılandırmasından ve miras ortamdan yalıtılmamış
+
+- **Ciddiyet:** Low (güvenilir kullanıcı ortamı gerektiriyor; saldırgan kontrollü repo içeriğinden tetiklenemiyor)
+- **Kanıt:** `src/scanner/workspace.ts:119-142`. `GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, `core.hooksPath` ve `http.extraHeader` sıfırlaması yok. `sanitizedChildEnv` `GIT_*` değişkenlerini geçiriyor.
+- **Saldırı yolu:** Global config'te kurumsal bir kapsamsız `http.extraHeader` (ör. iç Git sunucusu token'ı) bulunan bir kullanıcı herhangi bir üçüncü taraf repo URL'sini tarar ve bu başlık o hosta gider. Benzer şekilde global `http.sslVerify=false` veya miras alınan `GIT_SSL_NO_VERIFY=1`, entegrasyon token'ını MITM'e açar. Global template'teki bir `post-checkout` hook'u clone sırasında çalışır.
+- **Etkilenen alan:** Uzak tarama (P-03), token gizliliği (AC-P09-5)
+- **Düzeltme gereksinimi:**
+  - Clone ortamında `GIT_CONFIG_NOSYSTEM=1` ve boş bir `GIT_CONFIG_GLOBAL` (git ≥ 2.32) kullanın. Git for Windows'un system config'inden gelen `http.sslBackend=schannel` / `http.sslCAInfo` gibi değerler kaybolacağından bunları açıkça `-c` ile verin.
+  - `-c core.hooksPath=<boş klasör>` ekleyin.
+  - Üst ortamdan `GIT_*` değişkenlerini (bilinçli eklenenler hariç) çıkarın.
+  - Başlangıçta minimum `git --version` kontrolü yapın.
+  - Alternatif: Bu davranışı dokümante edip insan risk kabulüyle F2'ye bırakın.
+
+#### N-2 — `finalhandler` / `serve-static` CSP'yi `default-src 'none'` ile eziyor
+
+- **Ciddiyet:** Info
+- **Açıklama:** `/api` dışındaki eşleşmeyen yollar ve dizin yönlendirmeleri bu yanıtları üretiyor. Ezilen politika daha sıkı, diğer başlıklar korunuyor. Aksiyon gerekmiyor.
+
+#### N-3 — Vendored lucide dosyasının bütünlüğü doğrulanmamış
+
+- **Ciddiyet:** Info
+- **Açıklama:** `public/vendor/lucide-1.48.0.min.js` repoya eklendi; resmi npm paketiyle (`lucide@1.48.0` `dist/umd/lucide.min.js`) hash eşleşmesi bu oturumda kontrol edilemedi.
+- **Öneri:** Kaynak URL'si ve SHA-256 değeri `public/vendor/` altında veya handoff'ta kayıt altına alınmalı. Dosya `index.html`'deki tek üçüncü taraf betik ve CSP `'self'` onu meşru sayıyor.
+
+#### N-4 — Oturum sahibi kendi hesabını devre dışı bırakabiliyor veya silebiliyor (M-3 kalıntısı)
+
+- **Ciddiyet:** Info
+- **Açıklama:** Artık yalnız geçerli tarayıcı oturumu ve Origin kontrolüyle mümkün. Kendi kendine yapılan bir eylem; ancak kurtarma SQL'i bu durumu düzeltmiyor (bkz. M-3 madde 1).
+- **Öneri:** `PATCH status=inactive` / `DELETE` / admin rolü kaldırma işlemlerinde hedef kendi hesabıysa 409 dönün (F2).
+
+### Merge kararı (yeniden doğrulama sonrası)
+
+**Conditional Go — blocker yok.**
+
+- Critical, High veya Medium açık bulgu yok. M-1, M-2, M-3, D-20 ve L-3 kapandı.
+- Koşullar (handoff'a yazılmalı, kod değişikliği gerektirmez):
+  1. D-24 risk kabulü: `exceljs` → `uuid` kaynaklı 2 moderate açık ve hedef faz.
+  2. Bu oturumda doğrulanamayan `npm audit` (critical/high = 0) ve `npm test` (225/225) çıktılarının Integration-Release tarafından kanıt olarak eklenmesi.
+  3. N-1 için ya F1'de düzeltme ya da insan risk kabulü.
+- Önerilen düşük maliyetli düzeltme: L-7 için `.gitignore`'a `.env.*` ve `!.env.example` eklenmesi (backend-engineer veya repo sahibi).
+- **İnsan onayı gerektiren riskler:** N-1 (kullanıcı git ortamının clone'a etkisi), D-24 (moderate bağımlılık açıkları), L-2 (kurtarma penceresi; önceden kabul edildi).
+- `docs/handoffs/REQ-002.md` bu bölüme atıfla güncellenmelidir. Security Red Team handoff'u kendisi güncellemez; Delivery Lead / Integration-Release'e bildirilir.

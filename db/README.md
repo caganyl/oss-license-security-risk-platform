@@ -19,7 +19,7 @@ hedef veritabanındaki `schema_migrations` tablosunda tutulur.
 | Yol | Amaç |
 | --- | --- |
 | `migrations/NNN_ad.up.sql` / `.down.sql` | İleri / geri migration; `migrate.sh` her dosyayı tek transaction içinde çalıştırır (dosyalarda `BEGIN/COMMIT` yoktur). |
-| `migrate.sh` | Bash + `psql` ile migration çalıştırıcı (F1 yöntemi, AC-G-10; Node aracı F2/P-11). |
+| `migrate.sh` | Bash + `psql` (≥ 10) ile migration çalıştırıcı (F1 yöntemi, AC-G-10; Node aracı F2/P-11). Her migration dosyası ve onun `schema_migrations` kaydı (up'ta `INSERT`, down'da `DELETE`) tek `psql` oturumunda, tek transaction içinde çalışır: ya ikisi birden işlenir ya hiçbiri. |
 | `schema.sql` | 001–004 sonrası şemanın **referans görüntüsü**. `migrate.sh` ile yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `up` hata verir). Her yeni migration'la senkron tutulur. |
 | `tests/f1_migrations_test.sql` | 002–004 için up → down → up testi; yalnız boş, atılabilir test veritabanında çalışır. |
 
@@ -90,13 +90,20 @@ F1'de migration'lar yalnızca Git Bash içinden `db/migrate.sh` ile çalıştır
    bash db/migrate.sh up
    ```
 
-   Çıktıda her sürüm için `Applying …` veya `Skipping …` görünür. Bir hata
-   olursa o migration'ın transaction'ı geri alınır ve betik durur.
+   Çıktıda her sürüm için `Applying …` veya `Skipping …` görünür. Her sürüm
+   `psql --single-transaction -f <migration> -f -` ile çalışır; migration
+   dosyası ve `schema_migrations` kaydı aynı transaction'dadır. Bir hata olursa
+   ikisi birlikte geri alınır (kayıt yarım kalmaz) ve betik durur; önceki
+   sürümler işlenmiş olarak kalır.
 4. Uygulanan sürümleri kontrol edin:
 
    ```sh
    psql "$DATABASE_URL" -c "SELECT version, applied_at FROM schema_migrations ORDER BY version;"
    ```
+
+Migration'lar (ve `schema.sql`) hiçbir kullanıcı tohumlamaz; yalnız roller,
+lisans kataloğu ve sistem ayarları tohumlanır. İlk (yerel admin) kullanıcıyı
+yalnız uygulamanın ilk açılış (setup) akışı oluşturur (ADR-001 karar 2).
 
 `003` ve `004`, beklenmeyen veri bulduğunda açık bir hata mesajıyla durur
 (ör. aynı paket için birden çok sürümsüz satır, parmak izi üretilemeyen bulgu);
@@ -110,14 +117,16 @@ Production veritabanına migration uygulamak insan onayı gerektirir.
 > sırayla geri alır; `001` dahil olduğundan **bütün tablolar ve veriler
 > silinir**. Tek bir migration'ı geri almak için bu komutu kullanmayın.
 
-Yalnız en son migration'ı geri almak (örnek: `004`), Git Bash'te:
+Yalnız en son migration'ı geri almak (örnek: `004`), Git Bash'te; down
+dosyası ve kayıt silme `migrate.sh` ile aynı biçimde tek transaction'dadır:
 
 ```sh
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
-  -f db/migrations/004_finding_fingerprint.down.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f db/migrations/004_finding_fingerprint.down.sql \
   -c "DELETE FROM schema_migrations WHERE version = '004_finding_fingerprint';"
 ```
+
+(Tek adımlı geri alma seçeneği F2/P-11 Node göç aracında gelecek.)
 
 Geri alma her zaman ters sırayla yapılır (`004` → `003` → `002`). Her
 `.down.sql` dosyasının başında hangi verinin kaybolacağı yazılıdır; geri
@@ -137,6 +146,8 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/f1_migrations_test.sql
 ```
 
 Başarılı çalışmada son satır `F1 migration test: ALL ASSERTIONS PASSED` olur.
+Türkçe locale'li Windows'ta yeni bir test kümesi `initdb --locale=C
+--encoding=UTF8` ile açılmalıdır (Türkçe locale ile `initdb` başarısız oluyor).
 Uygulamanın kendi veritabanında çalıştırmayın.
 
 ## Parola kurtarma (SQL adımı)

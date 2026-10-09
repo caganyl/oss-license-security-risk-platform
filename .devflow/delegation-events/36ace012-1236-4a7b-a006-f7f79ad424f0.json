@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "36ace012-1236-4a7b-a006-f7f79ad424f0",
+  "timestamp": "2026-10-09T08:54:57Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStart",
+  "lifecycle_state": "started",
+  "agent_type": "devflow-plugin:product-analyst",
+  "evidence_source": "native_hook_event"
+}

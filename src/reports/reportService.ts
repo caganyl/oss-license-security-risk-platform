@@ -4,6 +4,7 @@ import path from 'path';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import type { Pool } from 'pg';
+import { sanitizeErrorText } from '../lib/errorText';
 
 export type ReportType =
   | 'executive_summary'
@@ -195,7 +196,8 @@ export class ReportService {
 
       return toRecord(result.rows[0]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Report generation failed';
+      // L-5 (ADR-002 Ek E3): no secret, absolute path or control character in error_message.
+      const message = sanitizeErrorText(err instanceof Error ? err.message : 'Report generation failed');
       const result = await this.db.query<ReportRow>(
         `UPDATE reports
          SET status = 'failed', error_message = $2, completed_at = NOW()

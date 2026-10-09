@@ -7,7 +7,8 @@ import { createRunId } from '../lib/runId';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
 import { ParserFailedError, createThreadParser } from './parsers/threadParser';
-import { scanErrorMessage, scanErrorText, shortErrorForLog } from './errorMessage';
+import { type ErrorTextContext, scanErrorMessage, scanErrorText, shortErrorForLog } from './errorMessage';
+import { type GitVersionProvider, assertGitForRemoteScan, getGitVersion } from './gitVersion';
 import {
   NonRetryableScanError,
   ORPHAN_RECOVERY_MESSAGE,
@@ -23,6 +24,7 @@ import {
 import {
   type CloneRepoFn,
   cloneRepo as defaultCloneRepo,
+  gitTokenSecretForms,
   isValidRef,
   sweepStaleWorkspaces,
   withTempWorkspace,
@@ -103,6 +105,14 @@ export interface ScanWorkerDeps {
    * Karar 4). Default: a fresh `createRunId()`; the runtime passes its own.
    */
   runId: string;
+  /**
+   * Git version gate of remote scans (REQ-003 AC-T-3, ADR-002 Ek E2): git
+   * missing or older than 2.32 fails the scan permanently before a temp
+   * folder is created. Default: the cached `git --version`
+   * (`getGitVersion`) with the real `cloneRepo`; `null` (the default when a
+   * `cloneRepo` is injected, since it does not run git) skips the gate.
+   */
+  gitVersion: GitVersionProvider | null;
 }
 
 export { NonRetryableScanError };
@@ -113,6 +123,8 @@ interface PersistOptions {
   runId?: string;
   /** Job abort signal: checked before every dependency; abort rolls back. */
   signal?: AbortSignal;
+  /** Sanitizer context of the parse warning text (L-5). */
+  errorContext?: ErrorTextContext;
 }
 
 /** normalized_license of a runtime package whose license could not be found (AC-P06-1). */
@@ -153,6 +165,10 @@ interface ClaimedJob {
   /** Resolves when the job has finished (never rejects). */
   done: Promise<void>;
   resolveDone: () => void;
+  /** Token forms of this job (raw + Basic base64), masked in `error_message` (L-5). */
+  secrets: string[];
+  /** Temp workspace(s) of this job, replaced by `<workspace>` (L-5). */
+  workspaceDirs: string[];
 }
 
 interface ScanJobRow {
@@ -188,6 +204,17 @@ export class ScanWorker {
       tmpRoot: deps.tmpRoot ?? os.tmpdir(),
       logger: deps.logger ?? console,
       runId: deps.runId ?? createRunId(),
+      gitVersion: deps.gitVersion !== undefined ? deps.gitVersion : deps.cloneRepo ? null : getGitVersion,
+    };
+  }
+
+  /** L-5 sanitizer context (ADR-002 Ek E3): job secrets/workspace, SCAN_ROOTS, temp roots. */
+  private errorContext(job?: ClaimedJob): ErrorTextContext {
+    return {
+      secrets: job?.secrets ?? [],
+      workspaceDirs: job?.workspaceDirs ?? [],
+      scanRoots: this.deps.scanRoots,
+      tempDirs: [this.deps.tmpRoot, os.tmpdir()],
     };
   }
 
@@ -305,7 +332,7 @@ export class ScanWorker {
       const logs: string[] = [];
       for (const row of orphans.rows) {
         const decision = decideRetry('transient', row.retry_count, settings.maxAttempts);
-        const message = scanErrorText(ORPHAN_RECOVERY_MESSAGE);
+        const message = scanErrorText(ORPHAN_RECOVERY_MESSAGE, this.errorContext());
         if (decision.action === 'retry') {
           const res = await client.query<{ next_attempt_at: Date }>(
             `UPDATE scans
@@ -472,7 +499,7 @@ export class ScanWorker {
       resolveDone = resolve;
     });
     const controller = new AbortController();
-    const job: ClaimedJob = { scanRow, settings, controller, timer: null, done, resolveDone };
+    const job: ClaimedJob = { scanRow, settings, controller, timer: null, done, resolveDone, secrets: [], workspaceDirs: [] };
     // Job time limit (D-42, AC-P13-6): covers clone, parse, OSV and the result write.
     job.timer = setTimeout(() => {
       if (!controller.signal.aborted) controller.abort(new ScanAbortError('timeout'));
@@ -501,6 +528,7 @@ export class ScanWorker {
       } catch (err) {
         throw new NonRetryableScanError((err as Error).message);
       }
+      if (token) job.secrets.push(token);
 
       const repoUrl = scanRow.integration_repo_url || scanRow.project_repo_url;
       if (!repoUrl) {
@@ -525,8 +553,13 @@ export class ScanWorker {
           throw new NonRetryableScanError('Invalid git ref for the scan');
         }
         const remoteUrl = source.url;
+        job.secrets.push(...gitTokenSecretForms(token ? { url: remoteUrl, token } : null));
+        // Git missing/older than 2.32: permanent, before any temp folder (AC-T-3).
+        if (this.deps.gitVersion) await assertGitForRemoteScan(this.deps.gitVersion);
+        signal.throwIfAborted();
         result = await withTempWorkspace(
           async (workspace) => {
+            job.workspaceDirs.push(workspace);
             const repoDir = path.join(workspace, 'repo');
             // The clone and the parser thread are awaited (killed/terminated on
             // abort) before withTempWorkspace removes the folder.
@@ -543,7 +576,11 @@ export class ScanWorker {
         throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
-      const stored = await this.persistResults(scanId, scanRow.project_id, result, { runId: this.runId, signal });
+      const stored = await this.persistResults(scanId, scanRow.project_id, result, {
+        runId: this.runId,
+        signal,
+        errorContext: this.errorContext(job),
+      });
       if (stored) this.logger.log(`Scan ${scanId} results stored.`);
     } catch (err) {
       await this.handleScanFailure(job, err);
@@ -597,7 +634,7 @@ export class ScanWorker {
     result: SandboxScanResult,
     options: PersistOptions,
   ): Promise<boolean> {
-    const { runId, signal } = options;
+    const { runId, signal, errorContext = this.errorContext() } = options;
     const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies, signal);
     signal?.throwIfAborted();
     const client = await this.db.connect();
@@ -853,9 +890,10 @@ export class ScanWorker {
       // Handle warnings from parse errors if any
       let warningMsg: string | null = null;
       if (result.parse_errors && result.parse_errors.length > 0) {
-        warningMsg = scanErrorText(result.parse_errors
-          .map(pe => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`)
-          .join('\n'));
+        warningMsg = scanErrorText(
+          result.parse_errors.map((pe) => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`).join('\n'),
+          errorContext,
+        );
       }
 
       signal?.throwIfAborted();
@@ -1173,6 +1211,7 @@ export class ScanWorker {
 
       const message = scanErrorText(
         abortReasonOf(signal) === 'timeout' ? timeoutMessage(job.settings.timeoutMinutes) : scanErrorMessage(err),
+        this.errorContext(job),
       );
       const decision = decideRetry(failureClass, job.scanRow.retry_count, job.settings.maxAttempts);
 

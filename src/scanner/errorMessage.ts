@@ -1,14 +1,15 @@
+import { sanitizeErrorText, type ErrorTextContext } from '../lib/errorText';
+
 /**
  * Single funnel for every text written to `scans.error_message` and for the
- * retry log line (REQ-003 AC-P13-8).
- *
- * Today it only turns a thrown value into text and shortens log lines. The
- * L-5 sanitizer of ADR-002 Ek E3 (`sanitizeErrorText`: secrets, absolute
- * paths, control characters, 2000 characters; REQ-003 AC-T-4) plugs in here,
- * so every writer is covered without touching the call sites.
+ * retry log line (REQ-003 AC-P13-8). Every text goes through the L-5
+ * sanitizer `sanitizeErrorText` (ADR-002 Ek E3; REQ-003 AC-T-4): secrets,
+ * absolute paths, control characters, 2000 characters. The worker passes the
+ * job context (token forms, workspace, SCAN_ROOTS, temp root).
  */
+export type { ErrorTextContext };
 
-/** Text of a thrown value for `scans.error_message`. */
+/** Raw text of a thrown value (not sanitized; use `scanErrorText` before persisting). */
 export function scanErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
@@ -19,14 +20,14 @@ export function scanErrorMessage(err: unknown): string {
   }
 }
 
-/** Free text (e.g. the joined parse warnings) on its way to `scans.error_message`. */
-export function scanErrorText(text: string): string {
-  return text;
+/** Sanitized text on its way to `scans.error_message` (error, warning join, recovery message). */
+export function scanErrorText(text: string, context: ErrorTextContext = {}): string {
+  return sanitizeErrorText(text, context);
 }
 
 const LOG_MAX_CHARS = 300;
 
-/** Shortened error for one log line (AC-P13-8). */
+/** Shortened error for one log line (AC-P13-8); expects already sanitized text. */
 export function shortErrorForLog(text: string, max: number = LOG_MAX_CHARS): string {
   const oneLine = text.replace(/\s+/g, ' ').trim();
   const chars = Array.from(oneLine);

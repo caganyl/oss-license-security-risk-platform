@@ -1,5 +1,7 @@
 import type { Pool } from 'pg';
 import { errorCode } from '../db/advisoryLock';
+import { sanitizeErrorText } from '../lib/errorText';
+import { shortErrorForLog } from '../scanner/errorMessage';
 import { ReportService } from './reportService';
 import { exportWorkerConfig, type ExportWorkerConfig } from './worker.config';
 
@@ -225,8 +227,9 @@ export class ExportWorker {
       await Promise.race([this.deps.reportService.processReport(reportId), timeoutPromise]);
       this.logger.log(`Report ${reportId} successfully generated.`);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Failed to generate report ${reportId}: ${errMsg}`);
+      // L-5 (ADR-002 Ek E3): the same sanitized text for the log and error_message.
+      const errMsg = sanitizeErrorText(err instanceof Error ? err.message : String(err));
+      this.logger.error(`Failed to generate report ${reportId}: ${shortErrorForLog(errMsg)}`);
       if (this.shuttingDown) return;
       try {
         await this.db.query(

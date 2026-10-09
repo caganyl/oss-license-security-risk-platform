@@ -1,7 +1,8 @@
 /**
  * Main-thread side of the parser thread (REQ-003 AC-P10-14, ADR-005 Karar 5).
  *
- * One `Worker` per scan (no pool), started with `env: {}`, empty
+ * One `Worker` per scan (no pool), started with `env: {}` (source mode: only
+ * `DISABLE_V8_COMPILE_CACHE=1`, see `SOURCE_MODE_THREAD_ENV`), empty
  * `argv`/`execArgv` and memory/stack `resourceLimits`. The thread has no
  * timer of its own: the caller's `AbortSignal` (scan timeout, shutdown)
  * terminates it. The thread is always terminated and that promise awaited
@@ -80,6 +81,16 @@ function sourceModeBootstrap(): string | null {
   return `require(${JSON.stringify(tsNode)}).register({ transpileOnly: true });\nrequire(${JSON.stringify(entry)});`;
 }
 
+/**
+ * Thread environment of the source-mode bootstrap. ts-node loads
+ * `v8-compile-cache-lib`, which writes its cache under `os.tmpdir()`; with
+ * `env: {}` Windows has no TEMP/TMP/SystemRoot, `os.tmpdir()` returns
+ * `undefined\temp` and the cache lands in the working directory. Disabling
+ * the cache is the narrowest fix: one non-secret flag, no inherited value.
+ * Compiled builds keep `env: {}` (nothing there calls `os.tmpdir()`).
+ */
+const SOURCE_MODE_THREAD_ENV: Readonly<Record<string, string>> = Object.freeze({ DISABLE_V8_COMPILE_CACHE: '1' });
+
 type Outcome =
   | { kind: 'message'; message: unknown }
   | { kind: 'error'; error: unknown }
@@ -147,7 +158,7 @@ export async function runParserInThread(
     eval: bootstrap !== null,
     workerData,
     resourceLimits: { ...options.resourceLimits },
-    env: {},
+    env: bootstrap !== null ? { ...SOURCE_MODE_THREAD_ENV } : {},
     argv: [],
     execArgv: [],
   });

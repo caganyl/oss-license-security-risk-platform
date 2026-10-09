@@ -46,7 +46,7 @@ Uygulama tek yerel kullanıcı modeliyle, tek bir Node süreci olarak çalışı
 *Ön koşullar*
 
 - **Node.js 22 LTS veya üstü** (`node --version`).
-- **Git for Windows 2.32 veya üstü** (`git --version`). Yalnız uzak (`https`) repo taraması için gerekir; git yoksa uygulama yine başlar ve uyarı yazar.
+- **Git for Windows 2.32 veya üstü** (`git --version`). Yalnız uzak (`https`) repo taraması için gerekir; git yoksa veya daha eskiyse uygulama yine başlar ve uyarı yazar, yerel klasör taramaları çalışır, uzak taramalar ise yeniden denenmeden `Uzak tarama için git 2.32 veya üstü gerekli (bulunan: …).` mesajıyla `failed` olur. Git sonradan kurulursa uygulamayı yeniden başlatın.
 - **PostgreSQL 15 veya üstü**, Windows kurulum paketiyle (EDB installer).
 - **Gerekmeyenler:** Python, Docker, Git Bash ve `PATH` üzerinde `psql`.
 
@@ -99,6 +99,8 @@ $env:NO_PROXY = "localhost,127.0.0.1"
 npm start
 ```
 
+Clone yalıtımı nedeniyle git'in kendi `http.proxy`, `http.sslCAInfo` ve `http.sslVerify` ayarları (kullanıcı ve sistem `gitconfig`'i) **okunmaz**; vekil yalnız bu ortam değişkenleriyle verilir. TLS denetimi yapan kurumsal ağlarda şirket kök sertifikasının **Windows sertifika deposunda** olması gerekir (git Windows'ta `schannel` ile çalıştırılır); ayrı bir CA dosyası (`CURL_CA_BUNDLE`, `SSL_CERT_FILE`) aktarılmaz.
+
 *CLI/CI erişimi*
 
 1.  CLI/CI için API anahtarı, tarayıcıda giriş yaptıktan sonra API ile oluşturulur: `POST /api/auth/api-keys`. Bu uç nokta yalnız oturum çereziyle çalışır (Bearer ile `403 forbidden`) ve izin verilen bir `Origin` başlığı ister: `http://127.0.0.1:<PORT>`, `http://localhost:<PORT>` veya `http://[::1]:<PORT>`. `Origin` yoksa ya da `null` ise istek `403 origin_rejected` alır; `Host` başlığı da aynı loopback adreslerinden biri olmalıdır (aksi halde `403 host_rejected`). Oturum çerezinin (`ossrisk_session`) değerini tarayıcının geliştirici araçlarından alın. İstek gövdesi isteğe bağlıdır ve yalnız en fazla 100 karakterlik bir `name` alanı alır:
@@ -117,10 +119,12 @@ npm start
 
 Tarama worker'ı `npm start` ile aynı süreçte çalışır ve Docker kullanmaz; uzak repo taraması için makinede `git` 2.32 veya üstü bulunmalıdır. Python gerekmez (REQ-003 P-10).
 
-- **Yeniden deneme ve süre sınırı (REQ-003 P-13):** Geçici hatalar (clone hatası veya clone zaman aşımı, veritabanı hatası, yarıda kalmış tarama) beklemeyle yeniden denenir: 30 sn, 60 sn, 120 sn, … en fazla 10 dk. Toplam deneme sayısı `scan.max_retries` ayarıdır (varsayılan 3, ilk deneme dahil). Kalıcı hatalar (token çözülemedi, geçersiz kaynak/ref, ayrıştırıcı çökmesi/bellek sınırı, süre sınırı) hemen `failed` olur. Bir taramanın toplam süresi `scan.timeout_minutes` ayarıyla sınırlıdır (varsayılan 60 dk); aşılırsa tarama `Tarama süre sınırını aştı (60 dk).` mesajıyla `failed` olur.
+- **Yeniden deneme ve süre sınırı (REQ-003 P-13):** Geçici hatalar (clone hatası veya clone zaman aşımı, veritabanı hatası, yarıda kalmış tarama) beklemeyle yeniden denenir: 30 sn, 60 sn, 120 sn, … en fazla 10 dk. Toplam deneme sayısı `scan.max_retries` ayarıdır (varsayılan 3, ilk deneme dahil). Kalıcı hatalar (token çözülemedi, geçersiz kaynak/ref, ayrıştırıcı çökmesi/bellek sınırı, süre sınırı, git yok veya 2.32'den eski) hemen `failed` olur. Bir taramanın toplam süresi `scan.timeout_minutes` ayarıyla sınırlıdır (varsayılan 60 dk); aşılırsa tarama `Tarama süre sınırını aştı (60 dk).` mesajıyla `failed` olur.
 
 - **Uzak repo:** Yalnız `https://` adresleri kabul edilir. `http`, SSH (`ssh://`, `git@host:yol`), `file://`, kullanıcı bilgisi içeren URL ve benzeri biçimler `400 repo_url_not_allowed` döner. Repo, `os.tmpdir()` altında `ossrisk-scan-*` adlı geçici bir klasöre sığ (`--depth 1`) olarak clone edilir ve tarama bitince (hata alsa bile) silinir. Özel repo token'ı URL'ye yazılmaz, git'e ortam üzerinden verilir. `ENCRYPTION_KEY` yoksa ya da token çözülemiyorsa tarama `failed` olur. Clone zaman aşımı `SCAN_CLONE_TIMEOUT_MS` ile ayarlanır (varsayılan 5 dk).
 - **Clone sertleştirmesi:** Git LFS dosyaları indirilmez (yalnız işaretçi dosyaları gelir, LFS filtreleri çalışmaz) ve HTTP yönlendirmeleri izlenmez; yönlendiren bir sunucu taramayı `failed` yapar. Erişim token'ı yalnız repo adresinin hostuna gönderilir. Token ortam değişkeniyle (`GIT_CONFIG_COUNT`) iletilir; desteklenen en düşük git sürümü 2.32'dir.
+- **Clone yalıtımı (REQ-003 N-1):** git, kullanıcının ve sistemin git yapılandırmasını, credential helper'ı, askpass programını, `.netrc` dosyasını ve kancaları görmez (iş başına boş `gitconfig`, `HOME` ve `hooks` klasörü). Git sürecine yalnız bir izin listesindeki ortam değişkenleri (`PATH`, `SystemRoot`, `TEMP` vb. ve vekil değişkenleri) aktarılır; diğer `GIT_*` değişkenleri ve sırlar aktarılmaz. Vekil/CA etkisi için yukarıdaki "Kurumsal vekil sunucu" notuna bakın.
+- **Hata mesajları (L-5):** Tarama ve rapor `error_message` alanı en fazla 2000 karakterdir; token, API anahtarı, URL içindeki kullanıcı bilgisi ve kontrol karakterleri silinir, geçici klasör / `SCAN_ROOTS` / kullanıcı profil yolları `<workspace>`, `<scan-root>`, `<temp>`, `<home>` ile değiştirilir.
 - **Yerel klasör:** Yalnız `SCAN_ROOTS` altındaki mutlak klasörler taranabilir. Liste `path.delimiter` ile ayrılır, yani Windows'ta `;` kullanılır (ör. `SCAN_ROOTS=C:\repos;D:\work`). `SCAN_ROOTS` tanımsız ya da boşsa hiçbir yerel yol taranamaz (`400 path_not_allowed`). Yollar `realpath` ile çözülür; `..`, junction ve symlink ile kök dışına çıkılamaz. Kontrol hem kayıt/tarama isteğinde hem worker taramayı başlatırken yapılır. Var olmayan bir kök uygulamanın başlangıçta açık bir hatayla durmasına yol açar.
 - **Ayrıştırıcılar:** Bağımlılık dosyaları TypeScript ayrıştırıcılarıyla (`src/scanner/parsers/`), tarama başına açılan bir `worker_threads` iş parçacığında okunur. İş parçacığının bellek sınırı 512 MiB'dir ve ortam değişkenlerini görmez. Sembolik bağlantı ve junction izlenmez, 32 MiB'den büyük dosya okunmaz; bu durumlar taramanın uyarılarına yazılır.
 - Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.

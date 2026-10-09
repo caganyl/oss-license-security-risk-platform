@@ -8,8 +8,9 @@
  *   `ENCRYPTION_KEY`, `NVD_API_KEY`, and the password inside `DATABASE_URL`)
  *   are replaced with `[REDACTED]`.
  *
- * The L-5 sanitizer of `scans.error_message` (ADR-002 Ek E3) is a separate,
- * later step; this module only guarantees that no secret reaches the log.
+ * The L-5 sanitizer of persisted error texts (`sanitizeErrorText` in
+ * `./errorText`, ADR-002 Ek E3) builds on `redactSecrets`; this module only
+ * guarantees that no secret reaches the log.
  */
 const SECRET_ENV_VARS = ['DATABASE_URL', 'PGPASSWORD', 'ENCRYPTION_KEY', 'NVD_API_KEY'] as const;
 const MIN_SECRET_LENGTH = 4;

@@ -7,7 +7,6 @@
  * the injected `exit` (forced-exit timer, lock taken over by another
  * instance); `src/main.ts` wires it to the real process.
  */
-import { spawn } from 'node:child_process';
 import type http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client, type Pool } from 'pg';
@@ -29,6 +28,7 @@ import { formatFatalError } from './lib/redact';
 import { createRunId } from './lib/runId';
 import { canonicalizeScanRoots, parseScanRoots } from './lib/scanSource';
 import { ExportWorker, type ExportWorkerDeps } from './reports/worker';
+import { describeGitVersion, getGitVersion, type GitVersionProvider } from './scanner/gitVersion';
 import { ScanWorker, type ScanWorkerDeps } from './scanner/worker';
 
 export type RuntimeLogger = Pick<Console, 'log' | 'warn' | 'error'>;
@@ -59,7 +59,6 @@ const STARTUP_CANCELLED_MESSAGE = 'Başlangıç kapanış isteğiyle iptal edild
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 15_000;
 export const DEFAULT_REPORT_DRAIN_MS = 10_000;
 export const DEFAULT_RELOCK_INTERVAL_MS = 5_000;
-const GIT_VERSION_TIMEOUT_MS = 10_000;
 
 export interface RuntimeOptions {
   /** Environment (default `process.env`): DATABASE_URL, SCAN_ROOTS, PORT, HOST. */
@@ -93,8 +92,14 @@ export interface RuntimeOptions {
   scanWorker?: Partial<Omit<ScanWorkerDeps, 'db' | 'scanRoots' | 'runId'>>;
   /** Injection points of the report worker (`reportService`, `config`, `logger`). */
   exportWorker?: Partial<Omit<ExportWorkerDeps, 'db'>>;
-  /** Step 5 (never stops the start-up). Default: `git --version`, warning when missing/older than 2.32. */
+  /** Step 5 (never stops the start-up). Default: `defaultCheckGit` with `gitVersion`. */
   checkGit?: (logger: RuntimeLogger) => Promise<void>;
+  /**
+   * Git version provider (default: the cached `git --version`, ADR-002 Ek E2)
+   * used by step 5 and by the scan worker's remote-scan gate, unless
+   * `scanWorker.gitVersion` is given.
+   */
+  gitVersion?: GitVersionProvider;
 }
 
 /** What `installProcessHandlers` needs from a runtime. */
@@ -216,7 +221,8 @@ class Runtime implements RuntimeHandle {
 
       // 5. Git version: informational, never stops the start-up (AC-T-3).
       try {
-        await (this.options.checkGit ?? defaultCheckGit)(this.logger);
+        if (this.options.checkGit) await this.options.checkGit(this.logger);
+        else await defaultCheckGit(this.logger, this.options.gitVersion ?? getGitVersion);
       } catch (err) {
         this.logger.warn(`git sürüm kontrolü yapılamadı (${errorCode(err)}).`);
       }
@@ -242,6 +248,9 @@ class Runtime implements RuntimeHandle {
         ...this.options.scanWorker,
         logger: this.options.scanWorker?.logger ?? this.logger,
         tmpRoot: this.options.scanWorker?.tmpRoot ?? this.options.tmpRoot,
+        ...(this.options.gitVersion && this.options.scanWorker?.gitVersion === undefined
+          ? { gitVersion: this.options.gitVersion }
+          : {}),
         db: pool,
         scanRoots,
         runId: this.runId,
@@ -490,49 +499,15 @@ function defaultCreatePool(connectionString: string, logger: RuntimeLogger): Poo
 }
 
 /**
- * Step 5 placeholder of ADR-002 Ek E2: asks `git --version` once (no shell,
- * 10 s) and logs it; warns when git is missing or older than 2.32. The cached
- * version provider and the permanent remote-scan failure belong to REQ-003
- * AC-T-3.
+ * Step 5 of ADR-004 Karar 2 / ADR-002 Ek E2: reads the (cached) git version
+ * through `provider` and logs it; a warning when git is missing or older than
+ * 2.32. Never throws a startup error: remote scans fail on their own
+ * (`GitUnavailableError`, AC-T-3), local scans are unaffected.
  */
-export async function defaultCheckGit(logger: RuntimeLogger): Promise<void> {
-  const output = await new Promise<string | null>((resolve) => {
-    let out = '';
-    let child;
-    try {
-      child = spawn('git', ['--version'], { shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-    } catch {
-      resolve(null);
-      return;
-    }
-    const timer = setTimeout(() => {
-      child.kill();
-      resolve(null);
-    }, GIT_VERSION_TIMEOUT_MS);
-    child.stdout?.on('data', (chunk: Buffer) => {
-      out += chunk.toString('utf8');
-    });
-    child.once('error', () => {
-      clearTimeout(timer);
-      resolve(null);
-    });
-    child.once('close', (code) => {
-      clearTimeout(timer);
-      resolve(code === 0 ? out.trim() : null);
-    });
-  });
-  const match = output ? /^git version (\d+)\.(\d+)/.exec(output) : null;
-  if (!match) {
-    logger.warn('git bulunamadı; uzak (https) taramalar çalışmayacak. Git for Windows 2.32 veya üstü kurun.');
-    return;
-  }
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  if (major < 2 || (major === 2 && minor < 32)) {
-    logger.warn(`git ${major}.${minor} eski; uzak taramalar için 2.32 veya üstü gerekli.`);
-    return;
-  }
-  logger.log(`git ${major}.${minor} bulundu.`);
+export async function defaultCheckGit(logger: RuntimeLogger, provider: GitVersionProvider = getGitVersion): Promise<void> {
+  const { level, message } = describeGitVersion(await provider());
+  if (level === 'warn') logger.warn(message);
+  else logger.log(message);
 }
 
 /** Creates a runtime without any I/O; call `start()` (after `installProcessHandlers`). */

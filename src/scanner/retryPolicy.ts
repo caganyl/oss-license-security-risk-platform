@@ -62,8 +62,8 @@ export function abortReasonOf(signal: AbortSignal | undefined): ScanAbortReason 
  * | parser thread crash / memory limit / `failed` result (`permanent = true`) | permanent |
  * | clone failure or clone timeout, database error, anything else | transient |
  *
- * (Git missing/older than 2.32 is a permanent error of REQ-003 AC-T-3; it will
- * carry `permanent = true` as well.)
+ * (Git missing/older than 2.32 is a permanent error of REQ-003 AC-T-3:
+ * `GitUnavailableError` in `gitVersion.ts` carries `permanent = true`.)
  */
 export function classifyScanFailure(err: unknown, signal?: AbortSignal): ScanFailureClass {
   const aborted = abortReasonOf(signal);

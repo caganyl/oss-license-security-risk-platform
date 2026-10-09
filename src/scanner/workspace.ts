@@ -2,7 +2,10 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { sanitizeErrorText } from '../lib/errorText';
 import { assertRemoteUrl } from '../lib/scanSource';
+
+export { scrubSecrets } from '../lib/errorText';
 
 /**
  * Scan workspace for remote repositories (REQ-002 P-03, ADR-002 karar 3): a
@@ -45,6 +48,36 @@ export function isValidRef(ref: string): boolean {
   return REF_RE.test(ref) && !ref.startsWith('-');
 }
 
+/** Per-job git isolation entries inside the workspace (ADR-002 Ek E1). */
+export interface GitIsolationPaths {
+  /** Empty file -> `GIT_CONFIG_GLOBAL`. */
+  gitConfig: string;
+  /** Empty folder -> `HOME` (no `.netrc`/`_netrc`, no `~/.gitconfig`). */
+  home: string;
+  /** `<home>/.config` -> `XDG_CONFIG_HOME` (need not exist). */
+  xdgConfigHome: string;
+  /** Empty folder -> `core.hooksPath`. */
+  hooks: string;
+}
+
+/** `<workspace>/{gitconfig,home,home/.config,hooks}`; `workspace` is the parent of the clone target. */
+export function gitIsolationPaths(workspace: string): GitIsolationPaths {
+  const home = path.join(workspace, 'home');
+  return {
+    gitConfig: path.join(workspace, 'gitconfig'),
+    home,
+    xdgConfigHome: path.join(home, '.config'),
+    hooks: path.join(workspace, 'hooks'),
+  };
+}
+
+export interface GitCloneArgsOptions {
+  /** `core.hooksPath` value. Default `<dirname(dest)>/hooks`. */
+  hooksDir?: string;
+  /** `win32` adds `http.sslBackend=schannel`. Default `process.platform`. */
+  platform?: NodeJS.Platform;
+}
+
 /**
  * Pure argument array for `git clone`; the token never appears here. `--`
  * ends option parsing before the URL and destination.
@@ -53,8 +86,15 @@ export function isValidRef(ref: string): boolean {
  * made optional so no LFS process runs and no LFS object is downloaded from
  * an attacker-chosen endpoint, and HTTP redirects are not followed so the
  * clone (and a token header) never leaves the requested host.
+ *
+ * Isolation (N-1, ADR-002 Ek E1, AC-T-1): hooks come only from an empty
+ * per-job folder, the askpass program is disabled, and on Windows the
+ * Windows certificate store (schannel) is used because the system config
+ * that points OpenSSL at Git's CA bundle is no longer read.
  */
-export function buildGitCloneArgs(url: string, ref: string | null, dest: string): string[] {
+export function buildGitCloneArgs(url: string, ref: string | null, dest: string, options: GitCloneArgsOptions = {}): string[] {
+  const hooksDir = options.hooksDir ?? gitIsolationPaths(path.dirname(dest)).hooks;
+  const platform = options.platform ?? process.platform;
   const args = [
     '-c', 'core.symlinks=false',
     '-c', 'core.longpaths=true',
@@ -64,8 +104,11 @@ export function buildGitCloneArgs(url: string, ref: string | null, dest: string)
     '-c', 'filter.lfs.process=',
     '-c', 'filter.lfs.required=false',
     '-c', 'http.followRedirects=false',
-    'clone', '--depth', '1', '--single-branch', '--no-tags',
+    '-c', `core.hooksPath=${hooksDir}`,
+    '-c', 'core.askPass=',
   ];
+  if (platform === 'win32') args.push('-c', 'http.sslBackend=schannel');
+  args.push('clone', '--depth', '1', '--single-branch', '--no-tags');
   if (ref !== null) {
     if (!isValidRef(ref)) throw new InvalidRefError();
     args.push('--branch', ref);
@@ -74,28 +117,37 @@ export function buildGitCloneArgs(url: string, ref: string | null, dest: string)
   return args;
 }
 
-const SECRET_ENV_RE = /SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|ENCRYPTION_KEY|API_KEY|DATABASE_URL|PGPASS/i;
+/** System variables passed to git unchanged (ADR-002 Ek E1 table, row 1). */
+export const GIT_ENV_PASSTHROUGH: readonly string[] = [
+  'PATH', 'PATHEXT', 'SystemRoot', 'windir', 'SystemDrive', 'ComSpec',
+  'TEMP', 'TMP', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS',
+];
+
+/** Proxy variables passed to git unchanged, both letter cases (row 2; libcurl reads them). */
+export const GIT_PROXY_ENV: readonly string[] = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'NO_PROXY', 'no_proxy'];
 
 /**
- * Environment for child processes that handle untrusted repository content
- * (git, dependency parser): the parent environment minus database/encryption
- * secrets, which those processes never need.
+ * Allowlisted part of the parent environment for any git process: only
+ * `GIT_ENV_PASSTHROUGH` and `GIT_PROXY_ENV`, original key spelling kept
+ * (Windows has `Path`). On `win32` names match case-insensitively. Nothing
+ * else (`GIT_*`, `SSH_ASKPASS`, `CURL_CA_BUNDLE`, `USERPROFILE`, secrets) passes.
  */
-export function sanitizedChildEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !SECRET_ENV_RE.test(key)) env[key] = value;
+export function buildGitBaseEnv(parentEnv: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  const windows = platform === 'win32';
+  const allowed = [...GIT_ENV_PASSTHROUGH, ...GIT_PROXY_ENV];
+  const allowedSet = new Set(windows ? allowed.map((n) => n.toUpperCase()) : allowed);
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parentEnv)) {
+    if (typeof value !== 'string') continue;
+    if (allowedSet.has(windows ? key.toUpperCase() : key)) env[key] = value;
   }
-  return { ...env, ...extra };
+  return env;
 }
 
-/** Replaces every occurrence of the given secret forms with `[REDACTED]`. */
-export function scrubSecrets(text: string, secrets: readonly string[]): string {
-  let scrubbed = text;
-  for (const secret of secrets) {
-    if (secret) scrubbed = scrubbed.split(secret).join('[REDACTED]');
-  }
-  return scrubbed;
+/** Token and the repository it is sent to (header scope and Basic user name). */
+export interface GitCredential {
+  url: string;
+  token: string;
 }
 
 /** Basic-auth user name expected by the provider for a token (ADR-002 karar 3). */
@@ -116,47 +168,124 @@ function headerScopeFor(url: string): string {
   return `${parsed.protocol}//${parsed.host}/`;
 }
 
-/**
- * Real shallow clone with a single `spawn('git', args, { shell: false })`.
- * The token travels only through git's environment configuration as one
- * host-scoped `http.<https://host/>.extraHeader` (GIT_CONFIG_*), never in the
- * URL, the argument list or `.git/config`; captured stderr is scrubbed of both
- * the raw and the base64 form. LFS smudge is skipped (GIT_LFS_SKIP_SMUDGE) in
- * addition to the emptied filters in `buildGitCloneArgs`.
- */
-export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
-  signal?.throwIfAborted();
-  assertRemoteUrl(url);
-  const args = buildGitCloneArgs(url, ref, dest);
+/** Basic base64 form of the token as sent in the header. */
+function basicAuthValue(credential: GitCredential): string {
+  return Buffer.from(`${tokenUserFor(credential.url)}:${credential.token}`, 'utf8').toString('base64');
+}
 
-  const gitEnv: Record<string, string> = {
+/** Every form in which the token can appear in git output: raw and Basic base64. */
+export function gitTokenSecretForms(credential: GitCredential | null): string[] {
+  if (!credential || !credential.token) return [];
+  return [credential.token, basicAuthValue(credential)];
+}
+
+/**
+ * Complete, pure environment of the clone process (ADR-002 Ek E1, AC-T-1):
+ * the allowlisted parent part plus the application's values. The parent
+ * environment is never copied wholesale. With a credential, exactly one
+ * host-scoped `http.<https://host/>.extraHeader` travels via GIT_CONFIG_*
+ * (never argv); without one `GIT_CONFIG_COUNT=0`.
+ */
+export function buildGitEnv(
+  parentEnv: NodeJS.ProcessEnv,
+  workspace: string,
+  credential: GitCredential | null,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  const paths = gitIsolationPaths(workspace);
+  const env: Record<string, string> = {
+    ...buildGitBaseEnv(parentEnv, platform),
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: paths.gitConfig,
+    HOME: paths.home,
+    XDG_CONFIG_HOME: paths.xdgConfigHome,
     GIT_TERMINAL_PROMPT: '0',
     GCM_INTERACTIVE: 'never',
     GIT_ALLOW_PROTOCOL: 'https',
     GIT_LFS_SKIP_SMUDGE: '1',
-    // Overrides any inherited GIT_CONFIG_* so no stray header/config leaks in.
     GIT_CONFIG_COUNT: '0',
   };
-  const secrets: string[] = [];
-  if (token) {
-    const basic = Buffer.from(`${tokenUserFor(url)}:${token}`, 'utf8').toString('base64');
-    gitEnv.GIT_CONFIG_COUNT = '1';
-    gitEnv.GIT_CONFIG_KEY_0 = `http.${headerScopeFor(url)}.extraHeader`;
-    gitEnv.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${basic}`;
-    secrets.push(token, basic);
+  if (credential && credential.token) {
+    env.GIT_CONFIG_COUNT = '1';
+    env.GIT_CONFIG_KEY_0 = `http.${headerScopeFor(credential.url)}.extraHeader`;
+    env.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${basicAuthValue(credential)}`;
   }
+  return env;
+}
+
+/**
+ * Creates the empty isolation entries (`gitconfig`, `home/`, `hooks/`) when
+ * the workspace folder exists (the worker's `withTempWorkspace` always
+ * creates it). Without them git still stays isolated: a missing
+ * `GIT_CONFIG_GLOBAL` file is read as empty and never falls back to `~`.
+ */
+async function prepareGitIsolation(workspace: string): Promise<void> {
+  let isDir = false;
+  try {
+    isDir = (await fs.promises.stat(workspace)).isDirectory();
+  } catch {
+    return;
+  }
+  if (!isDir) return;
+  const paths = gitIsolationPaths(workspace);
+  await fs.promises.mkdir(paths.home, { recursive: true });
+  await fs.promises.mkdir(paths.hooks, { recursive: true });
+  await fs.promises.writeFile(paths.gitConfig, '', { flag: 'w' });
+}
+
+/**
+ * Tail buffer of captured stderr: once the head was cut, the first (partial)
+ * line is dropped so a token cut in half never escapes `scrubSecrets`
+ * (ADR-002 Ek E3).
+ */
+function appendStderrTail(buffer: { text: string; truncated: boolean }, chunk: string): void {
+  let text = buffer.text + chunk;
+  if (text.length > MAX_CAPTURED_STDERR) {
+    text = text.slice(-MAX_CAPTURED_STDERR);
+    buffer.truncated = true;
+  }
+  buffer.text = text;
+}
+
+function finalStderr(buffer: { text: string; truncated: boolean }): string {
+  if (!buffer.truncated) return buffer.text;
+  const newline = buffer.text.indexOf('\n');
+  return newline === -1 ? '' : buffer.text.slice(newline + 1);
+}
+
+/**
+ * Real shallow clone with a single `spawn('git', args, { shell: false })`.
+ * The environment is built from an allowlist (`buildGitEnv`), so no user or
+ * system git config, credential helper, askpass, `.netrc` or inherited
+ * `GIT_*` variable reaches the clone (N-1, AC-T-1). The token travels only
+ * through git's environment configuration as one host-scoped
+ * `http.<https://host/>.extraHeader` (GIT_CONFIG_*), never in the URL, the
+ * argument list or `.git/config`; captured stderr is sanitized (raw and base64
+ * token, workspace path; ADR-002 Ek E3). LFS smudge is skipped
+ * (GIT_LFS_SKIP_SMUDGE) in addition to the emptied filters in `buildGitCloneArgs`.
+ */
+export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
+  signal?.throwIfAborted();
+  assertRemoteUrl(url);
+  const workspace = path.dirname(dest);
+  const paths = gitIsolationPaths(workspace);
+  const args = buildGitCloneArgs(url, ref, dest, { hooksDir: paths.hooks });
+  const credential: GitCredential | null = token ? { url, token } : null;
+  const secrets = gitTokenSecretForms(credential);
+  const env = buildGitEnv(process.env, workspace, credential);
+  await prepareGitIsolation(workspace);
 
   const timeoutMs = Number(process.env.SCAN_CLONE_TIMEOUT_MS) || DEFAULT_CLONE_TIMEOUT_MS;
   const child = spawn('git', args, {
     shell: false,
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'pipe'],
-    env: sanitizedChildEnv(gitEnv),
+    env,
   });
 
-  let stderr = '';
+  const stderrBuffer = { text: '', truncated: false };
   child.stderr?.on('data', (chunk: Buffer) => {
-    stderr = (stderr + chunk.toString('utf8')).slice(-MAX_CAPTURED_STDERR);
+    appendStderrTail(stderrBuffer, chunk.toString('utf8'));
   });
 
   let timedOut = false;
@@ -193,7 +322,14 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
   if (signal?.aborted) throw signal.reason;
   if (timedOut) throw new Error(`git clone timed out after ${Math.round(timeoutMs / 1000)} s`);
   if (exitCode !== 0) {
-    const detail = scrubSecrets(stderr, secrets).trim().slice(-MAX_ERROR_DETAIL);
+    // Sanitize the whole captured text first, then keep its tail (git's
+    // `fatal:` line is last): a cut never splits a secret or a path.
+    const sanitized = sanitizeErrorText(finalStderr(stderrBuffer), {
+      secrets,
+      workspaceDirs: [workspace],
+      maxChars: Number.POSITIVE_INFINITY,
+    }).trim();
+    const detail = Array.from(sanitized).slice(-MAX_ERROR_DETAIL).join('');
     throw new Error(`git clone failed (exit code ${exitCode})${detail ? `: ${detail}` : ''}`);
   }
 };

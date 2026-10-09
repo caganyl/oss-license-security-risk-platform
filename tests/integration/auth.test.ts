@@ -618,7 +618,7 @@ describe('P-01 identity on written records (AC-P01-8, AC-P01-17)', () => {
     const a = await app();
     const cookie = await setupPassword(a);
     const [user] = await db.query<{ id: string }>('SELECT id FROM users');
-    const proj = await req(a, 'post', '/api/projects', { cookie }).send({ name: 'owner-test' });
+    const proj = await req(a, 'post', '/api/projects', { cookie }).send({ name: 'owner-test', repoUrl: 'https://github.com/example/repo.git' }); // a source is required by D-20 / AC-P03-11
     expect(proj.status).toBe(201);
     const scan = await req(a, 'post', '/api/scans', { cookie }).send({ projectId: proj.body.data.id });
     expect(scan.status).toBe(201);

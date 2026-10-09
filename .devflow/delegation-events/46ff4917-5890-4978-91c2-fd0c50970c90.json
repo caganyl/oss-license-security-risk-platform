@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "46ff4917-5890-4978-91c2-fd0c50970c90",
+  "timestamp": "2026-10-09T14:18:45Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStop",
+  "lifecycle_state": "stopped",
+  "agent_type": "devflow-plugin:integration-release",
+  "evidence_source": "native_hook_event"
+}

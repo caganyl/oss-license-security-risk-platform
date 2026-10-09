@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { pool as defaultPool } from '../lib/db';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
@@ -14,7 +14,8 @@ import {
   sweepStaleWorkspaces,
   withTempWorkspace,
 } from './workspace';
-import type { SandboxScanResult } from '../types/scan';
+import { isRuntimeScope, type SandboxScanResult } from '../types/scan';
+import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import {
   normalizeLegacyVulnerability,
@@ -86,6 +87,32 @@ export interface ScanWorkerDeps {
   scanRoots: string[];
   tmpRoot: string;
   logger: WorkerLogger;
+}
+
+/** normalized_license of a runtime package whose license could not be found (AC-P06-1). */
+const NO_ASSERTION = 'NOASSERTION';
+
+interface NewFinding {
+  scanId: string;
+  projectId: string;
+  scanDependencyId: string;
+  findingType: 'license' | 'security';
+  fingerprint: string;
+}
+
+interface CarriedDecision {
+  findingId: string;
+  status: 'false_positive' | 'accepted';
+  reviewId: string;
+}
+
+interface StoredVulnerability {
+  id: string;
+  severity: VulnerabilitySeverity;
+  cvssScore: number | null;
+  osvId: string | null;
+  ghsaId: string | null;
+  cveId: string | null;
 }
 
 /** Deterministic failure (invalid source, ref or token): the scan fails without retry. */
@@ -483,29 +510,42 @@ export class ScanWorker {
         slaDays[severity] = Number(row.value);
       }
 
+      // One finding per fingerprint per scan (ADR-003 c, AC-P08-2): the same
+      // package in several manifests stays in the inventory but is reported once.
+      const seenFingerprints = new Set<string>();
+      const openFinding = (spec: Omit<NewFinding, 'scanId' | 'projectId' | 'scanDependencyId'>, scanDependencyId: string) =>
+        this.insertFinding(client, seenFingerprints, { ...spec, scanId, projectId, scanDependencyId });
+
       // Process dependencies
       for (const dep of result.dependencies) {
-        // Insert package (deduplicated)
-        const pkgResult = await client.query(
+        const scope = dep.scope || 'direct';
+        // packages.version holds only an exact version; unknown -> NULL (ADR-003 a).
+        const version = dep.version === null || dep.version === undefined || dep.version === '' ? null : dep.version;
+
+        // Insert package (deduplicated). purl is a deterministic function of
+        // (ecosystem, normalised name, version), so it is the conflict target;
+        // this also covers the versionless partial unique index.
+        const pkgResult = await client.query<{ id: string; purl: string; version: string | null }>(
           `
           INSERT INTO packages (ecosystem, name, version, purl)
           VALUES ($1, $2, $3, $4)
-          ON CONFLICT (ecosystem, name, version) DO UPDATE SET purl = EXCLUDED.purl
-          RETURNING id
+          ON CONFLICT (purl) DO UPDATE SET purl = EXCLUDED.purl
+          RETURNING id, purl, version
           `,
-          [dep.ecosystem, dep.name, dep.version, dep.purl]
+          [dep.ecosystem, dep.name, version, dep.purl]
         );
-        const packageId = pkgResult.rows[0].id;
+        const pkg = pkgResult.rows[0];
+        const packageId = pkg.id;
 
-        // Insert scan dependency
+        // Insert scan dependency; the declared range is a per-manifest fact.
         const depResult = await client.query(
           `
-          INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth)
-          VALUES ($1, $2, $3, $4, $5, 0)
+          INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range)
+          VALUES ($1, $2, $3, $4, $5, 0, $6)
           ON CONFLICT (scan_id, package_id, manifest_path, scope) DO NOTHING
           RETURNING id
           `,
-          [scanId, packageId, dep.scope || 'direct', dep.manifest_file, dep.manifest_path]
+          [scanId, packageId, scope, dep.manifest_file, dep.manifest_path, dep.declared_range ?? null]
         );
 
         let scanDepId: string;
@@ -517,13 +557,37 @@ export class ScanWorker {
             SELECT id FROM scan_dependencies
             WHERE scan_id = $1 AND package_id = $2 AND manifest_path = $3 AND scope = $4
             `,
-            [scanId, packageId, dep.manifest_path, dep.scope || 'direct']
+            [scanId, packageId, dep.manifest_path, scope]
           );
           scanDepId = getDepId.rows[0].id;
         }
 
+        // License policy applies to runtime scope only (ADR-003 b, AC-P07-1…3):
+        // a dev package stays in the inventory but is never a violation.
+        const runtime = isRuntimeScope(scope);
+
+        if (runtime && (!dep.licenses || dep.licenses.length === 0)) {
+          // No license found for a runtime package -> "unknown" finding (AC-P06-1).
+          const opened = await openFinding({
+            findingType: 'license',
+            fingerprint: computeFindingFingerprint({
+              projectId, purl: pkg.purl, version: pkg.version, findingType: 'license', normalizedLicense: NO_ASSERTION,
+            }),
+          }, scanDepId);
+          if (opened) {
+            licenseViolations++;
+            await client.query(
+              `
+              INSERT INTO license_findings (finding_id, license_id, detected_license, normalized_license, risk_level, applied_policy)
+              VALUES ($1, NULL, NULL, $2, 'unknown', NULL)
+              `,
+              [opened, NO_ASSERTION]
+            );
+          }
+        }
+
         // Process licenses and evaluate policy risk
-        if (dep.licenses && dep.licenses.length > 0) {
+        if (runtime && dep.licenses && dep.licenses.length > 0) {
           for (const rawLicense of dep.licenses) {
             const norm = normalizeLicense(rawLicense);
 
@@ -569,17 +633,14 @@ export class ScanWorker {
               (!policy && (riskLevel === 'high' || riskLevel === 'critical' || riskLevel === 'unknown'));
 
             if (isViolation) {
+              const findingId = await openFinding({
+                findingType: 'license',
+                fingerprint: computeFindingFingerprint({
+                  projectId, purl: pkg.purl, version: pkg.version, findingType: 'license', normalizedLicense,
+                }),
+              }, scanDepId);
+              if (!findingId) continue;
               licenseViolations++;
-
-              const findResult = await client.query(
-                `
-                INSERT INTO findings (scan_id, scan_dependency_id, finding_type, status)
-                VALUES ($1, $2, 'license', 'open')
-                RETURNING id
-                `,
-                [scanId, scanDepId]
-              );
-              const findingId = findResult.rows[0].id;
 
               await client.query(
                 `
@@ -596,7 +657,9 @@ export class ScanWorker {
         const lookedUpVulnerabilities = vulnerabilityLookup.get(lookupKey) || [];
         const legacyVulnerabilities = (dep.vulnerabilities || [])
           .map((vuln) => normalizeLegacyVulnerability(vuln, dep));
-        const vulnerabilities = mergeVulnerabilities([
+        // No vulnerability matching without an exact version (ADR-003 a): a range
+        // would flood the results with false positives.
+        const vulnerabilities = version === null ? [] : mergeVulnerabilities([
           ...lookedUpVulnerabilities,
           ...legacyVulnerabilities,
         ]);
@@ -604,13 +667,24 @@ export class ScanWorker {
         // Process vulnerabilities and generate security findings
         if (vulnerabilities.length > 0) {
           for (const vuln of vulnerabilities) {
-            totalVulns++;
-
             const storedVuln = await this.upsertVulnerability(client, vuln);
             const vulnId = storedVuln.id;
             const severity = storedVuln.severity;
             const cvssScore = storedVuln.cvssScore;
 
+            const findingId = await openFinding({
+              findingType: 'security',
+              fingerprint: computeFindingFingerprint({
+                projectId,
+                purl: pkg.purl,
+                version: pkg.version,
+                findingType: 'security',
+                vulnerability: { id: vulnId, osvId: storedVuln.osvId, ghsaId: storedVuln.ghsaId, cveId: storedVuln.cveId },
+              }),
+            }, scanDepId);
+            if (!findingId) continue;
+
+            totalVulns++;
             if (severity === 'critical') criticalVulns++;
             else if (severity === 'high') highVulns++;
             else if (severity === 'medium') mediumVulns++;
@@ -619,16 +693,6 @@ export class ScanWorker {
             const days = slaDays[severity] ?? 90;
             const slaDeadline = new Date();
             slaDeadline.setDate(slaDeadline.getDate() + days);
-
-            const findResult = await client.query(
-              `
-              INSERT INTO findings (scan_id, scan_dependency_id, finding_type, status)
-              VALUES ($1, $2, 'security', 'open')
-              RETURNING id
-              `,
-              [scanId, scanDepId]
-            );
-            const findingId = findResult.rows[0].id;
 
             const fixVersion = vuln.fixedVersion;
             const fixAvailable = Boolean(vuln.fixedVersion);
@@ -713,9 +777,9 @@ export class ScanWorker {
   }
 
   private async upsertVulnerability(
-    client: any,
+    client: PoolClient,
     vuln: NormalizedVulnerability
-  ): Promise<{ id: string; severity: VulnerabilitySeverity; cvssScore: number | null }> {
+  ): Promise<StoredVulnerability> {
     const identifiers = Array.from(new Set([
       vuln.cveId,
       vuln.ghsaId,
@@ -739,10 +803,13 @@ export class ScanWorker {
     );
 
     let vulnerabilityId: string;
+    // The identifiers as stored (COALESCE keeps older values): the fingerprint
+    // must use the same columns as the SQL backfill.
+    let storedIds: { osv_id: string | null; ghsa_id: string | null; cve_id: string | null };
 
     if (existing.rows.length > 0) {
       vulnerabilityId = existing.rows[0].id;
-      await client.query(
+      const updated = await client.query(
         `
         UPDATE vulnerabilities
         SET cve_id = COALESCE(vulnerabilities.cve_id, $2),
@@ -765,6 +832,7 @@ export class ScanWorker {
             source_url = $18,
             updated_at = NOW()
         WHERE id = $1
+        RETURNING osv_id, ghsa_id, cve_id
         `,
         [
           vulnerabilityId,
@@ -787,6 +855,7 @@ export class ScanWorker {
           vuln.sourceUrl,
         ]
       );
+      storedIds = updated.rows[0];
     } else {
       const inserted = await client.query(
         `
@@ -797,7 +866,7 @@ export class ScanWorker {
           advisory_data, source, source_url
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, 'osv', $17)
-        RETURNING id
+        RETURNING id, osv_id, ghsa_id, cve_id
         `,
         [
           vuln.cveId,
@@ -820,6 +889,7 @@ export class ScanWorker {
         ]
       );
       vulnerabilityId = inserted.rows[0].id;
+      storedIds = inserted.rows[0];
     }
 
     for (const alias of identifiers) {
@@ -845,7 +915,90 @@ export class ScanWorker {
       id: vulnerabilityId,
       severity: vuln.severity,
       cvssScore: vuln.cvssScore,
+      osvId: storedIds.osv_id,
+      ghsaId: storedIds.ghsa_id,
+      cveId: storedIds.cve_id,
     };
+  }
+
+  /**
+   * Inserts a finding with its fingerprint unless one with the same
+   * fingerprint was already opened in this scan (returns null then).
+   * Decision carry-over (ADR-003 c): the latest finding of the same project
+   * with the same fingerprint from another scan decides the initial status —
+   * false_positive and an unexpired risk acceptance (accepted_until >=
+   * CURRENT_DATE) are carried with a copy of their review; an expired or
+   * open-ended acceptance, wont_fix and every other status open a new `open`
+   * finding and leave the old one untouched.
+   */
+  private async insertFinding(client: PoolClient, seen: Set<string>, finding: NewFinding): Promise<string | null> {
+    if (seen.has(finding.fingerprint)) return null;
+    seen.add(finding.fingerprint);
+
+    const carry = await this.findCarriedDecision(client, finding);
+    const inserted = await client.query<{ id: string }>(
+      `
+      INSERT INTO findings (scan_id, scan_dependency_id, finding_type, status, fingerprint, carried_from_finding_id)
+      VALUES ($1, $2, $3::finding_type, $4::finding_status, $5, $6)
+      RETURNING id
+      `,
+      [
+        finding.scanId,
+        finding.scanDependencyId,
+        finding.findingType,
+        carry ? carry.status : 'open',
+        finding.fingerprint,
+        carry ? carry.findingId : null,
+      ]
+    );
+    const findingId = inserted.rows[0].id;
+
+    if (carry) {
+      await client.query(
+        `
+        INSERT INTO finding_reviews (finding_id, decision, reviewer_id, accepted_until, target_version, notes)
+        SELECT $1, decision, reviewer_id, accepted_until, target_version, $3
+        FROM finding_reviews
+        WHERE id = $2
+        `,
+        [findingId, carry.reviewId, `${carry.findingId} bulgusundan taşındı`]
+      );
+    }
+    return findingId;
+  }
+
+  private async findCarriedDecision(client: PoolClient, finding: NewFinding): Promise<CarriedDecision | null> {
+    // project_id is part of the fingerprint; the scans join is a defensive filter.
+    const previous = await client.query<{ id: string; status: string }>(
+      `
+      SELECT f.id, f.status::text AS status
+      FROM findings f
+      JOIN scans s ON s.id = f.scan_id
+      WHERE f.fingerprint = $1 AND s.project_id = $2 AND f.scan_id <> $3
+      ORDER BY f.created_at DESC, s.created_at DESC
+      LIMIT 1
+      `,
+      [finding.fingerprint, finding.projectId, finding.scanId]
+    );
+    const last = previous.rows[0];
+    if (!last || (last.status !== 'false_positive' && last.status !== 'accepted')) return null;
+
+    const decision = last.status === 'false_positive' ? 'false_positive' : 'accept_risk';
+    const review = await client.query<{ id: string; still_valid: boolean }>(
+      `
+      SELECT id, (accepted_until IS NOT NULL AND accepted_until >= CURRENT_DATE) AS still_valid
+      FROM finding_reviews
+      WHERE finding_id = $1 AND decision = $2::review_decision
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [last.id, decision]
+    );
+    const source = review.rows[0];
+    // A closed status without its review has no auditable reason: do not carry.
+    if (!source) return null;
+    if (decision === 'accept_risk' && !source.still_valid) return null;
+    return { findingId: last.id, status: last.status as 'false_positive' | 'accepted', reviewId: source.id };
   }
 
   private async handleScanFailure(

@@ -58,6 +58,13 @@ Tarama worker'ı (`npm run worker`) Docker kullanmaz; makinede `git` ve Python 3
 - **Python:** Ayrıştırıcılar `PYTHON_BIN` ile çağrılır. Varsayılan değer Windows'ta `python`, diğer sistemlerde `python3`'tür. Windows'taki Microsoft Store `python3` takma adı çalışmaz; gerekirse tam yolu verin.
 - Kaynak çözümlenemezse tarama `failed` olur. Platform klasörüne (`.`) geri dönüş yapılmaz.
 
+**Bulgular ve kararlar (REQ-002 P-05…P-08)**
+
+- **Kilit dosyası yoksa:** Paketin kesin sürümü bilinmez. Sürüm boş (`NULL`) kalır, purl sürümsüz yazılır (`pkg:npm/lodash`), manifestteki aralık (`^4.17.0`, `>=2,<3`) taranan bağımlılığın `declared_range` alanında manifest başına saklanır. Sürümü bilinmeyen paket için güvenlik açığı sorgusu yapılmaz; doğru sonuç için `package-lock.json`/`yarn.lock`/`poetry.lock` ekleyin veya sürümü `==` ile sabitleyin.
+- **Geliştirme kapsamı:** `devDependencies`, `requirements-dev.txt`/`requirements-test.txt` ve Poetry grupları `dev` kapsamıyla envantere girer ama lisans ihlali sayılmaz. `direct`, `transitive`, `peer` ve `optional` çalışma zamanı (runtime) kapsamıdır.
+- **Lisansı bilinmeyen paket:** Lisansı bulunamayan runtime paket için `unknown` riskli lisans bulgusu (`NOASSERTION`) açılır; `dev` paket için açılmaz.
+- **Kararların taşınması:** Her bulgunun proje, paket ve bulgu türünden türetilen bir parmak izi vardır (lisansta sürümsüz, güvenlik açığında sürümlü). Sonraki taramada aynı parmak izli bulgu, önceki karar false positive ya da süresi geçmemiş risk kabulü ise o durumla açılır. Süresi geçmiş kabul ve `wont_fix` taşınmaz; bulgu `open` açılır. Güvenlik kararları paket sürümü değişince yeniden değerlendirilir, lisans kararları sürüm yükseltmesinde korunur.
+
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 
 _Agentic Development Orchestrator ile oluşturuldu._

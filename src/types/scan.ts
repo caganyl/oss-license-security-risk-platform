@@ -40,11 +40,23 @@ export type DependencyScope =
   | 'peer'
   | 'optional';
 
+/**
+ * Runtime scope (ADR-003 b): everything except `dev`. `peer` and `optional`
+ * are installed and run in production, so they count as runtime.
+ */
+export function isRuntimeScope(scope: DependencyScope | null | undefined): boolean {
+  return scope !== 'dev';
+}
+
 /** Raw dependency record produced by the sandbox scanner entrypoint. */
 export interface ScannedDependency {
   ecosystem: TechEcosystem;
   name: string;
-  version: string;
+  /** Exact resolved version, or null when only a range is known (no lock file). */
+  version: string | null;
+  /** Range declared in the manifest (`^4.17.0`, `>=2,<3`), if any. */
+  declared_range?: string | null;
+  /** Carries a version only when `version` is exact (ADR-003 a). */
   purl: string;
   scope?: DependencyScope;
   licenses?: string[];

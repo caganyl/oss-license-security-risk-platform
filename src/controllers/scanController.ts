@@ -31,6 +31,11 @@ export class ScanController {
 
   createScan = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Initiator is always the authenticated user; there is no fallback identity (AC-P01-17).
+      const user = req.user;
+      if (!user) {
+        throw Object.assign(new Error('Authentication required'), { statusCode: 401 });
+      }
       const { projectId, ref, refType, trigger } = req.body;
       if (!projectId || typeof projectId !== 'string') {
         throw Object.assign(new Error('projectId is required'), { statusCode: 400 });
@@ -51,14 +56,14 @@ export class ScanController {
         trigger || 'manual',
         ref || 'main',
         refType || 'branch',
-        req.user?.id || '00000000-0000-0000-0000-000000000000'
+        user.id
       ]);
 
       // Write audit
       await this.db.query(
         `INSERT INTO audit_logs (action, actor_id, actor_email, entity_type, entity_id, new_data, occurred_at)
          VALUES ('scan_started', $1, $2, 'scan', $3, $4, NOW())`,
-        [req.user?.id || null, req.user?.email || null, result.rows[0].id, JSON.stringify(result.rows[0])]
+        [user.id, user.email, result.rows[0].id, JSON.stringify(result.rows[0])]
       ).catch(err => console.error('Failed to write audit log:', err));
 
       res.status(201).json({ data: result.rows[0] });

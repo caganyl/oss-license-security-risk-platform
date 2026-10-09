@@ -39,4 +39,16 @@ Sistemin tüm gereksinimleri fonksiyonel, fonksiyonel olmayan ve güvenlik olmak
 *   **BOM ve SBOM Standartları:** Platform, uluslararası standart haline gelen ve ISO/IEC 5962:2021 olarak bilinen açık kaynaklı **SPDX** (JSON ve Tag/Value formatları) ile OWASP tarafından desteklenen tedarik zinciri odaklı genişletilmiş **CycloneDX** (JSON ve XML formatları) formatlarını kullanacak ve üretecektir [3, 25].
 *   **Entegrasyon Teknolojileri:** Kaynak kod yönetimi için ilk etapta **GitHub, GitLab, Azure DevOps** ve lokal dosya yükleme (Local upload) kullanılacaktır [26]. Gelecek fazlarda Bitbucket eklenecektir [26]. CI/CD otomasyon testleri için GitHub Actions, Azure DevOps Pipeline, GitLab CI ve Jenkins kullanılacaktır [27]. İletişim ve iş takibi adına Microsoft Teams, Slack, Jira ve ServiceNow ile entegre çalışacaktır [26].
 
+**Yerel Kurulum (tek kullanıcı, REQ-002 F1)**
+
+Uygulama F1'de tek yerel kullanıcı modeliyle çalışır: API varsayılan olarak yalnız `127.0.0.1` üzerinde dinler, giriş tek bir yerel parola ve oturum çereziyle yapılır, CLI/CI erişimi için API anahtarı üretilir.
+
+1.  `.env.example` dosyasını `.env` olarak kopyalayın ve değerleri yalnız yerel `.env` içinde doldurun (`.env` git'e girmez). Parola gibi gizli değerler bağlantı URL'sine yazılmaz: `DATABASE_URL` parolasız tutulur (`postgres://<kullanici>@localhost:5432/<veritabani>`), parola `PGPASSWORD` ile verilir. Docker Compose için `POSTGRES_PASSWORD` zorunludur; `ENCRYPTION_KEY` yalnız şifreli repository token'ı çözülürken gerekir.
+2.  Veritabanını başlatın ve migration'ları uygulayın (`docker compose up -d db`, ardından `db/README.md`).
+3.  `npm install`, `npm run build`, `npm start`. `DATABASE_URL` tanımlı değilse API değerini yazmadan anlaşılır bir hatayla başlamaz.
+4.  Tarayıcıda `http://127.0.0.1:3001` adresini açın. İlk açılışta parola belirleme (setup) formu gelir; en az 12 karakterlik parola belirledikten sonra oturum otomatik açılır. Sonraki açılışlarda aynı parolayla giriş yapılır.
+5.  CLI/CI için arayüzden bir API anahtarı oluşturun ve isteklerde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Anahtar yalnız oluşturulduğu anda bir kez gösterilir; yeni anahtar öncekini iptal eder.
+
+Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
+
 _Agentic Development Orchestrator ile oluşturuldu._

@@ -1,7 +1,21 @@
 import 'dotenv/config';
 import express from 'express';
+import http from 'http';
 import path from 'path';
-import pool from './lib/db';
+import type { Pool } from 'pg';
+import { assertRequiredEnv, isLoopbackHost, resolveHost, resolvePort } from './config/env';
+import { AuthController } from './controllers/authController';
+import { LoginThrottle } from './lib/loginThrottle';
+import { statusLabel } from './lib/httpError';
+import { authenticate } from './middleware/authenticate';
+import { apiNotFound, errorHandler } from './middleware/errorHandler';
+import {
+  buildAllowedOrigins,
+  requireAllowedHost,
+  requireSameOrigin,
+  requireSameOriginForSessionWrites,
+} from './middleware/requestGuards';
+import { createAuthRouter, createPublicAuthRouter } from './routes/authRoutes';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
 import createReportRouter from './routes/reportRoutes';
@@ -9,47 +23,124 @@ import createWorkflowRouter from './routes/workflowRoutes';
 import createProjectRouter from './routes/projectRoutes';
 import createScanRouter from './routes/scanRoutes';
 
-const app = express();
-const port = process.env.PORT || 3001;
+export interface AppDeps {
+  /** Required; the app never falls back to the global pool. */
+  db: Pool;
+  /** Port for the Host/Origin allow-list and for listen (default: PORT env or 3001). */
+  port?: number;
+  /** Bind host, also allowed in Host/Origin (default: HOST env or 127.0.0.1). */
+  host?: string;
+  /** Allowed local scan roots (P-04); consumed by the scan source checks. */
+  scanRoots?: string[];
+}
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+const PUBLIC_DIR = path.join(__dirname, '../public');
+const JSON_BODY_LIMIT = '1mb';
 
-// Root route to serve the dashboard
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
+/**
+ * Builds the Express app without listening. Middleware order follows
+ * ADR-001 karar 8: Host -> static and /health -> login/setup -> cookie/Bearer
+ * authentication -> CSRF (Origin) -> routers and RBAC -> /api 404 -> JSON
+ * error handler. All in-memory state (login throttle) belongs to this instance.
+ */
+export function createApp(deps: AppDeps): express.Express {
+  const { db } = deps;
+  const allowed = buildAllowedOrigins(resolvePort(deps.port), resolveHost(deps.host));
+  const jsonBody = express.json({ limit: JSON_BODY_LIMIT });
+  const authController = new AuthController(db, new LoginThrottle());
 
-// Mock Auth Middleware to populate req.user for easy testing/demo
-app.use((req, res, next) => {
-  req.user = {
-    id: '00000000-0000-0000-0000-000000000000', // Mock Admin UUID or similar
-    email: 'admin@company.com',
-    displayName: 'Admin User',
-    roles: ['admin'],
-    sessionId: 'mock-session-id'
-  };
-  next();
-});
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(requireAllowedHost(allowed));
 
-// Mount routes
-app.use('/api/users', createUserRouter(pool));
-app.use('/api', createSbomRouter(pool));
-app.use('/api', createReportRouter(pool));
-app.use('/api/findings', createWorkflowRouter(pool));
-app.use('/api', createProjectRouter(pool));
-app.use('/api', createScanRouter(pool));
+  app.get('/health', async (_req, res) => {
+    try {
+      await db.query('SELECT 1');
+      res.json({ status: 'healthy', database: 'connected' });
+    } catch (err) {
+      // The raw driver message can carry host/user names; log the class only (AC-G-9).
+      const code = (err as { code?: unknown })?.code;
+      console.error(`Health check failed: database unavailable${typeof code === 'string' ? ` (${code})` : ''}`);
+      // Fixed contract body (not sendError, whose generic 5xx text differs).
+      res.status(500).json({
+        status: 'unhealthy',
+        database: 'disconnected',
+        error: statusLabel(500),
+        message: 'Database unavailable',
+        code: 'internal_error',
+      });
+    }
+  });
 
-// Base health route
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ status: 'healthy', database: 'connected' });
-  } catch (err: any) {
-    res.status(500).json({ status: 'unhealthy', error: err.message });
+  app.use(express.static(PUBLIC_DIR));
+  app.get('/', (_req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+
+  const api = express.Router();
+  api.use(createPublicAuthRouter(authController, requireSameOrigin(allowed), jsonBody));
+  api.use(authenticate(db));
+  api.use(requireSameOriginForSessionWrites(allowed));
+  api.use(jsonBody);
+  api.use('/auth', createAuthRouter(authController));
+  api.use('/users', createUserRouter(db));
+  api.use(createSbomRouter(db));
+  api.use(createReportRouter(db));
+  api.use('/findings', createWorkflowRouter(db));
+  api.use(createProjectRouter(db));
+  api.use(createScanRouter(db));
+  api.use(apiNotFound());
+
+  app.use('/api', api);
+  app.use(errorHandler());
+  return app;
+}
+
+/**
+ * Creates the app and listens on `host:port` (default 127.0.0.1, AC-P01-9).
+ * Resolves once the server is listening. Refuses to start without the
+ * required configuration (AC-P09-3).
+ */
+export async function startServer(options: AppDeps): Promise<http.Server> {
+  assertRequiredEnv();
+  const port = resolvePort(options.port);
+  const host = resolveHost(options.host);
+  if (!isLoopbackHost(host)) {
+    console.warn(
+      `Warning: HOST=${host} exposes the API beyond this machine over plain HTTP; ` +
+        'session cookies and API keys travel unencrypted. Use 127.0.0.1 unless you know why.',
+    );
   }
-});
+  const app = createApp({ ...options, port, host });
+  const server = http.createServer(app);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  return server;
+}
 
-app.listen(port, () => {
-  console.log(`OSS License & Security Risk Platform Backend listening on port ${port}`);
-});
+async function main(): Promise<void> {
+  try {
+    assertRequiredEnv();
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+  // Imported lazily so importing this module (tests) never creates the global pool.
+  const { pool } = await import('./lib/db');
+  const server = await startServer({ db: pool });
+  const address = server.address();
+  const where = typeof address === 'object' && address ? `${address.address}:${address.port}` : String(address);
+  console.log(`OSS License & Security Risk Platform Backend listening on ${where}`);
+}
+
+if (require.main === module) {
+  main().catch((err: unknown) => {
+    console.error(`Server failed to start: ${(err as Error)?.message ?? 'unknown error'}`);
+    process.exit(1);
+  });
+}

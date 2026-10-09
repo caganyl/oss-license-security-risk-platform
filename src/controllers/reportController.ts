@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { sendError } from '../lib/httpError';
 import {
   ReportService,
   VALID_REPORT_FORMATS,
@@ -16,13 +17,8 @@ function isUuid(value: string | undefined): value is string {
 function handleError(err: unknown, res: Response, next: NextFunction): void {
   const error = err as Error & { statusCode?: number; report?: ReportRecord };
   if (error.statusCode) {
-    const label =
-      error.statusCode === 404 ? 'Not Found'
-      : error.statusCode === 400 ? 'Bad Request'
-      : 'Error';
-    const body: Record<string, unknown> = { error: label, message: error.message };
-    if (error.report) body.report = toResponse(error.report);
-    res.status(error.statusCode).json(body);
+    // 5xx messages are replaced by a fixed text inside sendError (AC-G-8).
+    sendError(res, error.statusCode, error.message, undefined, error.report ? { report: toResponse(error.report) } : {});
     return;
   }
   next(err);

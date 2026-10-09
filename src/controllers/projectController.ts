@@ -25,6 +25,11 @@ export class ProjectController {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
+      // Owner is always the authenticated user; there is no fallback identity (AC-P01-17).
+      const user = req.user;
+      if (!user) {
+        throw Object.assign(new Error('Authentication required'), { statusCode: 401 });
+      }
       const { name, description, criticality, repoUrl, scanSchedule, tags, ecosystems } = req.body;
       if (!name || typeof name !== 'string' || name.trim() === '') {
         throw Object.assign(new Error('Project name is required'), { statusCode: 400 });
@@ -41,7 +46,7 @@ export class ProjectController {
         repoUrl || null,
         scanSchedule || null,
         tags || [],
-        req.user?.id || '00000000-0000-0000-0000-000000000000'
+        user.id
       ]);
       const project = insertProj.rows[0];
 
@@ -66,7 +71,7 @@ export class ProjectController {
       await this.db.query(
         `INSERT INTO audit_logs (action, actor_id, actor_email, entity_type, entity_id, new_data, occurred_at)
          VALUES ('project_created', $1, $2, 'project', $3, $4, NOW())`,
-        [req.user?.id || null, req.user?.email || null, project.id, JSON.stringify(project)]
+        [user.id, user.email, project.id, JSON.stringify(project)]
       ).catch(err => console.error('Failed to write audit log:', err));
 
       res.status(201).json({ data: project });

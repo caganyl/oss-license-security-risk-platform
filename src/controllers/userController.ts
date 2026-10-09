@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool, PoolClient, QueryResult } from 'pg';
+import { sendError } from '../lib/httpError';
 import type { RoleName } from '../types/auth';
 
 type UserStatus = 'active' | 'inactive' | 'pending';
@@ -124,18 +125,12 @@ function handleControllerError(err: unknown, res: Response, next: NextFunction):
   const error = err as Error & { code?: string; statusCode?: number; detail?: string };
 
   if (error.code === '23505') {
-    res.status(409).json({
-      error: 'Conflict',
-      message: 'A user with that email or SSO identity already exists',
-    });
+    sendError(res, 409, 'A user with that email or SSO identity already exists', 'conflict');
     return;
   }
 
   if (error.statusCode) {
-    res.status(error.statusCode).json({
-      error: error.statusCode === 404 ? 'Not Found' : 'Bad Request',
-      message: error.message,
-    });
+    sendError(res, error.statusCode, error.message);
     return;
   }
 

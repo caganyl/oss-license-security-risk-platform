@@ -1,0 +1,11 @@
+{
+  "name": "p07-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "runtime-lib": "1.0.0"
+  },
+  "devDependencies": {
+    "gpl-dev-tool": "1.0.0"
+  }
+}

@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "p07-poetry-fixture"
+version = "0.0.0"
+description = "REQ-002 P-07 fixture"
+authors = ["fixture <fixture@example.invalid>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+httpx = "0.27.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "24.1.0"

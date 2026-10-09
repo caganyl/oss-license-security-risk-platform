@@ -1,0 +1,4 @@
+# REQ-002 P-05 fixture: no lock file
+requests>=2,<3
+flask==3.0.0
+six

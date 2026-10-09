@@ -1,0 +1,43 @@
+{
+  "name": "oss-license-security-risk-platform",
+  "version": "1.0.0",
+  "description": "OSS License & Security Risk Platform Backend",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "worker": "ts-node src/scanner/worker.ts",
+    "worker:prod": "node dist/scanner/worker.js",
+    "export-worker": "ts-node src/reports/worker.ts",
+    "export-worker:prod": "node dist/reports/worker.js",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "pdfkit": "^0.18.0",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/express": "^4.17.21",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^20.12.7",
+    "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.11.5",
+    "@types/supertest": "^7.2.1",
+    "embedded-postgres": "^17.10.0-beta.17",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "jsdom": "^26.1.0",
+    "lucide": "^1.48.0",
+    "supertest": "^7.3.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^3.2.7"
+  }
+}

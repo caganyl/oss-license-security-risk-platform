@@ -2,8 +2,16 @@
 -- F1 migration test — 002_local_auth, 003_declared_range, 004_finding_fingerprint
 -- REQ-002 · AC-P05-5, AC-P08-5, AC-G-10 (migration side)
 --
+-- psql is NOT required (REQ-003 AC-P11-15, AC-G-2): `npm test` runs this file
+-- through node-postgres against embedded PostgreSQL in
+-- tests/integration/migrations.test.ts (tests/helpers/psqlScript.ts inlines
+-- the \ir lines and drops \set/\echo). tests/unit/findingFingerprint.test.ts
+-- reads the _expected_fp reference table below. The psql dialect is kept only
+-- so the file stays readable as one script; keep the \ir / \set / \echo lines
+-- limited to what psqlScript.ts supports.
+--
 -- Run ONLY against an EMPTY, throw-away test database (AC-G-5), never against
--- a real/production database:
+-- a real/production database. Optional manual run, if psql is available:
 --
 --   psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/f1_migrations_test.sql
 --
@@ -20,7 +28,8 @@
 --
 -- The reference fingerprint table below doubles as the SQL side of the
 -- TS <-> SQL fingerprint equality test required by ADR-003 (c).
--- schema_migrations is not touched: files are replayed directly.
+-- schema_migrations is not touched: files are replayed directly. 005 and the
+-- migration tool itself are covered by the REQ-003 Vitest migration tests.
 -- =============================================================================
 
 \set ON_ERROR_STOP on

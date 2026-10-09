@@ -12,7 +12,8 @@
     "export-worker:prod": "node dist/reports/worker.js",
     "typecheck": "tsc -p tsconfig.test.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "node dist/db/migrate.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

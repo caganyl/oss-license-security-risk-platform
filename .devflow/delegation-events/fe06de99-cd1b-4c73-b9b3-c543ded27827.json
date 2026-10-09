@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "evidence_id": "fe06de99-cd1b-4c73-b9b3-c543ded27827",
+  "timestamp": "2026-10-09T08:30:16Z",
+  "run_id": "unknown",
+  "hook_event": "SubagentStop",
+  "lifecycle_state": "stopped",
+  "agent_type": "devflow-plugin:contract-broker",
+  "evidence_source": "native_hook_event"
+}

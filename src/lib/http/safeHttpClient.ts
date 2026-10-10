@@ -24,8 +24,11 @@
  * - Errors are classified by `err.code` only; an error message is never kept
  *   (it may contain the proxy URL and its credentials, or a header value).
  * - Per-session, per-host circuit breaker: `failureThreshold` consecutive
- *   failed network attempts close the host for the session; any HTTP response
- *   resets the counter.
+ *   failed attempts (network failure or `429`/`5xx` response, retries
+ *   included) close the host for the session; any other HTTP response resets
+ *   the counter. Counted per attempt and checked before every attempt
+ *   (REQ-005 security review L-4), so a host answering `503` forever opens
+ *   the circuit and its pending retries stop.
  * - Process-wide (per instance) concurrency semaphore; in-flight dedupe by key
  *   with reference counting (the shared request is aborted only when every
  *   waiter aborted; each waiter races its own signal).
@@ -271,13 +274,26 @@ type AttemptOutcome =
   | { type: 'too_large' }
   | { type: 'bad_encoding' };
 
-/** Network-level attempt (`net`) or HTTP response (`http`), in order: drives the circuit breaker. */
-type AttemptTrace = Array<'net' | 'http'>;
+/**
+ * Per attempt, in order: drives the circuit breaker. `net` = network-level
+ * failure, `fail` = `429`/`5xx` response (a failed attempt, REQ-005 security
+ * review L-4), `http` = any other HTTP response (resets the counter).
+ */
+type AttemptStep = 'net' | 'fail' | 'http';
+type AttemptTrace = AttemptStep[];
+
+/** Circuit breaker of the session that started a shared request: checked before and updated after every attempt. */
+interface AttemptBreaker {
+  isOpen(host: string): boolean;
+  record(host: string, step: AttemptStep): void;
+}
 
 interface Shared {
   result: SafeHttpResult | null;
   trace: AttemptTrace;
   host: string;
+  /** Breaker updated live by `run` (its session does not replay `trace`). */
+  breaker: AttemptBreaker;
 }
 
 type ProxyAgentOptions = https.AgentOptions & { proxyEnv?: Record<string, string> };
@@ -459,15 +475,32 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
     return Math.max(base, retryAfter);
   }
 
-  async function run(start: URL, purposeName: string, body: Buffer | undefined, algorithm: DigestAlgorithm | undefined, signal: AbortSignal): Promise<Shared> {
+  async function run(
+    start: URL,
+    purposeName: string,
+    body: Buffer | undefined,
+    algorithm: DigestAlgorithm | undefined,
+    signal: AbortSignal,
+    breaker: AttemptBreaker,
+  ): Promise<Shared> {
     const purpose = purposes[purposeName];
-    const trace: AttemptTrace = [];
+    const steps: AttemptTrace = [];
     const host = start.host;
+    // L-4: the breaker counts every attempt (retries included) as it happens.
+    const trace = {
+      push(step: AttemptStep): void {
+        steps.push(step);
+        breaker.record(host, step);
+      },
+    };
+    const done = (result: SafeHttpResult | null): Shared => ({ result, trace: steps, host, breaker });
     let current = start;
     let redirects = 0;
     let retry = 0;
     for (;;) {
-      if (purpose.beforeAttempt && !(await purpose.beforeAttempt(signal))) return { result: null, trace, host };
+      // L-4: checked before every attempt, so retries stop once the host closed.
+      if (breaker.isOpen(host)) return done({ kind: 'unreachable', code: 'CIRCUIT_OPEN' });
+      if (purpose.beforeAttempt && !(await purpose.beforeAttempt(signal))) return { result: null, trace: steps, host, breaker };
       const outcome = await slotAttempt({
         url: current,
         method: purpose.method,
@@ -480,53 +513,53 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
         algorithm,
         readBody: (status) => status === 200,
       });
-      if (outcome.type === 'aborted') return { result: null, trace, host };
+      if (outcome.type === 'aborted') return { result: null, trace: steps, host, breaker };
       if (outcome.type === 'network') {
         trace.push('net');
         if (retry < limits.maxRetries && outcome.code !== 'PROXY_UNAVAILABLE') {
           await clock.sleep(backoff(retry), signal);
-          if (signal.aborted) return { result: null, trace, host };
+          if (signal.aborted) return { result: null, trace: steps, host, breaker };
           retry++;
           continue;
         }
-        return { result: { kind: 'unreachable', code: outcome.code }, trace, host };
+        return { result: { kind: 'unreachable', code: outcome.code }, trace: steps, host, breaker };
       }
-      trace.push('http');
-      if (outcome.type === 'too_large') return { result: { kind: 'too_large' }, trace, host };
-      if (outcome.type === 'bad_encoding') return { result: { kind: 'error', code: 'BAD_ENCODING' }, trace, host };
+      trace.push(outcome.type === 'response' && (outcome.status === 429 || outcome.status >= 500) ? 'fail' : 'http');
+      if (outcome.type === 'too_large') return { result: { kind: 'too_large' }, trace: steps, host, breaker };
+      if (outcome.type === 'bad_encoding') return { result: { kind: 'error', code: 'BAD_ENCODING' }, trace: steps, host, breaker };
       const { status, headers } = outcome;
       if (purpose.redirect === 'none') {
-        if (status >= 300 && status < 400) return { result: { kind: 'error', code: 'REDIRECT' }, trace, host };
+        if (status >= 300 && status < 400) return { result: { kind: 'error', code: 'REDIRECT' }, trace: steps, host, breaker };
       } else if (REDIRECT_STATUSES.has(status)) {
-        if (redirects >= purpose.redirect.sameOriginMax) return { result: { kind: 'error', code: 'REDIRECT_LIMIT' }, trace, host };
+        if (redirects >= purpose.redirect.sameOriginMax) return { result: { kind: 'error', code: 'REDIRECT_LIMIT' }, trace: steps, host, breaker };
         const location = headers.location;
-        if (typeof location !== 'string' || location === '') return { result: { kind: 'error', code: 'REDIRECT' }, trace, host };
+        if (typeof location !== 'string' || location === '') return { result: { kind: 'error', code: 'REDIRECT' }, trace: steps, host, breaker };
         let next: URL | null = null;
         try {
           next = allowedUrl(new URL(location, current), purposeName);
         } catch {
           next = null;
         }
-        if (next === null) return { result: { kind: 'error', code: 'URL_NOT_ALLOWED' }, trace, host };
-        if (next.origin !== current.origin) return { result: { kind: 'error', code: 'REDIRECT' }, trace, host };
+        if (next === null) return { result: { kind: 'error', code: 'URL_NOT_ALLOWED' }, trace: steps, host, breaker };
+        if (next.origin !== current.origin) return { result: { kind: 'error', code: 'REDIRECT' }, trace: steps, host, breaker };
         current = next;
         redirects++;
         continue;
       }
-      if (status === 404 || status === 410) return { result: { kind: 'not_found', status }, trace, host };
+      if (status === 404 || status === 410) return { result: { kind: 'not_found', status }, trace: steps, host, breaker };
       if (status === 429 || status >= 500) {
-        if (retry >= limits.maxRetries) return { result: { kind: 'error', code: `HTTP_${status}` }, trace, host };
+        if (retry >= limits.maxRetries) return { result: { kind: 'error', code: `HTTP_${status}` }, trace: steps, host, breaker };
         const wait = retryWait(retry, headers);
-        if (wait === null) return { result: { kind: 'error', code: 'RETRY_AFTER' }, trace, host };
+        if (wait === null) return { result: { kind: 'error', code: 'RETRY_AFTER' }, trace: steps, host, breaker };
         await clock.sleep(wait, signal);
-        if (signal.aborted) return { result: null, trace, host };
+        if (signal.aborted) return { result: null, trace: steps, host, breaker };
         retry++;
         continue;
       }
       if (status !== 200 || outcome.body === null || (algorithm !== undefined && outcome.digest === null)) {
-        return { result: { kind: 'error', code: `HTTP_${status}` }, trace, host };
+        return { result: { kind: 'error', code: `HTTP_${status}` }, trace: steps, host, breaker };
       }
-      return { result: { kind: 'ok', headers, body: outcome.body, digest: outcome.digest }, trace, host };
+      return { result: { kind: 'ok', headers, body: outcome.body, digest: outcome.digest }, trace: steps, host, breaker };
     }
   }
 
@@ -575,8 +608,15 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
   function session(): SafeHttpSession {
     const failures = new Map<string, number>();
     const isHostClosed = (host: string) => (failures.get(host) ?? 0) >= limits.failureThreshold;
+    const breaker: AttemptBreaker = {
+      isOpen: isHostClosed,
+      record(host, step) {
+        failures.set(host, step === 'http' ? 0 : (failures.get(host) ?? 0) + 1);
+      },
+    };
+    /** Replays the trace of a shared request started by another session. */
     const record = (host: string, trace: AttemptTrace) => {
-      for (const step of trace) failures.set(host, step === 'net' ? (failures.get(host) ?? 0) + 1 : 0);
+      for (const step of trace) breaker.record(host, step);
     };
 
     return {
@@ -592,8 +632,8 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
           requestOptions.dedupeKey ??
           (body !== undefined ? `${purposeName} ${url.href} ${crypto.createHash('sha256').update(body).digest('hex')}` : `${purposeName} ${url.href}`);
         const key = purpose.kind === 'binary' ? `archive ${requestOptions.algorithm ?? 'none'} ${base}` : `json ${base}`;
-        const shared = await joinShared(key, (signal) => run(url, purposeName, body, requestOptions.algorithm, signal), requestOptions.signal);
-        record(shared.host, shared.trace);
+        const shared = await joinShared(key, (signal) => run(url, purposeName, body, requestOptions.algorithm, signal, breaker), requestOptions.signal);
+        if (shared.breaker !== breaker) record(shared.host, shared.trace);
         if (shared.result === null) throw abortReason(requestOptions.signal);
         return shared.result;
       },

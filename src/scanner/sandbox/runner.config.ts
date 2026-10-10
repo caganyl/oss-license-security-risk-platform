@@ -117,7 +117,7 @@ export interface WorkerConfig {
  * limit is a fixed constant (`ENRICHMENT_LIMITS`).
  */
 export interface EnrichmentConfig {
-  /** `REGISTRY_ENRICHMENT`: `on` (default) / `off`. */
+  /** `REGISTRY_ENRICHMENT`: section 7.1 switch (default on; invalid -> off). */
   enabled: boolean;
   /** `REGISTRY_TIMEOUT_MS`: total time of one request attempt (1 ms – 24 h, default 15 000). */
   timeoutMs: number;
@@ -183,14 +183,32 @@ export const ENRICHMENT_LIMITS = Object.freeze({
   }),
 });
 
-/** `REGISTRY_ENRICHMENT`: `on`/`off` (case-insensitive); anything else -> default `on` and one warning naming the setting. */
-export function parseEnrichmentSwitch(raw: unknown, warn: (message: string) => void = console.warn): boolean {
-  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return true;
+const SWITCH_ON = new Set(['on', 'true', '1', 'yes']);
+const SWITCH_OFF = new Set(['off', 'false', '0', 'no']);
+
+/**
+ * The single on/off switch parser (REQ-005 contract 1.1.0 section 7.1,
+ * security review L-2; REQ-004 contract 1.3.0 C-24) used by
+ * `VULNERABILITY_LOOKUP`, `VULNERABILITY_RECHECK`, `NVD_ENABLED` and
+ * `REGISTRY_ENRICHMENT`.
+ *
+ * Trimmed, case-insensitive: `on/true/1/yes` -> on, `off/false/0/no` -> off,
+ * empty/unset -> default (on). Any other value fails closed (privacy: these
+ * switches gate outbound requests) with one warning naming only the variable;
+ * the value is never logged.
+ */
+export function parseSwitch(name: string, raw: unknown, warn: (message: string) => void = console.warn, defaultValue = true): boolean {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return defaultValue;
   const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (value === 'on') return true;
-  if (value === 'off') return false;
-  warn('REGISTRY_ENRICHMENT geçersiz (on/off); varsayılan on kullanılıyor.');
-  return true;
+  if (SWITCH_ON.has(value)) return true;
+  if (SWITCH_OFF.has(value)) return false;
+  warn(`${name} geçersiz (on/off/true/false/1/0/yes/no); kapalı (off) kullanılıyor.`);
+  return false;
+}
+
+/** `REGISTRY_ENRICHMENT` (section 7.1 parser; invalid -> off + one warning). */
+export function parseEnrichmentSwitch(raw: unknown, warn: (message: string) => void = console.warn): boolean {
+  return parseSwitch('REGISTRY_ENRICHMENT', raw, warn);
 }
 
 /** Enrichment settings from an environment (range-checked like the queue settings, REQ-003 I-3). */
@@ -229,7 +247,7 @@ export interface VulnerabilityConfig {
   timeoutMs: number;
   /** `OSV_CONCURRENCY`: OSV detail request slots (1–32, default 4). */
   concurrency: number;
-  /** `NVD_ENABLED`: only `false` disables NVD (OSV continues). */
+  /** `NVD_ENABLED`: section 7.1 switch (default on; invalid -> off); off disables only NVD (OSV and the local CVSS v3 score continue). */
   nvdEnabled: boolean;
 }
 
@@ -241,6 +259,12 @@ export const VULNERABILITY_LIMITS = Object.freeze({
   osvMaxPages: 10,
   /** Vulnerability ids per package result; more -> package unchecked (first ones processed). */
   osvMaxVulnsPerResult: 1000,
+  /** M-1 (contract 1.1.0 section 3.5.1): distinct ids per package over all pages; more -> package unchecked, none of its ids processed. */
+  osvMaxIdsPerPackage: 200,
+  /** M-1: distinct ids per lookup; a package that would add new ids beyond this -> unchecked. */
+  osvMaxDistinctIds: 5_000,
+  /** M-1: network detail requests per lookup (cache hits not counted; retries count once). */
+  osvMaxDetailRequests: 2_000,
   client: Object.freeze({
     querybatchMaxBytes: 16 * MiB,
     detailMaxBytes: 8 * MiB,
@@ -287,14 +311,9 @@ export const VULNERABILITY_LIMITS = Object.freeze({
 /** Upper bound of `OSV_CONCURRENCY`. */
 export const MAX_OSV_CONCURRENCY = 32;
 
-/** `on`/`off` switch (case-insensitive); anything else -> default `on` and one warning naming the setting only. */
+/** Alias of `parseSwitch` (section 7.1) kept for existing callers. */
 export function parseOnOffSwitch(name: string, raw: unknown, warn: (message: string) => void = console.warn): boolean {
-  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return true;
-  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (value === 'on') return true;
-  if (value === 'off') return false;
-  warn(`${name} geçersiz (on/off); varsayılan on kullanılıyor.`);
-  return true;
+  return parseSwitch(name, raw, warn);
 }
 
 /** Vulnerability settings from an environment (range-checked; invalid -> default + one warning naming the setting). */
@@ -326,7 +345,7 @@ export function vulnerabilityConfigFrom(
       max: MAX_OSV_CONCURRENCY,
       integer: true,
     }),
-    nvdEnabled: source.NVD_ENABLED !== 'false',
+    nvdEnabled: parseSwitch('NVD_ENABLED', source.NVD_ENABLED, warn),
   };
 }
 

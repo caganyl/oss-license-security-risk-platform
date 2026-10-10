@@ -376,11 +376,8 @@ Performans testlerinde gereksinim "< 1 sn"dir; CI dalgalanmasına karşı assert
 sınırı 2 sn'dir. Eski karesel/kübik kod bu girdilerde dakikalar–saatler sürer,
 bu yüzden 2 sn hâlâ doğrusalı karesel davranıştan ayırır.
 
-Bilinen kırmızılar (ürün düzeltmesi bekleniyor): `security/credentialScan.test.ts`
-AC-P12-12 (`.env.example`, ana oturum) ve `unit/errorText.test.ts` "L-1: a
-provider token split by a lone \r after 20 characters leaves no fragment"
-(ham ön geçiş token'ın ilk parçasını maskeliyor, kontrol karakteri silinince
-kalan parça yer tutucuya yapışıp açıkta kalıyor; backend).
+Bilinen kırmızılar (ürün düzeltmesi bekleniyor): yalnız `security/credentialScan.test.ts`
+AC-P12-12 (`.env.example`, ana oturum).
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

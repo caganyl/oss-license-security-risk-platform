@@ -110,35 +110,46 @@ describe('L-5: report time limit aborts processReport', () => {
     expect(filesWritten()).toEqual([]);
   });
 
-  it('L-5: ExportWorker time limit (150 ms) shorter than the render (600 ms) -> failed with the timeout text; after the render finishes the row is still not ready and no file exists', async () => {
+  // Timing-independent: under full-suite load `loadReportData` alone may exceed the
+  // 150 ms limit, so the abort can hit before `renderContent` is ever called. The test
+  // therefore does not assume where the abort lands: it captures the promise of the
+  // real `processReport` call made by the worker and waits until that call has
+  // settled (every checkpoint passed, render finished if it started), then asserts
+  // the end state.
+  it('L-5: ExportWorker time limit (150 ms) shorter than the render (600 ms) -> failed with the timeout text; once processReport has settled the row is not ready and no file exists', async () => {
     const { reportId } = await seedReport('pending');
-    let renderDone = false;
     vi.spyOn(proto, 'renderContent').mockImplementation(async function (this: ReportService, ...args: unknown[]) {
       await new Promise((r) => setTimeout(r, 600));
-      try {
-        return await realRender.apply(this, args);
-      } finally {
-        renderDone = true;
-      }
+      return realRender.apply(this, args);
+    });
+    const service = new ReportService(db.pool);
+    const realProcess = ReportService.prototype.processReport;
+    const calls: Promise<PromiseSettledResult<unknown>>[] = [];
+    vi.spyOn(service, 'processReport').mockImplementation((id: string, signal?: AbortSignal) => {
+      const p = realProcess.call(service, id, signal);
+      calls.push(Promise.allSettled([p]).then(([res]) => res));
+      return p;
     });
     const worker = new ExportWorker({
       db: db.pool,
       logger: quiet,
-      reportService: new ReportService(db.pool),
+      reportService: service,
       config: { maxConcurrentExports: 1, pollIntervalMs: 50, timeoutMs: 150 },
     });
     worker.startPolling();
+    let settled: PromiseSettledResult<unknown>[] = [];
     try {
+      await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0), { timeout: 10_000, interval: 25 });
+      settled = await Promise.all(calls);
       await vi.waitFor(async () => expect((await reportRow(reportId)).status).toBe('failed'), { timeout: 10_000, interval: 25 });
-      expect((await reportRow(reportId)).error_message).toMatch(/Report generation timed out after 150ms/);
-      await vi.waitFor(() => expect(renderDone).toBe(true), { timeout: 10_000, interval: 25 });
-      await new Promise((r) => setTimeout(r, 300)); // past the service's remaining checkpoints
     } finally {
       worker.stop();
       await worker.waitForIdle(5_000);
     }
+    expect(settled.map((s) => s.status)).toEqual(['rejected']);
     const r = await reportRow(reportId);
     expect(r.status).toBe('failed');
+    expect(r.error_message).toMatch(/Report generation timed out after 150ms/);
     expect(r.storage_key).toBeNull();
     expect(filesWritten()).toEqual([]);
     expect(await generatedAudits(reportId)).toBe(0);

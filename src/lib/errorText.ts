@@ -96,8 +96,19 @@ function maskSecrets(text: string, context: ErrorTextContext): string {
   for (const re of TOKEN_PATTERNS) {
     out = out.replace(re, (_match, keep?: string) => `${typeof keep === 'string' ? keep : ''}${REDACTED}`);
   }
-  return out;
+  return out.replace(REDACTED_TAIL_RE, REDACTED);
 }
+
+/**
+ * `[REDACTED]` directly followed by token characters swallows them. A secret
+ * split by a control or format character (`ghp_<20>\r<rest>`, `Bearer
+ * <16>\x00<rest>`, `…\x1b[0m<rest>`, U+200B) whose first part alone already
+ * has the token shape is masked by the raw pre-pass; once step 1 removes the
+ * separator, the rest is glued to the placeholder and no pattern sees it as a
+ * token any more. Over-masking text that touches a placeholder is harmless.
+ * A `.` is swallowed only inside a run, so a sentence-ending dot stays.
+ */
+const REDACTED_TAIL_RE = /\[REDACTED\](?:[A-Za-z0-9_+/=~-]|\.(?=[A-Za-z0-9_+/=~-]))+/g;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -510,7 +510,15 @@ describe('AC-T-3 / AC-P12-6 step 5: git missing or older than 2.32 never stops t
       const tmpRoot = fs.mkdtempSync(path.join(tmpBase, 'git-tmp-'));
       const clone = vi.fn<CloneRepoFn>();
       const remoteScan = await insertScan(db, await insertProject(db, 'https://github.com/org/repo.git'), { status: 'queued' });
-      const { runtime, logs, port, root } = await harness(db, { checkGit: undefined, gitVersion, tmpRoot, scanWorker: { cloneRepo: clone } });
+      // REQ-005: the recheck/expiry scheduler (startup expiry pass, recheck tick) is not under
+      // test here and competes for the pool under full-suite load; the git assertions are unchanged.
+      const { runtime, logs, port, root } = await harness(db, {
+        checkGit: undefined,
+        gitVersion,
+        tmpRoot,
+        scanWorker: { cloneRepo: clone },
+        vulnerabilityScheduler: null,
+      });
 
       await runtime.start();
       expect(runtime.state).toBe('running');

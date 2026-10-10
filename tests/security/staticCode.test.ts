@@ -99,11 +99,13 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
 
   it('ADR-005 Karar 1: src/scanner/parsers imports only node:fs/path/crypto/worker_threads, smol-toml (toml.ts), siblings and types; threadParser.ts may also import ../../lib/threadBootstrap (ADR-006 Karar 16)', () => {
     const files = fs.readdirSync(parsersDir).filter((n) => n.endsWith('.ts'));
-    expect(files.sort()).toEqual(['common.ts', 'index.ts', 'nodejs.ts', 'python.ts', 'thread.ts', 'threadParser.ts', 'toml.ts']);
+    // REQ-005 ADR-007 Karar 12: lockIntegrityValue.ts (L-5 side channel) is import-free.
+    expect(files.sort()).toEqual(['common.ts', 'index.ts', 'lockIntegrityValue.ts', 'nodejs.ts', 'python.ts', 'thread.ts', 'threadParser.ts', 'toml.ts']);
+    expect(importsOf(path.join(parsersDir, 'lockIntegrityValue.ts'))).toEqual([]);
     const violations: string[] = [];
     for (const name of files) {
       const imports = importsOf(path.join(parsersDir, name));
-      expect(imports.length, name).toBeGreaterThan(0);
+      if (name !== 'lockIntegrityValue.ts') expect(imports.length, name).toBeGreaterThan(0);
       for (const { spec, typeOnly } of imports) {
         if (typeOnly) continue;
         if (ALLOWED_RUNTIME.has(spec)) continue;

@@ -313,13 +313,21 @@ function scanActions(row) {
       el('div', { className: 'progress-bar', style: `width: ${row.status === 'running' ? '65' : '15'}%;` }));
   }
   if (row.status === 'completed') {
-    return el('a', {
+    const sbomLink = el('a', {
       className: 'btn btn-sm',
       href: apiPath('scans', row.id, 'sbom', 'download'),
       target: '_blank',
       rel: 'noopener',
       style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
     }, icon('download', 'width:12px;height:12px;'), ' SBOM');
+    const noticeLink = el('a', {
+      className: 'btn btn-sm',
+      href: apiPath('scans', row.id, 'notice'),
+      target: '_blank',
+      rel: 'noopener',
+      style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
+    }, icon('download', 'width:12px;height:12px;'), ' NOTICE');
+    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem;' }, sbomLink, noticeLink);
   }
   return el('span', { style: 'color: var(--text-muted); font-size:0.8rem;' }, '—');
 }

@@ -2,9 +2,12 @@
 
 - **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10
 - **status:** approved
-- **Sürüm:** 1.0.0
+- **Sürüm:** 1.1.0 (revizyon: bkz. bölüm 13)
 - **Tarih:** 2026-10-10
-- **Makine okunur contract:** `docs/contracts/REQ-004-notice-api.openapi.yaml` (OpenAPI 3.0.3)
+- **Makine okunur contract:** `docs/contracts/REQ-004-notice-api.openapi.yaml` (OpenAPI 3.0.3;
+  `info.version` 1.0.0 kalır — 1.1.0 revizyonu uç nokta yüzeyini değiştirmez)
+- **Revizyon dayanağı (1.1.0):** `docs/quality/security-reports/REQ-004-security-review.md`
+  bulguları L-1, L-2, I-3 ve M-1
 - **İlgili:** `docs/product/REQ-004.md` (AC-G-4, AC-P14-13, AC-P14-17, AC-P14-18,
   AC-P14-19, AC-L6-2…4, AC-P15-11…15, AC-P16-1…7; kararlar D-62, D-63,
   D-69…D-74), `docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md`
@@ -30,6 +33,14 @@
 >   gidebilir; hukuki görüş değildir.
 >
 > Frontend ve backend bu contract'a göre **paralel** çalışabilir (bkz. bölüm 7).
+>
+> **1.1.0 revizyonu (güvenlik bulguları L-1, L-2, I-3, M-1)** — Onaylandı
+> (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10. Değişiklikler
+> yalnız backend çıktı kurallarını (bölüm 1, 3.5–3.7, 5.1, 5.1a, 6.1, 9;
+> test ve sürüm notları 10–13) etkiler;
+> arayüz (bölüm 7) ve API yüzeyi (bölüm 2, OpenAPI) değişmez. Mevcut kod
+> 1.1.0'a uyana kadar bu bölümlerde contract'tan sapmaktadır; backend-engineer
+> ve qa-automation düzeltmeyi bu sürüme göre yapar (bölüm 13).
 
 ## İçindekiler
 
@@ -45,6 +56,7 @@
 10. Test yükümlülükleri
 11. Sürümleme
 12. Karar kaydı ve REQ/ADR ile netleştirmeler
+13. Revizyon geçmişi
 
 ## 1. Kapsam ve geriye uyumluluk
 
@@ -74,8 +86,12 @@ Bu contract F3'ün dışarıdan görünen yüzeyini sabitler:
   /api/scans/{scanId}/sbom/download` mevcut bir `cyclonedx_json` dokümanı
   varsa onu döndürmeye devam eder (mevcut davranış).
 - SBOM `specVersion` değerleri değişmez: SPDX `2.3`, CycloneDX `1.5`.
-- Excel'de mevcut sayfaların ve sütunların adı, sırası ve içeriği değişmez;
-  yeni sütunlar `Dependencies` sayfasının **sonuna** eklenir.
+- Excel'de mevcut sayfaların ve sütunların adı, sırası ve hücre tipleri
+  değişmez; yeni sütunlar `Dependencies` sayfasının **sonuna** eklenir.
+  Mevcut metin hücrelerinin içeriği de değişmez; **tek istisna** (1.1.0,
+  L-2) formül kalkanıdır: `=`, `+`, `-`, `@`, `\t` veya `\r` ile başlayan
+  metin değerlerinin başına `'` eklenir (bölüm 5.1). Bu karakterlerle
+  başlamayan değerler bayt bayt aynı kalır.
 
 ## 2. `GET /api/scans/{scanId}/notice`
 
@@ -304,7 +320,8 @@ File: <path>
   karakterleri atılır; kalan metin `\n` ile satırlara bölünür; her satıra
   ayraç kalkanı (bölüm 3.6) uygulanır ve LF ile yazılır. Atıldıktan sonra
   metin boşsa tek satır `(empty)` yazılır. Satır içi boşluk ve sekmeler
-  korunur, kesim yapılmaz.
+  korunur, kesim yapılmaz. Kalkan, satır içindeki U+0085/U+2028/U+2029
+  sonrasını da kapsar (bölüm 3.6, 1.1.0).
 
 **Meta veri lisans metni bloğu** (AC-P15-13): yalnız metinsiz girdide,
 ekosistem `pypi` iken ve `registry_package_cache.license_text` doluysa:
@@ -324,6 +341,26 @@ satırın başına tek bir boşluk (U+0020) eklenir. Böylece paket metni sahte 
 girdi veya dosya başlığı üretemez (ADR-006 Karar 12). Tek satırlık alanlar
 etiketli olduğu ve satır sonu içeremediği için (bölüm 9) satır başına
 çıkamaz.
+
+**Unicode satır ayırıcıları (1.1.0, I-3).** Çıktı satırları yalnız `\n` ile
+bölünür; ancak kalkan açısından U+0085 (NEL), U+2028 (LINE SEPARATOR) ve
+U+2029 (PARAGRAPH SEPARATOR) de satır sonu sayılır. Kural, `\n` ile bölünmüş
+her çıktı satırı için:
+
+1. Kalkan noktaları: satırın başı (konum 0) **ve** satırdaki her U+0085,
+   U+2028 veya U+2029 karakterinin hemen sonrası.
+2. Bir kalkan noktasından başlayan alt dizi `ENTRY_SEP` veya `FILE_SEP` ile
+   başlıyorsa, o noktaya tek bir U+0020 eklenir (ayırıcı karakter korunur,
+   boşluk ayırıcıdan **sonra** gelir).
+3. Ayırıcı karakterler silinmez, `\n`'e çevrilmez; çok satırlı metnin satır
+   yapısı ve diğer baytları değişmez.
+
+Örnek: `abc` U+2028 `====…` (80 `=`) → `abc` U+2028 U+0020 `====…`.
+
+U+0085 bir C1 kontrol karakteridir ve bölüm 9 adım 2'de zaten silinir;
+burada savunma derinliği için listelenmiştir (adım 2 değişse bile kalkan
+geçerli kalır). Böylece `str.splitlines()` gibi Unicode satır ayırıcılarını
+tanıyan tüketiciler de sahte ayraç satırı göremez.
 
 Bir ayrıştırıcı NOTICE'ı şu kuralla güvenle bölebilir: tam olarak
 `ENTRY_SEP` olan satır yeni girdi, tam olarak `FILE_SEP` olan satır blok
@@ -346,6 +383,35 @@ sınırıdır.
 - Kesim kuralı deterministiktir: ilk aşımdan sonra daha küçük bir blok
   yeniden denenmez.
 - Kesim üst bilgi sayılarını ve `Reason:` satırını değiştirmez.
+
+**Bellek sınırı (1.1.0, M-1) — üretim yöntemi, çıktı biçimi değişmez.**
+64 MiB sınırı yalnız çıktıya değil, **okumaya** da uygulanır:
+
+- Üretici arşiv kayıtlarının lisans dosyası metinlerini
+  (`registry_archive_cache.license_files` içindeki `text` değerleri) ve PyPI
+  meta veri lisans metinlerini (`registry_package_cache.license_text`) tek
+  sorguda topluca belleğe **almaz**; girdi sırasıyla (bölüm 3.3) sınırlı
+  partiler hâlinde (ör. 50 kayıt) veya kayıt kayıt okur. Bellekte aynı anda
+  tutulan metin, yazılmış gövde + tek partinin metniyle sınırlıdır; girdi
+  sayısıyla büyümez.
+- Kesim başladıktan sonra (ilk aşım) kalan kayıtların metinleri **hiç
+  okunmaz**. Yapı satırları için gereken veriler (sonuç, dosya yolları,
+  `omitted` değerleri, öğe sayısı `k`, telif satırları ve öğenin metinli olup
+  olmadığı bilgisi) metni döndürmeyen hafif bir sorguyla alınır.
+- Üst bilgi sayıları `A`/`B` ve `Reason:` seçimi kesimden bağımsız olarak
+  verinin tamamı üzerinden hesaplanmaya devam eder (bölüm 3.2); bunun için
+  metin içeriği değil yalnız "en az bir `{ path, text }` öğesi var mı"
+  bilgisi gerekir.
+- İlk aşımı belirleyen blok, bayt sayısının kesin hesaplanabilmesi için
+  okunabilir (paket başına üst sınırla sınırlıdır); ondan sonraki hiçbir
+  metin okunmaz.
+- Yanıt yine gövde tamamen üretildikten sonra yazılır (bölüm 2.3:
+  `Content-Length` ve `X-Checksum-SHA256` gövdeden hesaplanır); "akış"
+  burada veritabanından parti parti okuma anlamındadır, HTTP yanıt akışı
+  değildir. Gövde birleştirilirken gereksiz tam kopyalardan kaçınılır.
+- Çıktı baytları bu yöntemden etkilenmez: toplu okuma ile parti parti okuma
+  aynı veri için bayt bayt aynı NOTICE'ı üretir (golden dosyalar M-1
+  nedeniyle değişmez).
 
 ### 3.8 Örnek
 
@@ -485,7 +551,8 @@ satır 1–2, sonra `notice_status` (satır 3–13); ilk eşleşen satır kazan�
 
 ### 5.1 Excel `Dependencies` sayfası
 
-Mevcut 7 sütun aynen kalır; iki yeni sütun **sona** eklenir:
+Mevcut 7 sütun aynen kalır (1.1.0: formül kalkanı öneki hariç, bölüm
+5.1a); iki yeni sütun **sona** eklenir:
 
 | # | Başlık (birebir) | `key` | Genişlik | Değer |
 | --- | --- | --- | --- | --- |
@@ -495,14 +562,57 @@ Mevcut 7 sütun aynen kalır; iki yeni sütun **sona** eklenir:
 
 - Satır başına bir `scan_dependencies` satırı (mevcut). Başlık satırı kalın,
   donuk ve otomatik filtreli (mevcut döngü; filtre 9 sütunu kapsar).
-- Hücre tipi her zaman **düz metin** (string). ExcelJS `{ formula }`, sayı,
-  tarih veya zengin metin kullanılmaz.
-- **Formül kalkanı:** değer `=`, `+`, `-`, `@`, `\t` (U+0009) veya `\r`
-  (U+000D) ile başlıyorsa başına `'` (U+0027) eklenir. Kalkan yalnız yeni iki
-  sütuna uygulanır; mevcut sütunlar değişmez (ADR-006 Karar 13).
-- Değerler bölüm 9 tek satırlık alan kuralından geçer.
+- Yeni iki sütunun hücre tipi her zaman **düz metin** (string). ExcelJS
+  `{ formula }`, sayı, tarih veya zengin metin kullanılmaz.
+- Yeni iki sütunun değerleri bölüm 9 tek satırlık alan kuralından (adım
+  1–3) geçer, ardından formül kalkanı uygulanır.
 - F3 öncesi taramada iki hücre boştur ve rapor hatasız üretilir (AC-P14-18).
-- `Summary`, `Licenses` ve `Vulnerabilities` sayfaları **değişmez**.
+
+### 5.1a Formül kalkanı — tüm sayfalar (1.1.0, L-2)
+
+**Kural:** Bir metin (string) hücre değeri `=`, `+`, `-`, `@`, `\t`
+(U+0009) veya `\r` (U+000D) ile başlıyorsa başına tek bir `'` (U+0027)
+eklenir (`excelSafeText`). Diğer değerler değişmeden yazılır; boş metin boş
+kalır. Kalkan tek geçişlidir (değer başına bir kez; zaten `'` ile başlayan
+değere yeniden eklenmez çünkü `'` tetikleyici değildir).
+
+**Kapsam:** Excel raporunun **her sayfasındaki her metin hücresi** — değeri
+tarama, lock dosyası, kayıt defteri, OSV/zafiyet kaynağı veya proje
+kaydından gelen hücreler başta olmak üzere. 1.0.0'da kalkan yalnız
+`Dependencies` sayfasının `License` ve `License Source` sütunlarındaydı;
+1.1.0 ile mevcut sayfalara genişletilir:
+
+| Sayfa | Kalkan uygulanan metin sütunları |
+| --- | --- |
+| `Summary` | `Value` (özellikle `Project`, `Repository`, `Reference`); `Metric` etiketleri sabit metindir, kalkan etkisizdir |
+| `Dependencies` | `Name`, `Version`, `Ecosystem`, `Scope`, `Manifest`, `PURL`, `License`, `License Source` |
+| `Licenses` | `Package`, `Version`, `Detected License`, `Normalized License`, `Risk`, `Policy`, `Status`, `Suppressed` |
+| `Vulnerabilities` | `Package`, `Version`, `Advisory`, `Title`, `Severity`, `Fix Version`, `Fix Available`, `Status`, `Suppressed`, `Published At` |
+
+- Sabit/enum değerli sütunlar (`Ecosystem`, `Scope`, `Risk`, `Status`,
+  `Suppressed`, `Fix Available`, `Severity` vb.) tetikleyici karakterle
+  başlamadığı için pratikte değişmez; kalkan uygulamada sütun ayrımı
+  gerektirmemek için "tüm metin hücreleri" kuralı esastır. İleride eklenen her
+  metin sütunu da bu kurala tabidir.
+- **Sayı ve tarih hücreleri tiplerini korur:** `Dependencies.Depth`,
+  `Vulnerabilities.CVSS` ve `Summary`'deki sayaçlar sayı olarak yazılmaya
+  devam eder; kalkan yalnız `typeof value === 'string'` olan değerlere
+  uygulanır. Bugün metin olarak yazılan tarih değerleri (`Completed At`,
+  `Generated At`, `Published At`) metin kalır ve kalkandan geçer (rakamla
+  başladıkları için değişmezler). Hiçbir hücre tipi metne veya sayıya
+  dönüştürülmez.
+- **Mevcut sütunların içeriği kalkan dışında değişmez:** mevcut sütunlara bu
+  revizyonla bölüm 9 adım 1–3 (CR normalizasyonu, kontrol temizliği, tek satır
+  katlama) **eklenmez**; kalkan ham değere uygulanır. Bu yüzden `\t`/`\r` ile
+  başlayan ham değerler de kalkana takılır.
+- Hücreler yine ExcelJS düz değerleri olarak yazılır; `{ formula }` hiçbir
+  sayfada kullanılmaz.
+- **D-63 ile ilişki:** D-63 "`Licenses` (bulgu) sayfası değişmez" der. Bu
+  revizyon sayfanın yapısını (sütun adı, sırası, sayısı, satır kümesi) ve
+  içerik anlamını değiştirmez; tek fark tetikleyici karakterle başlayan
+  değerlere eklenen `'` önekidir. Bu, güvenlik bulgusu L-2 nedeniyle bilinçli
+  bir çıktı değişikliğidir (karar C-15).
+- `Summary`, `Licenses` ve `Vulnerabilities` sayfalarının yapısı **değişmez**.
 
 ### 5.2 PDF bağımlılık tablosu
 
@@ -562,6 +672,36 @@ olduğunda anahtar olarak bulunur.
   `PackageDownloadLocation`, `PackageLicenseDeclared`, `ExternalRef`,
   `PackageSupplier`, `PackageHomePage`, `DocumentName`, `Creator`) bölüm 9 tek
   satırlık alan kuralından geçer; satır sonu içermez.
+
+**Tek satırlık değerlerde `<text>` kaçışı (1.1.0, L-1).** Tek satırlık bir
+tag-value değeri `<text>` bloğu açamaz veya kapatamaz:
+
+- **Kapsam:** `<text>…</text>` bloğu olarak yazılmayan **her** tag-value
+  değeri — en az yukarıdaki listedeki alanlar ve `Relationship` satırlarının
+  hedef kimliği; tarama, lock, kayıt defteri veya proje verisinden türeyen
+  tüm tek satırlık değerler (paket adı, sürüm, purl'lü `ExternalRef`,
+  `Organization: <yazar>` biçimli `PackageSupplier`, indirme konumu/ana sayfa,
+  `SBOM-<proje adı>-<tarama>` biçimli `DocumentName`, `Organization: <proje
+  adı>` biçimli `Creator`). Sabit değerli satırlara (`SPDXVersion`,
+  `DataLicense`, `DocumentNamespace`, `Created` vb.) da uygulanabilir; orada
+  etkisizdir.
+- **Kaçış biçimi:** blok içi kuralla **birebir aynı** — `<text>` dizisi
+  `&lt;text&gt;`, `</text>` dizisi `&lt;/text&gt;` olur. Eşleşme büyük/küçük
+  harfe duyarsızdır (`<TEXT>`, `</Text>` …); çıktı her zaman küçük harfli
+  `&lt;text&gt;` / `&lt;/text&gt;` biçimidir (blok içinde kullanılan düzenli
+  ifade ve yer değiştirme: `/<(\/?)text>/gi` → `&lt;$1text&gt;`). Değerdeki
+  diğer `<`, `>` ve `&` karakterleri kaçışlanmaz (blok içi kuralla aynı).
+- **Sıra:** kaçış, bölüm 9 adım 1–3'ten **sonra** (adım 4) uygulanır. Böylece
+  biçim karakterlerinin silinmesiyle oluşan diziler (ör. `<te` U+200B `xt>`
+  → `<text>`) de yakalanır.
+- **Değişmez:** hiçbir tek satırlık değer ham `<text>` (herhangi bir harf
+  büyüklüğüyle) ile başlayamaz ve içinde ham `<text>`/`</text>` bulunduramaz.
+  Örnek: `PackageName: <text>gizli` yerine `PackageName: &lt;text&gt;gizli`.
+  Üretici tarafından yazılan `<text>` / `</text>` yalnız
+  `PackageLicenseComments` ve `PackageCopyrightText` bloklarının sınırlarında
+  bulunur.
+- SPDX JSON, CycloneDX JSON ve CycloneDX XML çıktıları bu kuraldan
+  **etkilenmez** (JSON yalnız `JSON.stringify`; XML kendi kaçışını kullanır).
 
 ### 6.2 CycloneDX 1.5 JSON
 
@@ -659,11 +799,34 @@ ipucu, telif satırı, dosya yolu, lisans metni, meta veri lisans metni) her
 2. Kontrol/biçim temizliği: `src/lib/textSanitize.ts` `stripControl`
    (ESC/C1 dizileri, `\p{Cf}`, `\n`/`\t` dışı C0, `DEL`, C1); eşleşmeyen vekil
    → U+FFFD. Saklanırken uygulanmış olsa da çıktıda yeniden uygulanır.
-3. **Tek satırlık alan kuralı:** `\n` ve `\t` → tek boşluk. Kesim yalnız
-   açıkça belirtilen yerlerde (ipucu 200 kod noktası, PDF 28 karakter).
-4. Hedefe özgü kaçış: NOTICE ayraç kalkanı (3.6), tag-value `<text>`
-   (6.1), XML geçersiz karakter + kaçış (6.3), Excel formül kalkanı (5.1),
-   JSON yalnız `JSON.stringify`.
+3. **Tek satırlık alan kuralı:** `\n`, `\t`, U+0085 (NEL), U+2028 (LINE
+   SEPARATOR) ve U+2029 (PARAGRAPH SEPARATOR) karakterlerinin **her biri**
+   tek bir boşluk (U+0020) olur (1.1.0, I-3; karakter başına bir boşluk,
+   ardışık boşluklar birleştirilmez — mevcut `\n`/`\t` davranışıyla aynı).
+   Düzenli ifade karşılığı: `/[\n\t\u0085  ]/g` → `' '`. U+0085
+   adım 2'de zaten silinir; listede savunma derinliği için yer alır. Kesim
+   yalnız açıkça belirtilen yerlerde (ipucu 200 kod noktası, PDF 28 karakter)
+   ve bu adımdan sonra yapılır.
+4. Hedefe özgü kaçış: NOTICE ayraç kalkanı (3.6; çok satırlı metinde
+   U+0085/U+2028/U+2029 sonrası dahil), tag-value `<text>` (6.1; hem blok
+   içinde hem tek satırlık değerlerde, 1.1.0 L-1), XML geçersiz karakter +
+   kaçış (6.3), Excel formül kalkanı (5.1a; tüm sayfalardaki metin
+   hücreleri, 1.1.0 L-2), JSON yalnız `JSON.stringify`.
+
+Çok satırlı serbest metin (NOTICE lisans dosyası ve meta veri lisans metni)
+adım 3'ü uygulamaz; bu metinlerde U+2028/U+2029 korunur ve yalnız NOTICE
+ayraç kalkanı açısından satır sonu sayılır (bölüm 3.6). Satırların `\n` ile
+birleştirildiği alanlarda (telif satırları — NOTICE `Copyright:`, SPDX
+`copyrightText`, CycloneDX `copyright`; `licenseComments` satırları) her
+satır ayrı bir tek satırlık değerdir ve adım 3'ten geçer; birleştirici `\n`
+üreticiye aittir.
+
+Adım 3'ün genişletilmesi, adım 3'ün bugün uygulandığı her yerde geçerlidir
+(NOTICE tek satırlık alanları, yeni Excel sütunları, PDF `License`, SPDX
+tag-value tek satırlık alanları, lisans adı/ifadesi ve telif satırları).
+Bugün yalnız adım 1–2'den geçen JSON/XML alanları (ör. SPDX/CycloneDX JSON
+`name`, `version`) bu revizyonla değişmez. Bölüm 5.1a gereği mevcut Excel
+sütunlarına adım 1–3 uygulanmaz.
 
 ## 10. Test yükümlülükleri
 
@@ -671,13 +834,23 @@ ipucu, telif satırı, dosya yolu, lisans metni, meta veri lisans metni) her
 | --- | --- |
 | backend-engineer | Bu contract'a uygun uygulama: route/controller/`NoticeService`, rapor sütunları, SBOM değişiklikleri, `[registry]` satırı. Implementation sonunda lint, typecheck ve hedef test suite sonuçlarını raporlar. |
 | frontend-engineer | Bölüm 7; lint. |
-| qa-automation | **Uç nokta (contract testi):** `200` başlıkları (`Content-Type`, `Content-Disposition`, `Content-Length`, `X-Checksum-SHA256` = gövde özeti, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`); büyük harfli `scanId` ile istekte dosya adının küçük harf olması; `400`/`401`/`403`/`404` (tarama yok ve `running`/`failed` tarama) gövdeleri ve kodları, hata yanıtında `Content-Disposition` olmaması; API anahtarıyla erişim; istek sırasında ağ isteği yapılmaması ve `sbom_documents`/`reports`/disk yazımı olmaması. **Biçim:** golden NOTICE (`tests/fixtures/notice/*.txt`, `-text`) bayt bayt; iki istekte aynı bayt; BOM yok, CR yok, son satır LF; sıralama (büyük/küçük harfli adlar, sürümsüz paket); runtime tekilliği (girdi sayısı = tekil runtime anahtar sayısı; `dev`+runtime paket bir kez, yalnız `dev` yok); ayraç kalkanı (lisans metninde `ENTRY_SEP` ve `FILE_SEP` satırları); atlanmış dosya; `Reason:` tablosunun en az `no_license_file`, `limit_exceeded`, `version_unknown`, `unreachable`, F3 öncesi satırları; SPDX bağlantıları; PyPI meta veri metni bloğu; 64 MiB kesimi (test sırasında üretilen büyük metinle); F3 öncesi tarama notu. **Raporlar:** `.xlsx` geri okuma — `Dependencies` başlıkları 9 sütun ve sırası, değerler, uyuşmazlık ve `none (lockfile hint ignored: …)` hücreleri, formül kalkanı, F3 öncesi boş hücreler, `Licenses` sayfasının değişmediği; PDF üretiminin hatasız olduğu. **SBOM:** AC-P16-1…7; `licenseComments` iki satır kuralı; tag-value enjeksiyon testi; CycloneDX JSON tek girdi; XML öğe sırası ve geçersiz karakter. **Arayüz (jsdom):** `completed` satırda `a[href="/api/scans/<id>/notice"]` vardır, metni `NOTICE`, SBOM bağlantısı korunur; diğer durumlarda yoktur. **`[registry]`:** iki şablonun birebir metni. **Geriye uyumluluk:** mevcut contract testleri değiştirilmeden yeşil. |
-| security-red-team | NOTICE ayraç sahteciliği, tag-value/XML/Excel enjeksiyonu, uç noktada yetki ve hata gövdesi sızıntısı incelemesi. |
+| qa-automation | **Uç nokta (contract testi):** `200` başlıkları (`Content-Type`, `Content-Disposition`, `Content-Length`, `X-Checksum-SHA256` = gövde özeti, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`); büyük harfli `scanId` ile istekte dosya adının küçük harf olması; `400`/`401`/`403`/`404` (tarama yok ve `running`/`failed` tarama) gövdeleri ve kodları, hata yanıtında `Content-Disposition` olmaması; API anahtarıyla erişim; istek sırasında ağ isteği yapılmaması ve `sbom_documents`/`reports`/disk yazımı olmaması. **Biçim:** golden NOTICE (`tests/fixtures/notice/*.txt`, `-text`) bayt bayt; iki istekte aynı bayt; BOM yok, CR yok, son satır LF; sıralama (büyük/küçük harfli adlar, sürümsüz paket); runtime tekilliği (girdi sayısı = tekil runtime anahtar sayısı; `dev`+runtime paket bir kez, yalnız `dev` yok); ayraç kalkanı (lisans metninde `ENTRY_SEP` ve `FILE_SEP` satırları); atlanmış dosya; `Reason:` tablosunun en az `no_license_file`, `limit_exceeded`, `version_unknown`, `unreachable`, F3 öncesi satırları; SPDX bağlantıları; PyPI meta veri metni bloğu; 64 MiB kesimi (test sırasında üretilen büyük metinle); F3 öncesi tarama notu. **Raporlar:** `.xlsx` geri okuma — `Dependencies` başlıkları 9 sütun ve sırası, değerler, uyuşmazlık ve `none (lockfile hint ignored: …)` hücreleri, formül kalkanı, F3 öncesi boş hücreler, `Licenses` sayfasının yapısının (sütunlar, sıra, satır kümesi) değişmediği; PDF üretiminin hatasız olduğu. **SBOM:** AC-P16-1…7; `licenseComments` iki satır kuralı; tag-value enjeksiyon testi; CycloneDX JSON tek girdi; XML öğe sırası ve geçersiz karakter. **Arayüz (jsdom):** `completed` satırda `a[href="/api/scans/<id>/notice"]` vardır, metni `NOTICE`, SBOM bağlantısı korunur; diğer durumlarda yoktur. **`[registry]`:** iki şablonun birebir metni. **Geriye uyumluluk:** mevcut contract testleri değiştirilmeden yeşil. |
+| backend-engineer (1.1.0) | L-1: tag-value tek satırlık değerlerde `<text>`/`</text>` kaçışı (6.1). L-2: Excel kalkanının tüm sayfalardaki metin hücrelerine uygulanması, sayı hücrelerinin tipinin korunması (5.1a). I-3: adım 3'e U+0085/U+2028/U+2029 eklenmesi ve NOTICE ayraç kalkanının bu karakterlerden sonra da uygulanması (3.6, 9). M-1: NOTICE metinlerinin parti parti okunması ve kesimden sonra hiç okunmaması (3.7). Lint, typecheck ve hedef test sonuçları raporlanır. |
+| qa-automation (1.1.0) | **L-1:** lock'ta adı `<text>gizli` (ve `<TEXT>…`, içinde `</text>` geçen ad/sürüm/yazar/ana sayfa) olan paketle SPDX tag-value: hiçbir tek satırlık değer ham `<text>` ile başlamaz ve ham `<text>`/`</text>` içermez; değer `&lt;text&gt;gizli`; ham `<text>` ve `</text>` sayısı yalnız üreticinin `PackageLicenseComments`/`PackageCopyrightText` blok sayısına eşit; sonraki paketin `PackageName` satırı belgede ayrı satır olarak bulunur; SPDX JSON ve CycloneDX çıktıları değişmez. **L-2:** `.xlsx` geri okuma — `Dependencies` `Name`/`Version`/`PURL`/`Manifest`, `Licenses` `Detected License`/`Normalized License`/`Package`, `Vulnerabilities` `Title`/`Advisory` ve `Summary` `Project` hücrelerinde `=`, `+`, `-`, `@`, `\t`, `\r` ile başlayan değerler `'` önekli; bu karakterlerle başlamayan değerler değişmemiş; `Depth`, `CVSS` ve `Summary` sayaçları sayı tipinde; hiçbir hücre formül değil. **I-3:** NOTICE tek satırlık alanlarında (ad, telif) U+2028/U+2029 → boşluk; lisans metninde U+2028 + `ENTRY_SEP` ve U+2029 + `FILE_SEP` → ayırıcıdan sonra tek boşluk; ayırıcı korunur; SPDX tag-value tek satırlık değerde U+2028 yok. **M-1:** çok sayıda büyük önbellek satırıyla (ör. 200 × 4 MiB) NOTICE üretiminde tepe heap kullanımının sınırlı kalması (güvenlik raporu hedefi < ~300 MB) ve çıktının 64 MiB kesim kuralına uyması; mevcut golden NOTICE'lar değişmeden geçer. |
+| security-red-team | NOTICE ayraç sahteciliği, tag-value/XML/Excel enjeksiyonu, uç noktada yetki ve hata gövdesi sızıntısı incelemesi. 1.1.0 sonrası M-1 ve L-1 düzeltmelerinin merge öncesi yeniden incelenmesi (güvenlik raporu "Merge kararı"). |
 
 ## 11. Sürümleme
 
-- Contract sürümü **1.0.0**. API yolu sürümlenmez (`/api/...`, mevcut
-  desen).
+- Contract sürümü **1.1.0** (minor: güvenlik sertleştirmesi; uç nokta,
+  şema, sütun ve değer kümeleri değişmez). API yolu sürümlenmez (`/api/...`,
+  mevcut desen). OpenAPI `info.version` 1.0.0 kalır.
+- **NOTICE biçim sürümü 1.1.0'da `1` kalır.** I-3 kalkan genişletmesi ve
+  adım 3 değişikliği yalnız U+2028/U+2029 içeren girdilerde NOTICE baytlarını
+  değiştirir. F3 henüz yayımlanmadığı (branch merge edilmediği) için
+  `NOTICE format: 1` çıktısını görmüş bir tüketici yoktur; numara artırılmaz
+  (karar C-17). Aşağıdaki kural F3 merge edildikten sonraki değişikliklere
+  uygulanır. Golden dosyalar bu karakterleri içermiyorsa değişmez; içeriyorsa
+  güncellenir.
 - NOTICE biçim sürümü üst bilgideki `NOTICE format: 1` satırıdır. Bölüm 3'te
   çıktı baytlarını değiştiren her değişiklik bu sayıyı artırır, golden
   dosyayı günceller ve bu contract'ın yeni sürümünü gerektirir.
@@ -707,14 +880,36 @@ Tümü "kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10".
 | C-11 | SPDX lock kaynağı görünürlüğü | `licenseComments` satırı `License source: lockfile (unverified)` | L-6 görünürlüğü SBOM'da da |
 | C-12 | F3 öncesi SBOM telifi | `NOASSERTION` (önbellek araması yok); NOTICE ise ADR-006 Karar 12'ye göre önbellekte arar | ADR-006 SBOM için F3 öncesi telif kaynağı tanımlamıyordu; `packages.copyright_text` hiç dolmadığı için bugünkü çıktı da `NOASSERTION` |
 | C-13 | Desteklenmeyen ekosistem | NOTICE nedeni `license enrichment not supported for this ecosystem`; F3 ayrıştırıcıları yalnız `nodejs`/`python` ürettiği için bugün oluşmaz | `tech_ecosystem` enum'u daha geniş |
+| C-14 | Tag-value tek satırlık değerlerde `<text>` (1.1.0) | Önerilen seçenek: değerin yalnız başı değil **her yerindeki** `<text>`/`</text>` (harf duyarsız) blok içi kaçışla birebir aynı biçimde `&lt;text&gt;`/`&lt;/text&gt;` olur; adım 1–3'ten sonra uygulanır | Güvenlik raporu L-1; ADR-006 Karar 13 tag-value kaçışını yalnız bloklar için tanımlıyordu |
+| C-15 | Excel formül kalkanının kapsamı (1.1.0) | Önerilen seçenek: tüm sayfalardaki tüm metin hücreleri; sayı hücreleri tipini korur; mevcut sütunlara yalnız kalkan eklenir (adım 1–3 eklenmez) | Güvenlik raporu L-2; ADR-006 Karar 13 "Mevcut sütunlar değişmez" ve D-63 "`Licenses` sayfası değişmez" ifadeleri bu güvenlik istisnasıyla daraltılır (yapı değişmez, yalnız tetikleyici önekli değerler) |
+| C-16 | Unicode satır ayırıcıları (1.1.0) | U+0085/U+2028/U+2029 tek satırlık değerlerde boşluk; çok satırlı NOTICE metninde korunur ama ayraç kalkanı için satır sonu sayılır | Güvenlik raporu I-3 |
+| C-17 | NOTICE biçim numarası (1.1.0) | `NOTICE format: 1` kalır | F3 yayımlanmadı; numarayı artırmak tüketicisi olmayan bir sürüm farkı yaratırdı |
+| C-18 | NOTICE bellek sınırı (1.1.0) | Metinler parti parti okunur, ilk kesimden sonra hiç okunmaz; çıktı biçimi değişmez | Güvenlik raporu M-1 |
 
 **Handoff:** Bu contract non-trivial'dir. Implementation ve doğrulama sonunda
 `docs/handoffs/REQ-004.md` güncellenmelidir (integration-release; Delivery Lead
 takip eder). Handoff'a yazılacaklar: golden NOTICE dosyasının yolu, CycloneDX
 XSD sırası teyidi (bölüm 6.3) ve bu contract'tan sapma varsa gerekçesi.
+1.1.0 için ek olarak: contract revizyonunun güvenlik bulgularına (L-1, L-2,
+I-3, M-1) atfı, düzeltmelerin durumu ve M-1 kapatılmadan merge edilecekse
+insan risk kabulü.
+
+**ADR uyumu (1.1.0):** C-14 ve C-15, ADR-006 Karar 13 tablosundaki SPDX
+tag-value ve Excel satırlarından daha sıkıdır. Bu bir gevşetme değil güvenlik
+sertleştirmesidir; ADR-006 Karar 13'ün bu kurallarla uyumlu hâle getirilmesi
+(not veya revizyon) solution-architect'e bildirilmelidir.
 
 **NotebookLM / Obsidian:** kullanılmadı. Kaynaklar git'teki REQ-004 r1,
 ADR-006 ve repo kodu (`src/controllers/sbomController.ts`,
 `src/sbom/sbomService.ts`, `src/sbom/formats/*`, `src/reports/reportService.ts`,
 `src/middleware/rbac.ts`, `src/middleware/securityHeaders.ts`,
 `src/lib/httpError.ts`, `src/config/permissions.ts`, `public/app.js`).
+1.1.0 için ek kaynaklar: `docs/quality/security-reports/REQ-004-security-review.md`,
+`src/lib/outputText.ts`, `src/sbom/formats/spdx.ts`, `src/reports/reportService.ts`.
+
+## 13. Revizyon geçmişi
+
+| Sürüm | Tarih | Değişiklik | Dayanak | Onay |
+| --- | --- | --- | --- | --- |
+| 1.0.0 | 2026-10-10 | İlk sürüm. | REQ-004, ADR-006 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
+| 1.1.0 | 2026-10-10 | **L-1:** SPDX tag-value tek satırlık değerlerde `<text>`/`</text>` (harf duyarsız) → `&lt;text&gt;`/`&lt;/text&gt;`, blok içi kuralla aynı; hiçbir tek satırlık değer ham `<text>` ile başlayamaz (6.1, 9 adım 4; C-14). **L-2:** Excel formül kalkanı tüm sayfalardaki tüm metin hücrelerine genişletildi (`Summary`, `Dependencies`, `Licenses`, `Vulnerabilities`); sayı hücreleri tipini korur; mevcut içerik kalkan öneki dışında değişmez (1, 5.1, 5.1a; C-15). **I-3:** adım 3'te U+0085/U+2028/U+2029 → boşluk; NOTICE ayraç kalkanı bu karakterlerden sonra da uygulanır (3.5, 3.6, 9; C-16). **M-1:** NOTICE metinleri parti parti okunur ve kesimden sonra okunmaz; çıktı biçimi değişmez (3.7; C-18). `NOTICE format: 1` kalır (11; C-17). Test yükümlülükleri eklendi (10). | `docs/quality/security-reports/REQ-004-security-review.md` (M-1, L-1, L-2, I-3) | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |

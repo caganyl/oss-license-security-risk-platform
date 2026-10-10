@@ -275,15 +275,24 @@ export const VULNERABILITY_LIMITS = Object.freeze({
     failureThreshold: 5,
   }),
   nvd: Object.freeze({
-    windowMs: 30_000,
+    /**
+     * NVD publishes 5 / 50 requests per rolling 30 s; the limiter counts
+     * starts, NVD counts arrivals, so the window has a 5 s safety margin
+     * (security re-verification Y-2).
+     */
+    windowMs: 35_000,
     requestsWithoutKey: 5,
     requestsWithKey: 50,
+    /** Y-2: minimum spacing between two NVD request starts without an API key (NVD guidance ~6 s). */
+    minSpacingWithoutKeyMs: 6_000,
     foundTtlMs: 7 * 24 * 60 * 60_000,
     noCvssTtlMs: 24 * 60 * 60_000,
   }),
   recheck: Object.freeze({
     maxPackages: 10_000,
     runTimeoutMs: 30 * 60_000,
+    /** Y-1: the lookup gets at most this share of the run limit; the rest (>= 5 of 30 min) is reserved for the write phase. */
+    lookupBudgetShare: 5 / 6,
     tickIntervalMs: 10 * 60_000,
     firstCheckDelayMs: 60_000,
     failureBackoffMs: 60 * 60_000,

@@ -78,6 +78,12 @@ export interface SafeHttpPurpose {
    * (ADR-007 Karar 6). Resolves false when `signal` aborted while waiting.
    */
   beforeAttempt?(signal: AbortSignal): Promise<boolean>;
+  /**
+   * Called after every attempt that got an HTTP response (retries included),
+   * before the retry decision, e.g. to pause a rate limiter on `429`
+   * (security re-verification Y-2). Must not throw; reads headers only.
+   */
+  onResponse?(status: number, headers: IncomingHttpHeaders): void;
   /** In-flight dedupe key prefix kind: `json` or `binary` (streamed digest). */
   kind: 'json' | 'binary';
 }
@@ -528,6 +534,7 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
       if (outcome.type === 'too_large') return { result: { kind: 'too_large' }, trace: steps, host, breaker };
       if (outcome.type === 'bad_encoding') return { result: { kind: 'error', code: 'BAD_ENCODING' }, trace: steps, host, breaker };
       const { status, headers } = outcome;
+      purpose.onResponse?.(status, headers);
       if (purpose.redirect === 'none') {
         if (status >= 300 && status < 400) return { result: { kind: 'error', code: 'REDIRECT' }, trace: steps, host, breaker };
       } else if (REDIRECT_STATUSES.has(status)) {

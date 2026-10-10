@@ -10,6 +10,7 @@
  * "Kurallar"); none of them is a real credential.
  */
 import os from 'node:os';
+import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
 import { MAX_ERROR_TEXT_CHARS, REDACTED, sanitizeErrorText, scrubSecrets, truncateCodePoints, type ErrorTextContext } from '../../src/lib/errorText';
 
@@ -96,9 +97,9 @@ describe('AC-T-4: absolute paths -> fixed placeholders (longest first, both sepa
     for (const sibling of ['C:\\Users\\qa-userr\\file', 'C:\\Users\\qa-user.old\\file', 'C:\\Users\\qa-user2', 'C:\\Users\\qa-user_x']) {
       expect(s(sibling), sibling).toBe(sibling);
     }
-    // the same rule for the profile named in the task: C:\Users\caganyy is not C:\Users\cagany
-    expect(s('C:\\Users\\caganyy\\x', { ...WIN, homeDir: 'C:\\Users\\cagany' })).toBe('C:\\Users\\caganyy\\x');
-    expect(s('C:\\Users\\cagany\\x', { ...WIN, homeDir: 'C:\\Users\\cagany' })).toBe('<home>\\x');
+    // the same rule with another (fake) profile name: C:\Users\qa-ownerr is not C:\Users\qa-owner
+    expect(s('C:\\Users\\qa-ownerr\\x', { ...WIN, homeDir: 'C:\\Users\\qa-owner' })).toBe('C:\\Users\\qa-ownerr\\x');
+    expect(s('C:\\Users\\qa-owner\\x', { ...WIN, homeDir: 'C:\\Users\\qa-owner' })).toBe('<home>\\x');
   });
 
   it('AC-T-4: on linux paths are case-sensitive', () => {
@@ -159,9 +160,9 @@ describe('AC-T-4: secrets -> [REDACTED]', () => {
 });
 
 describe('AC-T-4: secrets glued to ANSI colour sequences (git colours its output)', () => {
-  // Product gap (reported to backend): secrets are masked before ANSI removal, and the
-  // `\b` of the token-shape patterns does not match after the CSI final letter (`m`),
-  // so `\x1b[31mghp_…` survives once the sequence is stripped. Red until fixed.
+  // Formerly a product gap (security review L-1): secrets were masked before ANSI removal
+  // and `\b` did not match after the CSI final letter (`m`). Fixed in f32b00c (control
+  // characters first, `(?<![A-Za-z0-9])` start boundary); kept as a regression guard.
   it.each([
     ['ghp_', fake('gh', 'p_', FILLER)],
     ['github_pat_', fake('github', '_pat_', FILLER, '_', FILLER)],
@@ -179,6 +180,97 @@ describe('AC-T-4: control characters', () => {
     expect(s('a\r\nb\rc')).toBe('a\nbc');
     expect(s('x\x00y\x07z\x08\x0b\x0c\x1f\x7f\x85\x9b!')).toBe('xyz!');
     expect(s('keep\ttab\nand newline')).toBe('keep\ttab\nand newline');
+  });
+});
+
+describe('L-1 (security review): control characters are removed before masking; token boundaries, letter case, format characters', () => {
+  const GH = fake('gh', 'p_', FILLER);
+  const NO_FILLER = 'FAKE0TEST0';
+
+  it('L-1: a provider token split by a lone \\r (short first part) is joined by the control-character step and then masked', () => {
+    const split = fake('gh', 'p_', FILLER.slice(0, 10), '\r', FILLER.slice(10));
+    expect(s(`remote: ${split} end`)).toBe(`remote: ${REDACTED} end`);
+  });
+
+  // Product bug (found by QA after f32b00c, reported to backend): when the part before
+  // the control character is itself a complete token shape (>= 20 characters after
+  // `ghp_`), the raw pre-pass masks only that part; step 1 then glues the rest of the
+  // token to the placeholder ("[REDACTED]FAKE0TEST0…") and step 2 no longer sees a token.
+  // Expected: the whole token disappears. Red until fixed.
+  it('L-1: a provider token split by a lone \\r after 20 characters leaves no fragment', () => {
+    const split = fake('gh', 'p_', FILLER.slice(0, 20), '\r', FILLER.slice(20));
+    const out = s(`remote: ${split} end`);
+    expect(out).not.toContain(FILLER.slice(20));
+    expect(out).toBe(`remote: ${REDACTED} end`);
+  });
+
+  it('L-1: the job token from context.secrets split by \\x00 is masked after joining', () => {
+    expect(s(`token ${FAKE_TOKEN.slice(0, 8)}\x00${FAKE_TOKEN.slice(8)} end`)).toBe(`token ${REDACTED} end`);
+  });
+
+  it('L-1: a token after a percent escape (%3Aghp_…) or after "_" (_ghp_…) is masked', () => {
+    expect(s(`fatal: https%3A${GH}%40git.example.test`)).toBe(`fatal: https%3A${REDACTED}%40git.example.test`);
+    expect(s(`x=_${GH}`)).toBe(`x=_${REDACTED}`);
+    expect(s(`x=_${fake('gl', 'pat-', FILLER)}`)).toBe(`x=_${REDACTED}`);
+  });
+
+  it('L-1: Bearer and Basic values in any letter case (bearer, BEARER, BASIC)', () => {
+    const otherBasic = Buffer.from('qa-user:not-a-real-pass-123', 'utf8').toString('base64'); // not in context.secrets
+    expect(s('sent bearer abcdefghijklmnop1234 to host')).toBe(`sent bearer ${REDACTED} to host`);
+    expect(s('sent BEARER abcdefghijklmnop1234 to host')).toBe(`sent BEARER ${REDACTED} to host`);
+    expect(s(`auth BASIC ${otherBasic} sent`)).toBe(`auth BASIC ${REDACTED} sent`);
+    expect(s(`auth basic ${otherBasic} sent`)).toBe(`auth basic ${REDACTED} sent`);
+  });
+
+  it('L-1: a profile path split by \\x00 (C:\\Users\\qa\\x00-user) is masked after joining', () => {
+    expect(s('see C:\\Users\\qa\x00-user\\x')).toBe('see <home>\\x');
+    expect(s('see C:/Users/qa-\x07user/x')).toBe('see <home>/x');
+  });
+
+  it('L-1: a CSI whose final byte is the drive letter (ESC[1C:\\Users\\…) does not expose the profile path', () => {
+    for (const input of ['see \x1b[1C:\\Users\\qa-user\\.gitconfig', 'see \x9b1C:\\Users\\qa-user\\.gitconfig', 'see \x1b[1;2C:/Users/qa-user/.gitconfig']) {
+      const out = s(input);
+      expect(out.toLowerCase(), JSON.stringify(input)).not.toContain('qa-user');
+      expect(out.toLowerCase(), JSON.stringify(input)).not.toContain('users');
+      expect(out).not.toMatch(CONTROL_EXCEPT_NL_TAB);
+    }
+  });
+
+  it('L-1: a token glued to unfinished CSI parameters (ESC[31 + token, 8-bit CSI) does not survive', () => {
+    for (const input of [`remote: \x1b[31${GH} end`, `remote: \x9b31${GH} end`, `remote: \x1b[${GH} end`, `remote: \x1b[1;31m${GH}\x1b[0m end`]) {
+      const out = s(input);
+      expect(out, JSON.stringify(input)).not.toContain(NO_FILLER);
+      expect(out).not.toMatch(CONTROL_EXCEPT_NL_TAB);
+    }
+  });
+
+  it('L-1: an OSC 8 hyperlink is removed whole (ST or BEL terminator, 7-bit and 8-bit); the link target with credentials disappears', () => {
+    expect(s('see \x1b]8;;https://qa-user:not-a-real-pass@git.example.test/x\x1b\\the docs\x1b]8;;\x1b\\ now')).toBe('see the docs now');
+    expect(s('see \x1b]8;;https://git.example.test/x\x07the docs\x1b]8;;\x07 now')).toBe('see the docs now');
+    expect(s('see \x9d8;;https://git.example.test/x\x9cthe docs\x9d8;;\x9c now')).toBe('see the docs now');
+    expect(s('title \x1b]0;window title\x07done')).toBe('title done');
+  });
+
+  it('L-1 / I-8: format characters (U+202E RTL override, U+200B zero width, U+2060, U+FEFF) are removed; a token split by U+200B is masked', () => {
+    expect(s('abc\u202Edef\u200Bghi\u2060jkl\uFEFF')).toBe('abcdefghijkl');
+    expect(s(`remote: ${fake('gh', 'p_', FILLER.slice(0, 10), '\u200B', FILLER.slice(10))} end`)).toBe(`remote: ${REDACTED} end`);
+  });
+
+  // Time limit: required < 1 s; asserted < 2 s for CI headroom (a quadratic rescan of
+  // 200 000 unterminated control strings would take minutes).
+  it.each([
+    ['200 000 x \\x9d (unterminated 8-bit OSC)', '\x9d'.repeat(200_000)],
+    ['100 000 x ESC ]', '\x1b]'.repeat(100_000)],
+    ['100 000 x ESC [', '\x1b['.repeat(100_000)],
+    ['\\x90 + 200 000 characters without terminator', `\x90${'a'.repeat(200_000)}`],
+    ['100 000 x "\\x9b1"', '\x9b1'.repeat(100_000)],
+  ])('L-1: %s is sanitized in linear time', (_label, input) => {
+    const start = performance.now();
+    const out = s(input);
+    const ms = performance.now() - start;
+    expect(out).not.toMatch(CONTROL_EXCEPT_NL_TAB);
+    expect(codePoints(out)).toBeLessThanOrEqual(2000);
+    expect(ms, `took ${ms.toFixed(0)} ms`).toBeLessThan(2_000);
   });
 });
 

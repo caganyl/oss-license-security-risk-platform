@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MAX_MANIFEST_BYTES, SKIP_DIRS, parseManifests } from '../../src/scanner/parsers';
 import type { SandboxScanResult } from '../../src/types/scan';
 import { FORMATS_DIR, errorTextProblems } from '../helpers/parserGolden';
@@ -235,7 +235,7 @@ describe('AC-P10-11 / L-4 / D-28 a: links and junctions are not followed', () =>
   );
 
   it.skipIf(!FILE_SYMLINKS)(
-    `AC-P10-11 (3): linked manifests get an ecosystem record, an unrelated file link gets none${NO_SYMLINK_NOTE}`,
+    `AC-P10-11 (3) / L-2: linked manifests get an ecosystem record, an unrelated file link gets one 'filesystem' record${NO_SYMLINK_NOTE}`,
     () => {
       const outside = newRoot('outside-files');
       const req = write(outside, 'requirements.txt', 'outside-py==1.0.0\n');
@@ -250,9 +250,69 @@ describe('AC-P10-11 / L-4 / D-28 a: links and junctions are not followed', () =>
       expectHealthyShape(r, root);
       expect(r.dependencies).toEqual([]);
       expect(r.scan_files).toEqual([]);
-      expect(errorsOf(r)).toEqual(['nodejs:npm/package.json', 'python:requirements.txt']);
+      // L-2 (security review): the target is never resolved, so a file link and a folder
+      // link with an unrelated name are not told apart: both get a 'filesystem' record
+      // (formerly ADR-005 Karar 6 skipped unrelated file links silently; deviation in the handoff).
+      expect(errorsOf(r)).toEqual(['filesystem:README.md', 'nodejs:npm/package.json', 'python:requirements.txt']);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+describe('L-2 (security review): link targets are never resolved; the record is chosen by name only', () => {
+  it("L-2: junction with an unrelated name -> one 'filesystem' record; SKIP_DIRS names -> no record; a manifest name -> that ecosystem's record", () => {
+    const outside = newRoot('l2-outside');
+    write(outside, 'package.json', JSON.stringify({ dependencies: { 'outside-pkg': '1.0.0' } }));
+    const root = newRoot('l2-names');
+    write(root, 'requirements.txt', 'flask==3.0.0\n');
+    dirLink(outside, path.join(root, 'docs-link'));
+    dirLink(outside, path.join(root, 'node_modules'));
+    dirLink(outside, path.join(root, 'build'));
+    fs.mkdirSync(path.join(root, 'sub'));
+    dirLink(outside, path.join(root, 'sub', '.venv'));
+    dirLink(outside, path.join(root, 'sub', 'package.json')); // a folder link that carries a manifest name
+
+    const r = parse(root);
+    expectHealthyShape(r, root);
+    expect(namesOf(r)).toEqual(['flask']);
+    expect(filesOf(r)).toEqual(['requirements.txt']);
+    expect(errorsOf(r)).toEqual(['filesystem:docs-link', 'nodejs:sub/package.json']);
+  });
+
+  it('L-2: walking a tree with junctions never calls fs.statSync / fs.realpathSync(.native) on a link (lstat only)', () => {
+    // vi.spyOn works here: src/scanner/parsers/common.ts reads `fs.<fn>` from the shared
+    // CommonJS `node:fs` default export at call time (Vitest externalises node built-ins),
+    // which is the same object this file imports. The lstat spy is the positive control
+    // proving that calls from the parser module are intercepted at all.
+    const outside = newRoot('l2-spy-outside');
+    write(outside, 'requirements.txt', 'outside==1.0.0\n');
+    const root = newRoot('l2-spy');
+    write(root, 'package.json', JSON.stringify({ dependencies: { 'inside-pkg': '1.0.0' } }));
+    const linkPaths = [path.join(root, 'unrelated'), path.join(root, 'requirements.txt'), path.join(root, 'node_modules')];
+    for (const l of linkPaths) dirLink(outside, l);
+
+    const lstatSpy = vi.spyOn(fs, 'lstatSync');
+    const statSpy = vi.spyOn(fs, 'statSync');
+    const nativeSpy = vi.spyOn(fs.realpathSync, 'native');
+    const realpathSpy = vi.spyOn(fs, 'realpathSync');
+    // The mock replacing fs.realpathSync has no `.native`; give it the spied one.
+    (fs.realpathSync as unknown as { native: unknown }).native = nativeSpy;
+    let r: SandboxScanResult;
+    try {
+      r = parse(root);
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    const norm = (p: unknown) => path.resolve(String(p)).toLowerCase();
+    const isLinkOrBelow = (p: unknown) => linkPaths.some((l) => norm(p) === l.toLowerCase() || norm(p).startsWith(`${l.toLowerCase()}${path.sep}`));
+    const lstatArgs = lstatSpy.mock.calls.map((c) => c[0]);
+    expect(lstatArgs.filter(isLinkOrBelow).length, 'positive control: lstat seen on the links').toBeGreaterThanOrEqual(3);
+    const resolvingCalls = [...statSpy.mock.calls, ...realpathSpy.mock.calls, ...nativeSpy.mock.calls].map((c) => c[0]).filter(isLinkOrBelow);
+    expect(resolvingCalls, 'a link target was resolved').toEqual([]);
+    expect(errorsOf(r)).toEqual(['filesystem:unrelated', 'python:requirements.txt']);
+    expect(namesOf(r)).toEqual(['inside-pkg']);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -394,6 +394,110 @@ describe('ADR-004 Karar 4: write fence on worker_id', () => {
   });
 });
 
+describe('I-3 (security review): system_settings bounds and waiting scans whose attempts are used up', () => {
+  async function setRetry(projectId: string, fields: { status: string; retry_count: number; error_message?: string | null; future?: boolean }): Promise<string> {
+    const [s] = await db.query<{ id: string }>(
+      `INSERT INTO scans (project_id, trigger, status, ref, queued_at, retry_count, error_message, next_attempt_at, created_at)
+       VALUES ($1, 'manual', $2::scan_status, 'main', NOW(), $3, $4, CASE WHEN $5 THEN NOW() + INTERVAL '1 hour' END, NOW() - INTERVAL '1 minute')
+       RETURNING id`,
+      [projectId, fields.status, fields.retry_count, fields.error_message ?? null, fields.future ?? false],
+    );
+    return s.id;
+  }
+
+  it('I-3: scan.max_retries lowered to 2 -> at claim, waiting scans with retry_count >= 2 become failed + scan_failed (last error kept); a scan with an attempt left is claimed', async () => {
+    await db.query(`UPDATE system_settings SET value = '2' WHERE key = 'scan.max_retries'`);
+    const projectId = await insertProject(root);
+    const over = await setRetry(projectId, { status: 'queued', retry_count: 3, error_message: 'earlier clone failure' });
+    const equal = await setRetry(projectId, { status: 'queued', retry_count: 2, future: true });
+    const pendingOver = await setRetry(projectId, { status: 'pending', retry_count: 5 });
+    const fresh = await insertScan(projectId);
+    const parser = vi.fn<RunParserFn>(okParser);
+
+    expect(await worker({ runParser: parser }).runOnce()).toBe(fresh);
+    expect((await row(fresh)).status).toBe('completed');
+    expect(parser).toHaveBeenCalledTimes(1);
+
+    const o = await row(over);
+    expect(o).toMatchObject({ status: 'failed', retry_count: 3, next_attempt_at: null, worker_id: null, error_message: 'earlier clone failure' });
+    expect(o.completed_at).not.toBeNull();
+    const e = await row(equal);
+    expect(e).toMatchObject({ status: 'failed', retry_count: 2, next_attempt_at: null });
+    expect(e.error_message).toMatch(/Deneme hakkı bitti/);
+    expect((await row(pendingOver)).status).toBe('failed');
+    for (const id of [over, equal, pendingOver]) expect(await failedAudits(id)).toBe(1);
+    expect(logs.filter((l) => /deneme hakkı kalmadı \(scan\.max_retries=2\); failed\./.test(l))).toHaveLength(3);
+
+    // a second poll changes nothing more (no duplicate audit rows)
+    expect(await worker().runOnce()).toBeNull();
+    for (const id of [over, equal, pendingOver]) expect(await failedAudits(id)).toBe(1);
+  });
+
+  it('I-3: retry_count below scan.max_retries is not touched by the cleanup', async () => {
+    await db.query(`UPDATE system_settings SET value = '2' WHERE key = 'scan.max_retries'`);
+    const projectId = await insertProject(root);
+    const waiting = await setRetry(projectId, { status: 'queued', retry_count: 1, future: true, error_message: 'transient' });
+    expect(await worker().runOnce()).toBeNull();
+    expect(await row(waiting)).toMatchObject({ status: 'queued', retry_count: 1, error_message: 'transient' });
+    expect(await failedAudits(waiting)).toBe(0);
+  });
+
+  it('I-3: scan.max_retries 11 / scan.timeout_minutes 1441 in system_settings -> defaults (3 attempts, 60 min) and each warning logged once per worker', async () => {
+    await db.query(`UPDATE system_settings SET value = '11' WHERE key = 'scan.max_retries'`);
+    await db.query(`UPDATE system_settings SET value = '1441' WHERE key = 'scan.timeout_minutes'`);
+    const projectId = await insertProject(root);
+    const exhausted = await setRetry(projectId, { status: 'queued', retry_count: 3 }); // >= default 3, < 11
+    const w = worker();
+    const scanId = await insertScan(projectId);
+    expect(await w.runOnce()).toBe(scanId);
+    const r = await row(scanId);
+    expect(r.status).toBe('completed');
+    expect(r.timeout_window).toBe(60 * 60);
+    expect((await row(exhausted)).status).toBe('failed'); // the default (3) applied, not 11
+    await w.runOnce();
+    await w.runOnce();
+    expect(logs.filter((l) => l.includes('scan.max_retries geçersiz veya sınır dışı'))).toHaveLength(1);
+    expect(logs.filter((l) => l.includes('scan.timeout_minutes geçersiz veya sınır dışı'))).toHaveLength(1);
+  });
+});
+
+describe('I-6 (security review): loadEcosystems logs only the error code', () => {
+  it('I-6: a failing project_tech_stacks query -> one warning with the code, never the error object or its message; the scan falls back to nodejs + python', async () => {
+    const scanId = await insertScan(await insertProject(root));
+    const secretish = 'relation failed for postgres://qa:not-a-real-pass@localhost/x';
+    const pool = new Proxy(db.pool, {
+      get(target, prop) {
+        if (prop === 'query') {
+          return (...args: unknown[]) => {
+            if (typeof args[0] === 'string' && args[0].includes('project_tech_stacks')) {
+              return Promise.reject(Object.assign(new Error(secretish), { code: '42P01' }));
+            }
+            return (target.query as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+          };
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    }) as Pool;
+    const warn = vi.fn();
+    const parser = vi.fn<RunParserFn>(okParser);
+    expect(await worker({ db: pool, runParser: parser, logger: { log: () => undefined, warn, error: () => undefined } }).runOnce()).toBe(scanId);
+
+    const calls = warn.mock.calls.filter((c) => String(c[0]).includes('tech stack'));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(1);
+    expect(calls[0][0]).toBe(`Warning: failed to fetch tech stack for project ${(await db.query<{ project_id: string }>('SELECT project_id FROM scans WHERE id = $1', [scanId]))[0].project_id} (42P01).`);
+    for (const c of warn.mock.calls) {
+      for (const arg of c) {
+        expect(arg).not.toBeInstanceOf(Error);
+        expect(String(arg)).not.toContain('not-a-real-pass');
+      }
+    }
+    expect(parser.mock.calls[0][1]).toEqual(['nodejs', 'python']);
+    expect((await row(scanId)).status).toBe('completed');
+  });
+});
+
 describe('AC-G-8 / D-43: next_attempt_at and timeout_at never appear in API responses', () => {
   it('POST /api/scans, GET /api/scans/:id and GET /api/scans', async () => {
     const app = await makeApp(db.pool, { scanRoots: [root] });

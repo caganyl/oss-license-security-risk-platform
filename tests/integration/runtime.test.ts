@@ -4,8 +4,8 @@
  *
  * The runtime is created in-process with `createRuntime(options)`; every
  * test injects `exit: vi.fn()` (the 15 s forced-exit timer must never reach
- * the real `process.exit`), a fixed free port (the Host allow-list is built
- * from `options.port`, so port 0 would reject every request), a capturing
+ * the real `process.exit`), a fixed free port (port 0 also works since
+ * f32b00c: the allow-list follows the bound port, security review I-1), a capturing
  * logger, `checkGit` (no `git --version` child process) and fake
  * clone/parser/report-service unless the test needs the real parser thread.
  * The scan worker poll interval is lowered to 200 ms for this file
@@ -526,11 +526,9 @@ describe('AC-T-3 / AC-P12-6 step 5: git missing or older than 2.32 never stops t
   );
 });
 
-describe('Observation (product bug): Host allow-list with an ephemeral port', () => {
-  // createRuntime({ port: 0 }) builds the Host/Origin allow-list from port 0
-  // (src/runtime.ts listenApp call -> src/app.ts buildAllowedOrigins), so every
-  // request to the actually bound port is rejected with 403. Expected: the
-  // allow-list follows the bound port. Red until the backend fix.
+describe('I-1 (security review): Host allow-list with an injected ephemeral port; PORT validation at start-up', () => {
+  // Formerly a product bug (allow-list built from port 0); fixed in f32b00c
+  // (listenApp builds it from the bound port). Kept as a regression guard.
   it('createRuntime({ port: 0 }) binds a free port and GET /health with Host 127.0.0.1:<bound port> answers 200', async () => {
     const db = await newDb();
     const { runtime } = await harness(db, { port: 0 });
@@ -538,6 +536,67 @@ describe('Observation (product bug): Host allow-list with an ephemeral port', ()
     const bound = runtime.address?.port ?? 0;
     expect(bound).toBeGreaterThan(0);
     expect(await health(bound)).toBe(200);
+  });
+
+  it.each([['0'], ['70000'], ['abc']])(
+    'I-1: PORT=%s (no injected port) -> RuntimeStartupError exit 1 with the fixed message; no lock, no pool, nothing listens',
+    async (value) => {
+      const factory = vi.fn((config: ClientConfig) => new Client(config) as unknown as LockClient);
+      const createPoolSpy = vi.fn();
+      const exit = vi.fn<(code: number) => void>();
+      const runtime = createRuntime({
+        // never connected: the PORT check comes before the lock (fake, unreachable URL)
+        env: { DATABASE_URL: 'postgres://qa@127.0.0.1:1/never_used', PORT: value },
+        logger: { log: () => undefined, warn: () => undefined, error: () => undefined },
+        exit,
+        lockClientFactory: factory,
+        createPool: createPoolSpy as unknown as RuntimeOptions['createPool'],
+        checkGit: async () => undefined,
+      });
+      started.push(runtime);
+      const err = await runtime.start().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RuntimeStartupError);
+      expect(err).toMatchObject({ exitCode: 1, message: 'PORT geçersiz: 1 ile 65535 arasında bir tam sayı olmalı.' });
+      expect(runtime.state).toBe('failed');
+      expect(runtime.server).toBeNull();
+      expect(factory).not.toHaveBeenCalled();
+      expect(createPoolSpy).not.toHaveBeenCalled();
+      expect(exit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('I-1: PORT unset or blank passes the check (default 3001 is used by listenApp; here the fake database refuses next)', async () => {
+    for (const env of [{}, { PORT: '' }, { PORT: '  ' }]) {
+      const runtime = createRuntime({
+        env: { DATABASE_URL: 'postgres://qa@127.0.0.1:1/never_used', ...env },
+        logger: { log: () => undefined, warn: () => undefined, error: () => undefined },
+        exit: vi.fn(),
+        checkGit: async () => undefined,
+      });
+      started.push(runtime);
+      const err = await runtime.start().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RuntimeStartupError);
+      expect((err as Error).message).toMatch(/^Veritabanına bağlanılamadı/);
+    }
+  });
+
+  it('I-1: a valid PORT from the environment (no injected port) is the listening port and the allow-list port', async () => {
+    const db = await newDb();
+    const port = await freePort();
+    // not the harness: it always injects `port`
+    const plain = createRuntime({
+      env: { DATABASE_URL: db.url, PORT: String(port) },
+      logger: { log: () => undefined, warn: () => undefined, error: () => undefined },
+      exit: vi.fn(),
+      scanRoots: [tmpBase],
+      tmpRoot: fs.mkdtempSync(path.join(tmpBase, 'tmp-')),
+      checkGit: async () => undefined,
+      exportWorker: { config: { maxConcurrentExports: 1, pollIntervalMs: 100, timeoutMs: 60_000 } },
+    });
+    started.push(plain);
+    await plain.start();
+    expect(plain.address?.port).toBe(port);
+    expect(await health(port)).toBe(200);
   });
 });
 
@@ -705,6 +764,59 @@ describe('AC-P12-10 / D-39: graceful shutdown', () => {
   });
 });
 
+describe('L-5 (security review): no report sweep after lock-lost', () => {
+  it("shutdown('lock-lost'): exit code 1; our running scan -> queued (fenced by run id); a generating report stays generating", async () => {
+    const db = await newDb();
+    const parserStarted = deferred();
+    const reportGate = deferred();
+    const { runtime, root, exit } = await harness(db, {
+      processReport: () => reportGate.promise,
+      scanWorker: {
+        runParser: (_d, _e, _id, signal) =>
+          new Promise<SandboxScanResult>((_resolve, reject) => {
+            parserStarted.resolve();
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
+      },
+    });
+    const scanId = await insertScan(db, await insertProject(db, root), { retry_count: 1, error_message: 'earlier attempt failed' });
+    const ownReport = await insertReport(db);
+
+    await runtime.start();
+    await parserStarted.promise;
+    await vi.waitFor(async () => expect(await reportStatus(db, ownReport)).toBe('generating'), { timeout: 5_000, interval: 50 });
+    const foreignReport = await insertReport(db, 'generating'); // as if another instance generated it
+    expect(await scan(db, scanId)).toMatchObject({ status: 'running', worker_id: runtime.runId });
+
+    expect(await runtime.shutdown('lock-lost')).toBe(1);
+    expect(await scan(db, scanId)).toMatchObject({
+      status: 'queued',
+      retry_count: 1,
+      worker_id: null,
+      next_attempt_at: null,
+      error_message: 'earlier attempt failed',
+    });
+    expect(await reportStatus(db, ownReport)).toBe('generating');
+    expect(await reportStatus(db, foreignReport)).toBe('generating');
+    expect(runtime.state).toBe('stopped');
+    expect(await holders(db)).toEqual([]);
+    expect(exit).not.toHaveBeenCalled(); // shutdown() itself never exits; tryRelock does
+    reportGate.resolve();
+  });
+
+  it("regression: shutdown('signal') still returns generating reports to pending", async () => {
+    const db = await newDb();
+    const reportGate = deferred();
+    const { runtime } = await harness(db, { processReport: () => reportGate.promise });
+    const reportId = await insertReport(db);
+    await runtime.start();
+    await vi.waitFor(async () => expect(await reportStatus(db, reportId)).toBe('generating'), { timeout: 5_000, interval: 50 });
+    expect(await runtime.shutdown('signal')).toBe(0);
+    expect(await reportStatus(db, reportId)).toBe('pending');
+    reportGate.resolve();
+  });
+});
+
 describe('AC-P12-15: losing the lock connection -> degraded mode', () => {
   it('pg_terminate_backend on the lock session: workers stop claiming, the API keeps answering, the lock is re-acquired and processing resumes', async () => {
     const db = await newDb();
@@ -735,10 +847,11 @@ describe('AC-P12-15: losing the lock connection -> degraded mode', () => {
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it('lock taken by another session meanwhile -> "başka bir örneğe geçti", graceful shutdown, exit(1)', async () => {
+  it('lock taken by another session meanwhile -> "başka bir örneğe geçti", graceful shutdown, exit(1); the other instance\'s generating report is not swept (L-5)', async () => {
     const db = await newDb();
     const { runtime, logs, exit } = await harness(db, { relockIntervalMs: 500 });
     await runtime.start();
+    const foreignReport = await insertReport(db, 'generating');
     const oldPid = runtime.lock?.backendPid;
     const other = await connect(db.url);
     const [{ pid: otherPid }] = (await other.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows;
@@ -750,5 +863,6 @@ describe('AC-P12-15: losing the lock connection -> degraded mode', () => {
     expect(logs.some((l) => /başka bir örneğe geçti/.test(l))).toBe(true);
     expect(runtime.state).toBe('stopped');
     expect(await holders(db)).toEqual([otherPid]);
+    expect(await reportStatus(db, foreignReport)).toBe('generating');
   });
 });

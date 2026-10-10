@@ -221,8 +221,8 @@ describe('AC-T-4 / L-5: report worker error_message (D-48 covers every persisted
     );
     const reportService = {
       processReport: async () => {
-        // A space separates the ANSI sequence from the token here; the glued form is a
-        // known sanitizer gap covered by tests/unit/errorText.test.ts ("glued to ANSI").
+        // A space separates the ANSI sequence from the token here; the glued form
+        // (fixed by security review L-1) is covered by tests/unit/errorText.test.ts.
         throw new Error(`render failed \x1b[31m ${ghToken}\x1b[0m https://qa-user:not-a-real-pass@git.example.test/x ${path.join(HOME, 'r.pdf')}\x00\r\n${'z'.repeat(3000)}`);
       },
     } as unknown as ReportService;

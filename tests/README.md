@@ -68,6 +68,10 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `unit/mainEntry.test.ts` | D-52 / REQ-002 AC-P09-3: `main()` `DATABASE_URL` yokken tek hata satırı + `exit(1)` (`dotenv/config` taklit edilir, `.env` okunmaz) |
 | `integration/errorTextPersistence.test.ts` | L-5 uçtan uca: tarama (clone, ayrıştırıcı, `parse_errors`) ve rapor (`ReportService` dosya hatası, atılan hata) `error_message` yazımları |
 | `integration/excelExport.test.ts` | AC-T-5: `uuid` 11.1.1 ile Excel raporu üretilir, `.xlsx` ExcelJS ile geri okunur (sayfa, başlık, satır) |
+| `unit/parserLinear.test.ts` | Güvenlik incelemesi M-1: `pyStrip`/`pyRstrip`/`isPyWhitespace` ↔ Python `str.strip` boşluk tablosu (tüm BMP), eski regex'le farksızlık; `matchRequirementLine` ↔ eski `REQUIREMENT_RE` (deterministik tohumlu rastgele girdiler); 1–2 MB boşluklu `requirements.txt`/`yarn.lock`/`package.json`/`pyproject.toml` < 1 sn (assert < 2 sn) |
+| `unit/redact.test.ts` | Güvenlik incelemesi L-1/M-1: `redactSecrets` — `x_https://u@h` maskesi, 64k `a.` doğrusal |
+| `unit/settingsBounds.test.ts` | Güvenlik incelemesi I-3 (`boundedNumber`, `parseScanQueueSettings` üst sınırları, ortam değişkenleri modül yüklenirken) ve I-1 (`assertValidPortEnv`, `resolvePort`) |
+| `integration/reportTimeout.test.ts` | Güvenlik incelemesi L-5: rapor süre sınırı `processReport(reportId, signal)`'ı iptal eder; `ready` yazılmaz, dosya oluşmaz |
 | `security/followUpItems.test.ts` | AC-T-5 statik (`overrides.uuid`, lock, çalışma anı çözümü), AC-T-6 (`db/README.md` kurtarma bölümü) |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |
 
@@ -93,10 +97,10 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 
 - `createRuntime` her zaman `exit: vi.fn()` ile kurulur: 15 sn'lik zorla
   çıkış zamanlayıcısı gerçek `process.exit`'e ulaşmamalıdır.
-- `port: 0` verilmez: Host izin listesi `options.port`'tan kurulur, 0 ile her
-  istek `403 host_rejected` olur. Testler boş bir sabit port alır. Bu davranış
-  ürün hatası olarak raporlandı; "Observation (product bug): Host allow-list
-  with an ephemeral port" testi düzeltmeye kadar kırmızıdır.
+- Testler boş bir sabit port alır. `port: 0` da çalışır: `f32b00c`'den beri
+  Host izin listesi bağlanılan gerçek porttan kurulur (güvenlik incelemesi
+  I-1; regresyon testi `runtime.test.ts` "I-1 …"). Ortamdaki `PORT=0`,
+  aralık dışı ya da sayı olmayan değer ise başlangıçta reddedilir.
 - `checkGit` enjekte edilir (`git --version` alt süreci açılmaz).
 - `runtime.test.ts`, `WORKER_POLL_INTERVAL_MS=200`'ü `vi.hoisted` ile modüller
   yüklenmeden önce ayarlar ve `afterAll`'da geri alır.
@@ -354,10 +358,29 @@ kabul edilir; harici köken, `https:`, `*`, `'unsafe-eval'` yoktur.
 | REQ-003 AC-T-6 (L-2) | `security/followUpItems.test.ts` |
 | REQ-003 AC-P12-6 / D-52 (REQ-002 AC-P09-3) | `integration/runtime.test.ts`, `unit/mainEntry.test.ts` |
 
+### Güvenlik incelemesi bulguları → test (`docs/quality/security-reports/REQ-003-security-review.md`)
+
+| Bulgu | Dosya |
+| --- | --- |
+| M-1 (karesel `pyStrip`/`pyRstrip`, `REQUIREMENT_RE`) | `unit/parserLinear.test.ts`, `unit/redact.test.ts` (64k `a.`) |
+| L-1 (arındırıcı sırası, `\b`, harf, biçim karakterleri) | `unit/errorText.test.ts` "L-1 …" ve "secrets glued to ANSI", `unit/redact.test.ts` |
+| L-2 (link hedefi çözülmez) | `unit/parsersDeviations.test.ts` "L-2 …" (junction; `fs.statSync`/`fs.realpathSync(.native)` spy, `lstatSync` pozitif kontrol) ve "AC-P10-11 (3) / L-2" (dosya symlink'i; yetki yoksa atlanır) |
+| L-3 (testte gerçek profil adı) | `unit/errorText.test.ts` sahte `qa-owner`; `tests/` grep ile tarandı |
+| L-5 (lock-lost rapor süpürmesi, rapor süre sınırı) | `integration/runtime.test.ts` "L-5 …" ve "lock taken by another session", `integration/reportTimeout.test.ts` |
+| I-1 (`PORT` doğrulaması, port 0 izin listesi) | `integration/runtime.test.ts` "I-1 …", `unit/settingsBounds.test.ts` |
+| I-3 (ayar üst sınırları, hakkı biten bekleyen taramalar) | `unit/settingsBounds.test.ts`, `integration/scanRetry.test.ts` "I-3 …" |
+| I-6 (`loadEcosystems` yalnız kod loglar) | `integration/scanRetry.test.ts` "I-6 …" |
+| I-8 (biçim karakterleri) | `unit/errorText.test.ts` "L-1 / I-8 …" |
+
+Performans testlerinde gereksinim "< 1 sn"dir; CI dalgalanmasına karşı assert
+sınırı 2 sn'dir. Eski karesel/kübik kod bu girdilerde dakikalar–saatler sürer,
+bu yüzden 2 sn hâlâ doğrusalı karesel davranıştan ayırır.
+
 Bilinen kırmızılar (ürün düzeltmesi bekleniyor): `security/credentialScan.test.ts`
-AC-P12-12 (`.env.example`, ana oturum), `unit/errorText.test.ts` "secrets glued
-to ANSI colour sequences" (L-5 boşluğu) ve `integration/runtime.test.ts`
-"Host allow-list with an ephemeral port" (`port: 0`).
+AC-P12-12 (`.env.example`, ana oturum) ve `unit/errorText.test.ts` "L-1: a
+provider token split by a lone \r after 20 characters leaves no fragment"
+(ham ön geçiş token'ın ilk parçasını maskeliyor, kontrol karakteri silinince
+kalan parça yer tutucuya yapışıp açıkta kalıyor; backend).
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

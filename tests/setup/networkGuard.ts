@@ -157,6 +157,9 @@ process.env.VULNERABILITY_LOOKUP = 'off';
 process.env.VULNERABILITY_RECHECK = 'off';
 delete process.env.OSV_API_URL;
 delete process.env.NVD_API_URL;
+// Security review I-2: a developer's real NVD key in the shell or `.env`
+// must never reach a test (the client reads it once at construction).
+delete process.env.NVD_API_KEY;
 
 function failOnViolations(phase: string): void {
   const seen = takeNetworkViolations();

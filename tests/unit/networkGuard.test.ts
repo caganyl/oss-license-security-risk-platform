@@ -57,6 +57,10 @@ describe('network guard: defaults', () => {
     expect('NVD_API_URL' in process.env).toBe(false);
   });
 
+  it('REQ-005 security I-2: NVD_API_KEY is removed from the test environment', () => {
+    expect('NVD_API_KEY' in process.env).toBe(false);
+  });
+
   it('isLoopbackHost: loopback / local-only hosts allowed, everything else not', () => {
     for (const h of [undefined, '', 'localhost', 'LOCALHOST', '127.0.0.1', '127.1.2.3', '::1', '[::1]', '::ffff:127.0.0.1', '0.0.0.0', '::']) {
       expect(isLoopbackHost(h), String(h)).toBe(true);

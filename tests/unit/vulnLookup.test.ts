@@ -562,9 +562,10 @@ describe('AC-P17-7 / AC-P17-8 / AC-P17-9 / AC-P17-10: safe client', () => {
     const url = `${osv.origin}/v1/vulns/GHSA-jjjj-jjjj-jjjj`;
     const results = [];
     for (let i = 0; i < 3; i++) results.push(await session.request('osv-vuln', url, { signal: signal() }));
-    // Shared F3 core: counters are updated per request (3 attempts each), so request 2 crosses
-    // the threshold (6 network failures) and request 3 is refused without a connection.
-    expect(osv.count('/v1/vulns/GHSA-jjjj-jjjj-jjjj')).toBe(6);
+    // Security review L-4: the breaker counts every attempt (3 per request), so the 5th attempt
+    // (2nd attempt of request 2) opens the circuit, request 2 stops retrying and request 3 is
+    // refused without a connection.
+    expect(osv.count('/v1/vulns/GHSA-jjjj-jjjj-jjjj')).toBe(5);
     expect(results[0]).toMatchObject({ kind: 'unreachable' });
     expect(results[2]).toMatchObject({ kind: 'unreachable', code: 'CIRCUIT_OPEN' });
     expect(session.isHostClosed(new URL(osv.origin).host)).toBe(true);

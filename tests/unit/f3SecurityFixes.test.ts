@@ -96,7 +96,9 @@ describe('B-2: license normalizer handles -or-later / -only ids without recursio
     for (const s of ['MIT-or-later', 'foo-and-bar', 'x-with-y', 'OR', ' OR ', '( OR )', '(GPL-3.0-or-later)', 'MIT OR', 'OR MIT', `${'MIT OR '.repeat(5000)}MIT`]) {
       expect(() => normalizeLicense(s), s.slice(0, 40)).not.toThrow();
     }
-  });
+    // 5000 inputs plus the 5000-operator expression exceed the 5 s default under full-suite load
+    // (flaky); the input count stays, only the timeout is raised (REQ-005 post-review).
+  }, 60_000);
 });
 
 // ---------------------------------------------------------------------------

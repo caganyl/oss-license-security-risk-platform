@@ -460,6 +460,27 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | AC-P19-1…5, AC-P19-8 (sınır günü, NULL/incelemesiz, denetim şekli, idempotent, 500'lük parti + SKIP LOCKED, hata) | `integration/vulnRecheck.test.ts` "risk acceptance expiry" |
 | AC-P19-2 / AC-P19-6 / AC-P19-7 (API üzerinden `open`, yeniden kabul, 7 gün sayımı) | `integration/vulnStatusWorker.test.ts` "AC-P19-2 / AC-P19-6 / AC-P19-7 …" |
 
+#### Güvenlik incelemesi düzeltmeleri → test (contract 1.1.0, `docs/quality/security-reports/REQ-005-security-review.md`, `3fdb538`)
+
+| Bulgu | Dosya / test adı öneki |
+| --- | --- |
+| P-1 (yerel CVSS v3 taban puanı, §3.5.3) | `unit/f4PostReview.test.ts` "P-1 …" (9 bilinen vektör, 25 kayıtlı NVD CVE vektör/puan çifti — çevrimdışı tablo, emin olunmayan çiftler alınmadı; geçersiz vektörler → null; temporal/environmental yok sayılır; `roundUp`; adım sırası); `unit/vulnLookupPostReview.test.ts` "P-1 …" (yalnız vektörlü kayıt → NVD isteği yok, `advisory_data.cvss.source='osv_vector'`) |
+| M-1 (OSV kimlik/ayrıntı sınırları, yazım süre sınırı, §3.5.1) | `unit/vulnLookupPostReview.test.ts` "M-1 …" (201 kimlik/paket ve sayfalar arası 101+100 → `id_limit`; 5001 ayrı kimlik → `total_id_limit`; 2002 ayrıntı → 2000 istek + `detail_limit`, D=2); `integration/f4PostReview.test.ts` "M-1 …" (proje transaction'ı içinde süre dolar → proje geri alınır, `partial` + `osv:time_limit`) |
+| L-1 (katı RFC 3339, 0–10 puan, §3.5.2) | `unit/f4PostReview.test.ts` "L-1 …" (takvim/saat/ofset/yıl sınırları, geçersiz → alan NULL, kayıt korunur; OSV ve NVD aralık dışı/NaN puan); `unit/vulnLookupPostReview.test.ts` "L-1 …" (geçersiz querybatch `modified` → yeniden çekme) |
+| L-2 (tek anahtar ayrıştırıcı, §7.1) | `unit/f4PostReview.test.ts` "L-2 …" (tüm yazımlar, boş → açık, geçersiz → kapalı + yalnız değişken adını içeren tek uyarı; dört anahtar dahil `REGISTRY_ENRICHMENT`). "Geçersiz → açık" bekleyen eski F3 testi yoktu |
+| L-3 (kilit kaybında süre değerlendirmesi iptali) | `integration/f4PostReview.test.ts` "L-3 …" — **bilinen kırmızı:** kuyruğa ikinci tick girince in-flight değerlendirme iptal edilmiyor (ürün hatası, aşağıda) |
+| L-4 (deneme başına devre kesici, 5xx/429) | `unit/vulnLookupPostReview.test.ts` "L-4 …", `unit/vulnLookup.test.ts` "AC-P17-10: circuit breaker" (6 → 5 deneme) |
+| L-6 (çakışmaya dayanıklı katalog upsert) | `integration/f4PostReview.test.ts` "L-6 …" (iki eşzamanlı transaction aynı açığı ekler, ikisi de commit eder, tek satır) |
+| L-7 (sayfalı kapsam) | `integration/f4PostReview.test.ts` "L-7 …" (10 001 paket → 10 000 kontrol + `osv:package_limit`; sorgu casusu: kapsam sorguları sayfa başına ≤ 5000 satır) |
+| I-2 (`NVD_API_KEY` testte yok) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 security I-2 …" |
+
+Bilinen kırmızı: `integration/f4PostReview.test.ts` "L-3: pause() aborts the running P-19 evaluation even when another
+expiry tick is queued behind it" — `scheduler.ts` `expiryTick()` her çağrıda `expiryController`'ı ezer; kuyruktaki tick
+çalışan değerlendirmenin denetleyicisini değiştirdiği için `pause()` yalnız kuyruktakini iptal eder.
+
+Hâlâ eksik (bu turda yazılmadı): AC-L5-2/AC-L5-4 uçtan uca worker testi ve `OSV_API_URL`/`NVD_API_URL` runtime
+başlangıç uyarısı testi (yukarıdaki tabloda "eksik" satırları).
+
 Yardımcılar: `helpers/f4Seed.ts` (paket upsert'li tarama/bulgu/inceleme tohumlama, sahte OSV'ye karşı gerçek
 sorgu motoru). Testler `VULNERABILITY_RECHECK=off` test varsayılanıyla çalışır; durum uç noktasındaki
 `next_check_earliest_at` beklentisi etkin `recheck_enabled` değerine göre kurulur.

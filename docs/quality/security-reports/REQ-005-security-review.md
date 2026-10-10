@@ -274,3 +274,26 @@ Bu inceleme non-trivial. `docs/handoffs/REQ-005.md` dosyasının bu raporun bulg
   2. `main` merge onayı.
   3. Gerçek ağ doğrulamasının (I-15) handoff'a kullanıcı beyanı olarak işlenmesi.
 - Handoff: `docs/handoffs/REQ-005.md` bu bölümle güncellenmeli (Delivery Lead / Integration-Release). Takip işleri (Y-1…Y-3, I-16 tasarım koşulları) backlog'a alınmalı.
+
+### Takip doğrulaması (2026-10-11)
+
+- İnceleme aralığı: `git diff 9aee953..f79d3d5 -- src/` ve README I-6 maddesi.
+- Testlerin (`f0facaa`) "1048 geçti / 2 atlandı / 0 kırmızı" sonucu QA'nın beyanıdır.
+- Gerçek ağ tekrarının sonuçları da ana oturumun beyanıdır, doğrulanmadı: ilk tarama 345 sn, 40 NVD isteği, **0 adet HTTP 429** (önce 3–4); ikinci tarama 4 sn ve 0 ayrıntı isteği; telafi recheck'i 2,7 sn (758 paket).
+- Bu turda test çalıştırılmadı.
+
+| ID | Durum | Kanıt / not |
+| --- | --- | --- |
+| **Y-1** | **Kapandı** | Lookup bütçesi, çalıştırma başlangıcından itibaren `runTimeoutMs × 5/6`'da bitecek şekilde hesaplanıyor; P-19 ve kapsam okuma süresi de buna dahil. Yazma fazına en az 5 dk kalıyor (`recheck.ts` `lookupBudgetMs`, `runner.config.ts` `lookupBudgetShare`). Önceki adımlar 25 dk'yı aşarsa bütçe 1 ms olur, lookup `time_limit` ile boş döner ve hiçbir şey yazılmaz. `time_limit` kodu yeni bütçeye göre veriliyor. |
+| **Y-2** | **Kapandı** | Pencere 35 sn. Anahtarsız kullanımda iki başlangıç arası en az 6 sn; bu, ortalama 7 sn/istekle 5/35 sn'den daha sıkı değil, onunla uyumlu. NVD 429'u, sınırlayıcıyı tüm oturumlar için duraklatıyor: kullanılabilir bir `Retry-After` varsa (≤ 30 sn) o kadar, yoksa bir pencere boyu (`client.ts` `onNvdResponse`, `rateLimiter.ts` `pause`). `pause` yalnız uzatıyor, kısaltmıyor; geçersiz veya negatif değerleri yok sayıyor. `onResponse` yalnız `nvd-cve` amacına bağlı ve atmayan `parseRetryAfter` kullanıyor; duraklama süresi sunucu tarafından en fazla 30 sn veya bir pencereyle sınırlı, kötüye kullanım yüzeyi yok. NVD 429'ları devre kesicide sayılmaya devam ediyor (L-4 anlamı değişmedi). Duraklama ve aralık sayesinde art arda 5 adet 429 pratikte beklenmiyor; beyan edilen 0 adet 429 bununla tutarlı. Bekleme hâlâ abortable ve FIFO. |
+| **Y-3** | **Kapandı (kalan risk düşük)** | `upsertVulnerability` bir savepoint içinde çalışıyor. `40P01` veya `40001` gelirse `ROLLBACK TO SAVEPOINT` yapılıyor, rastgele gecikmeyle bir kez yeniden deneniyor, ikinci hata yukarı atılıyor. Recheck ayrıca proje transaction'ını bir kez yeniden deniyor; deneme öncesinde iptal ve son tarih denetleniyor (`writeProjectWithRetry`). Savepoint geri alma, savepoint'ten **önce** alınmış kilitleri bırakmaz; bu yüzden aynı çift yeniden çakışabilir. Recheck tarafında bunu proje düzeyindeki yeniden deneme kapatıyor. Tarama tarafında yalnız savepoint denemesi var; ikinci bir deadlock, taramanın sonuç transaction'ını düşürür ve mevcut başarısızlık/yeniden deneme yoluna girer. Olasılık düşük, sonuç görünür ve veri bozulmuyor; kabul edildi. |
+| **I-6** | **Kapandı** | README'ye "Kurumsal TLS denetimi yapan vekil istek içeriğini görür" notu eklendi. Not, paket adları ve sürümleri, açık ve CVE kimlikleri ile `NVD_API_KEY` tanımlıysa NVD isteklerindeki `apiKey` başlığının düz metin görünebileceğini açıkça söylüyor. |
+
+**Yeni sorun:** Yok. `jitteredDelay` enjekte edilen saat yerine `setTimeout` kullanıyor ve iptal edilemiyor; bu yalnız 50–100 ms'lik bir gecikme, güvenlik etkisi yok (bilgi notu).
+
+**Nihai karar: Go.** Kod tarafında merge öncesi zorunlu iş yok. Açık kalanlar yalnız insan onayı kapıları:
+1. L-5: ilk dağıtımdan önce ön kontrol sorgusunun `would_reopen` sonucu kabul metniyle handoff'ta onaylanmalı.
+2. `main` merge onayı.
+3. Gerçek ağ kanıtları handoff'a kullanıcı beyanı olarak işlenmeli.
+
+Takip işleri: I-12 (`withdrawn` için katı tarih), I-13 (geri alma prosedürü notu), I-16 (NVD'nin arka plana taşınması tasarım koşulları), I-4 (unique kısıt).

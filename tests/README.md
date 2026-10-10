@@ -4,7 +4,9 @@ REQ-002 P-01…P-09 için **test-first** Vitest paketi. Testler bugünkü kodda
 hatayı yeniden üretir (KIRMIZI); backend/frontend düzeltmesi bu dosyada
 tanımlanan arayüzleri uyguladığında YEŞİL olmalıdır (AC-G-2, AC-G-3).
 REQ-003 P-10 (TypeScript ayrıştırıcılar, ADR-005) için golden eşdeğerlik,
-sapma ve iş parçacığı testleri de buradadır.
+sapma ve iş parçacığı testleri; P-11 (Node göç aracı), P-12 (tek süreçli
+çalışma zamanı, tek örnek kilidi, kapanış) ve P-13 (yeniden deneme, bekleme,
+süre sınırı) testleri de buradadır (ADR-004).
 
 ## İçindekiler
 
@@ -36,9 +38,9 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `helpers/loadSrc.ts` | `loadSrc` / `loadSrcGuarded`: `src/` modüllerini dinamik yükler; yoksa `MissingImplementationError` |
 | `helpers/contracts.ts` | Testlerin beklediği TypeScript arayüzleri (aşağıdaki tablonun makine okunur hâli) |
 | `helpers/pgCluster.ts` | embedded-postgres kümesi, migrate edilmiş şablon DB, CREATE/DROP DATABASE |
-| `helpers/db.ts` | `useTestDatabase({ scope: 'file' \| 'test' })` — dosya ya da test başına DB |
+| `helpers/db.ts` | `useTestDatabase({ scope: 'file' \| 'test' })` — dosya ya da test başına DB; `useScratchDatabases(base)` — test başına ek geçici DB'ler (boş / F1 durumu / göç edilmiş, testten sonra `DROP … WITH (FORCE)`) |
 | `helpers/pgGlobalSetup.ts` | İsteğe bağlı Vitest `globalSetup` (tek küme) — henüz kayıtlı değil |
-| `helpers/migrations.ts` | `db/migrations/*.up.sql`'i sürüm sırasıyla, dosya başına bir transaction ve `schema_migrations` kaydıyla uygular (yalnız geçici test DB'leri) |
+| `helpers/migrations.ts` | Kaldırılan F1 `db/migrate.sh`'in kayıt biçiminin testteki bağımsız eşi: `db/migrations/*.up.sql`'i sürüm sırasıyla, dosya başına bir transaction ve `schema_migrations` kaydıyla uygular; `{ through: '004_finding_fingerprint' }` ile AC-P11-3'ün "F1 veritabanı"nı kurar. Ürün göç aracını (`src/db/migrator.ts`) kullanmaz; şablon DB'yi kurar (yalnız geçici test DB'leri) |
 | `helpers/parserGolden.ts` | P-10 golden karşılaştırıcısı (AC-P10-5): JSON gidiş-dönüş, sıradan bağımsız diziler, `parse_errors` yalnız `(ecosystem, file)`, hata metninde mutlak yol denetimi |
 | `helpers/psqlScript.ts` | psql betiğini düz SQL'e çevirir (`\ir` içe alınır, `\set`/`\echo` atılır) |
 | `helpers/http.ts` | supertest yardımcıları (Host/Origin, çerez, setup/login, hata gövdesi kontrolü) |
@@ -53,7 +55,12 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `unit/parsersDeviations.test.ts` | D-28 sapmaları: büyük/küçük harf (AC-P10-18), göreli `SKIP_DIRS` (AC-P10-10), junction/symlink (AC-P10-11), 32 MiB (AC-P10-19), dosya bazlı hata ve mutlak yol (AC-P10-12/13), derin TOML/JSON, tip-geçersiz ve NaN girdiler |
 | `unit/parserThread.test.ts` | AC-P10-14: iş parçacığında normal çalışma (kaynak modu ve `typescript` ile geçici klasöre derlenmiş `thread.js`), `env: {}`, AbortSignal iptali, bellek sınırı, çökme eşlemesi, `undefined/` regresyonu |
 | `unit/pythonParsers.test.ts` | P-05/P-07 ayrıştırıcı sözleşmesi ve AC-P10-7 tekilleştirme; REQ-003'ten beri TypeScript ayrıştırıcıyla (ad REQ-002'den kaldı) |
+| `unit/retryPolicy.test.ts` | AC-P13-1 bekleme tablosu, hata sınıflandırması (ADR-004 Karar 8), `decideRetry`, süre sınırı mesajı |
+| `unit/processHandlers.test.ts` | AC-P12-9/10: `installProcessHandlers` sahte süreç (EventEmitter) ve sahte çalışma zamanıyla — dört sinyal, ikinci sinyal, ölümcül hata günlüğünün arındırılması |
 | `integration/` | Gerçek PostgreSQL ile HTTP ve worker testleri, migration testi |
+| `integration/migrateTool.test.ts` | P-11: `runMigrateCli` (süreç içi) ve `typescript` ile geçici klasöre derlenmiş `migrate.js` (gerçek `node` süreci); tek örnek kilidi ve kilit kaybı yapı taşları |
+| `integration/runtime.test.ts` | P-12: `createRuntime` ile süreç içi başlatma; sahte `exit`, sabit boş port, sahte clone/ayrıştırıcı/rapor servisi; kapanış, bozulmuş kip, `pg_terminate_backend` |
+| `integration/scanRetry.test.ts` | P-13: `ScanWorker.runOnce` ile geri çekilme, kalıcı/geçici hatalar, süre sınırı, yoklamada sahipsiz kurtarma, `worker_id` çiti, AC-G-8 |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |
 
 ## Test veritabanı
@@ -70,6 +77,19 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
   ekleyebilir; `helpers/db.ts` bunu `inject()` ile otomatik kullanır.
 - `integration/migrations.test.ts`, `db/tests/f1_migrations_test.sql`'i psql
   olmadan çalıştırır (embedded-postgres psql içermez).
+- Tek örnek kilidi (`pg_try_advisory_lock(1330860882, 1)`) veritabanı
+  başınadır; kilit ve çalışma zamanı testleri her senaryoda ayrı geçici DB
+  kullandığı için paralel dosyalar birbirini kilitlemez.
+
+### Çalışma zamanı testlerinde dikkat (REQ-003 P-12)
+
+- `createRuntime` her zaman `exit: vi.fn()` ile kurulur: 15 sn'lik zorla
+  çıkış zamanlayıcısı gerçek `process.exit`'e ulaşmamalıdır.
+- `port: 0` verilmez: Host izin listesi `options.port`'tan kurulur, 0 ile her
+  istek `403 host_rejected` olur. Testler boş bir sabit port alır.
+- `checkGit` enjekte edilir (`git --version` alt süreci açılmaz).
+- `runtime.test.ts`, `WORKER_POLL_INTERVAL_MS=200`'ü `vi.hoisted` ile modüller
+  yüklenmeden önce ayarlar ve `afterAll`'da geri alır.
 
 ## Beklenen arayüzler
 
@@ -90,7 +110,9 @@ export interface AppDeps {
 }
 export function createApp(deps: AppDeps): express.Express;           // listen ETMEZ
 export function startServer(options: AppDeps): Promise<http.Server>; // listen olunca resolve; host vars. 127.0.0.1
-// Süreç girişi REQ-003'ten beri src/main.ts'tir (`npm start` = node dist/main.js); app.ts yan etkisizdir.
+export function listenApp(options: AppDeps, env?: NodeJS.ProcessEnv): Promise<http.Server>; // ortam kontrolsüz; çalışma zamanı adım 6
+// Süreç girişi REQ-003'ten beri src/main.ts'tir (`npm start` = node dist/main.js); app.ts yan etkisizdir
+// ve kendi başına süreç olarak çalıştırılmaz.
 ```
 
 - İçe aktarma yan etkisiz olmalı (bugünkü `app.listen` modül düzeyinde kalmamalı).
@@ -307,6 +329,13 @@ kabul edilir; harici köken, `https:`, `*`, `'unsafe-eval'` yoktur.
 | REQ-003 AC-P10-14 | `unit/parserThread.test.ts` |
 | REQ-003 AC-P10-15, ADR-005 Karar 1, AC-G-6 | `security/staticCode.test.ts` |
 | REQ-003 AC-P10-16, AC-P12-12 (`.env.example`) | `security/staticCode.test.ts`, `security/credentialScan.test.ts` |
+| REQ-003 AC-P11-1…13, 15…18 | `integration/migrateTool.test.ts` (AC-P11-14 elle doğrulama: handoff) |
+| REQ-003 AC-P12-1, 2, 4…8, 10, 11, 15 | `integration/runtime.test.ts` |
+| REQ-003 AC-P12-3 (tek giriş, `WORKER_ID` yok, scripts) | `security/staticCode.test.ts` |
+| REQ-003 AC-P12-9, AC-P12-10 (sinyaller) | `unit/processHandlers.test.ts`, `integration/runtime.test.ts` |
+| REQ-003 AC-P12-11 (yoklamada kurtarma), ADR-004 Karar 4 (çit) | `integration/scanRetry.test.ts` |
+| REQ-003 AC-P13-1 | `unit/retryPolicy.test.ts` |
+| REQ-003 AC-P13-2…8, AC-G-8 | `integration/scanRetry.test.ts`, `unit/retryPolicy.test.ts` |
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

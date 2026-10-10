@@ -2,6 +2,12 @@
  * Interfaces the REQ-002 tests expect from src/ (test-first). The prose
  * version, with rationale, is in tests/README.md ("Beklenen arayüzler").
  * Modules are loaded with loadSrc()/loadSrcGuarded() and cast to these types.
+ *
+ * REQ-003 tests (P-11…P-13) import src/ statically and use the real types
+ * (src/db/*, src/runtime.ts, src/scanner/retryPolicy.ts); they add nothing
+ * here. The process entry point is src/main.ts (`npm start` =
+ * `node dist/main.js`); `startServer` below is only the listen helper of
+ * src/app.ts used by the REQ-002 HTTP tests, not a process entry.
  */
 import type { Server } from 'node:http';
 import type { Express } from 'express';

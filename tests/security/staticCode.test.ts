@@ -65,6 +65,28 @@ describe('REQ-003 AC-G-6 static cleanup (D-31, D-44)', () => {
   });
 });
 
+describe('REQ-003 AC-P12-3 single entry point (ADR-004 Karar 1, 4)', () => {
+  it('src/ never reads WORKER_ID or EXPORT_WORKER_ID from the environment', () => {
+    expect(filesContaining(/process\.env(\.|\[\s*['"])(EXPORT_)?WORKER_ID\b/)).toEqual([]);
+    expect(filesContaining(/\b(EXPORT_)?WORKER_ID\b/)).toEqual([]);
+  });
+
+  it('package.json: build/start/db:migrate/typecheck/lint/test, no worker scripts, main = dist/main.js, engines.node >=22', () => {
+    const pkg = JSON.parse(read('package.json')) as { main?: string; engines?: { node?: string }; scripts?: Record<string, string> };
+    const scripts = pkg.scripts ?? {};
+    for (const name of ['build', 'start', 'db:migrate', 'typecheck', 'lint', 'test']) expect(scripts[name], name).toBeTruthy();
+    for (const name of ['worker', 'worker:prod', 'export-worker', 'export-worker:prod']) expect(scripts[name], name).toBeUndefined();
+    expect(scripts.start).toBe('node dist/main.js');
+    expect(scripts['db:migrate']).toBe('node dist/db/migrate.js');
+    expect(pkg.main).toBe('dist/main.js');
+    expect(pkg.engines?.node).toBe('>=22');
+  });
+
+  it('only src/main.ts and src/db/migrate.ts are process entry points (no require.main block in app.ts or the workers)', () => {
+    expect(filesContaining(/require\.main\s*===\s*module/).sort()).toEqual(['src/db/migrate.ts', 'src/main.ts']);
+  });
+});
+
 describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
   const parsersDir = path.join(REPO_ROOT, 'src', 'scanner', 'parsers');
   const ALLOWED_RUNTIME = new Set(['node:fs', 'node:path', 'node:crypto', 'node:worker_threads']);

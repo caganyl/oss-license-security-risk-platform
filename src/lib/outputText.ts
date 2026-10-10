@@ -19,9 +19,14 @@ export function outputClean(text: string | null | undefined): string {
   return sanitizeText(text);
 }
 
-/** Single-line value: cleaned, every line break becomes one space. */
+/**
+ * Single-line value (contract section 9, steps 1–3): cleaned first (`\r\n`
+ * and `\r` become `\n`, control/format characters removed), then every `\n`
+ * and `\t` becomes one space. Target-specific escaping (step 4, e.g.
+ * `excelSafeText`) is applied by the caller afterwards.
+ */
 export function singleLine(text: string | null | undefined): string {
-  return outputClean(text).replace(/\n/g, ' ');
+  return outputClean(text).replace(/[\n\t]/g, ' ');
 }
 
 /**

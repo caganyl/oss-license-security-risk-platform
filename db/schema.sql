@@ -5,7 +5,7 @@
 -- Reference snapshot of the schema after migrations
 --   001_initial_core_schema, 002_local_auth, 003_declared_range,
 --   004_finding_fingerprint, 005_scan_next_attempt, 006_registry_enrichment,
---   007_vulnerability_recheck
+--   007_vulnerability_recheck, 008_nuget_enrichment
 -- The migrations in db/migrations/ are the source of truth and are applied
 -- with `npm run db:migrate` (src/db/migrate.ts). Do not load this file into a
 -- database that is (or will be) managed by the migration tool: it does not
@@ -325,16 +325,17 @@ CREATE TABLE packages (
 -- REGISTRY ENRICHMENT CACHE (006, REQ-004, ADR-006 Karar 9-10, D-57)
 -- Independent of scans: written in its own autocommit transaction as soon as
 -- a registry response is classified; re-downloadable, safe to clear
--- (db/README.md). ecosystem is the registry identity ('npm' | 'pypi'), not
--- tech_ecosystem.
+-- (db/README.md). ecosystem is the registry identity ('npm' | 'pypi' |
+-- 'nuget' since 008), not tech_ecosystem.
 -- =============================================================================
 
 -- License metadata per (ecosystem, request name, exact version). found rows
--- never expire (refreshed when METADATA_EXTRACTOR_VERSION grows); not_found
--- (404/410) rows expire after 24 h; transient errors are never stored.
+-- never expire (refreshed when the per-ecosystem metadata extractor version
+-- grows); not_found (404/410) rows expire after 24 h; transient errors are
+-- never stored.
 CREATE TABLE registry_package_cache (
-    ecosystem          TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi')),
-    name               TEXT        NOT NULL,  -- request name: npm as-is, PyPI PEP 503
+    ecosystem          TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi', 'nuget')),
+    name               TEXT        NOT NULL,  -- request name: npm as-is, PyPI PEP 503, NuGet ASCII-lowercased id
     version            TEXT        NOT NULL,
     outcome            TEXT        NOT NULL CHECK (outcome IN ('found', 'not_found')),
     declared_license   TEXT        NULL,      -- derived per AC-P14-1/2/3; NULL = registry has no license
@@ -343,12 +344,23 @@ CREATE TABLE registry_package_cache (
     extractor_version  INTEGER     NOT NULL CHECK (extractor_version > 0),
     fetched_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at         TIMESTAMPTZ NULL,      -- NULL = found (never expires); not_found = fetched_at + 24 h
+    -- NuGet-only fields (008, REQ-006, ADR-008 Karar 9, 13.2, 14); NULL on every
+    -- other row (registry_package_cache_nuget_fields)
+    license_unclassified TEXT      NULL CHECK (license_unclassified IN ('file', 'url')),
+    license_file_path    TEXT      NULL
+        CHECK (license_file_path IS NULL OR char_length(license_file_path) <= 256),
+    canonical_name       TEXT      NULL
+        CHECK (canonical_name IS NULL OR char_length(canonical_name) <= 100),
     PRIMARY KEY (ecosystem, name, version),
     CONSTRAINT registry_package_cache_expiry
         CHECK ((outcome = 'not_found') = (expires_at IS NOT NULL)),
     CONSTRAINT registry_package_cache_not_found_empty
         CHECK (outcome = 'found' OR (declared_license IS NULL AND license_text IS NULL
-                                     AND archive_candidates = '[]'::jsonb))
+                                     AND archive_candidates = '[]'::jsonb)),
+    CONSTRAINT registry_package_cache_nuget_fields
+        CHECK ((ecosystem = 'nuget' AND outcome = 'found')
+               OR (license_unclassified IS NULL AND license_file_path IS NULL
+                   AND canonical_name IS NULL))
 );
 
 COMMENT ON TABLE registry_package_cache IS
@@ -357,13 +369,19 @@ COMMENT ON COLUMN registry_package_cache.expires_at IS
   'NULL for found rows (never expire); NOW() + 24 h for not_found rows. Evaluated with the database clock.';
 COMMENT ON COLUMN registry_package_cache.extractor_version IS
   'METADATA_EXTRACTOR_VERSION of the code that wrote the row; a row with an older version is a cache miss.';
+COMMENT ON COLUMN registry_package_cache.license_unclassified IS
+  'NuGet only (REQ-006, ADR-008 Karar 9): file = .nuspec <license type="file">, url = <licenseUrl> not mapped to an SPDX expression. The URL itself is never stored.';
+COMMENT ON COLUMN registry_package_cache.license_file_path IS
+  'NuGet only: license file path declared in the .nuspec (normalized archive path, <= 256); NULL when absent or invalid.';
+COMMENT ON COLUMN registry_package_cache.canonical_name IS
+  'NuGet only: .nuspec <id> in its original case (<= 100), used as the OSV package name (ADR-008 Karar 13.2, 13.4).';
 
 -- License files and copyright lines of one package archive. Only outcomes
 -- produced by the archive reader itself are stored; updated in place (same
 -- id) when ARCHIVE_EXTRACTOR_VERSION grows.
 CREATE TABLE registry_archive_cache (
     id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    ecosystem         TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi')),
+    ecosystem         TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi', 'nuget')),
     name              TEXT        NOT NULL,
     version           TEXT        NOT NULL,
     archive_digest    TEXT        NOT NULL,   -- 'sha512-<b64>' | 'sha1-<hex>' | 'sha256-<hex>'
@@ -408,7 +426,7 @@ CREATE TABLE scan_dependencies (
     -- completed before F3. Value sets = docs/contracts/REQ-004-notice-and-outputs.md §4.
     license_expression        TEXT    NULL,
     license_source            TEXT    NULL CHECK (license_source IN
-        ('registry:npm', 'registry:pypi', 'lockfile (unverified)', 'none')),
+        ('registry:npm', 'registry:pypi', 'registry:nuget', 'lockfile (unverified)', 'none')),
     license_lock_hint         TEXT    NULL,
     license_hint_differs      BOOLEAN NULL,
     license_enrichment_status TEXT    NULL CHECK (license_enrichment_status IN
@@ -424,6 +442,10 @@ CREATE TABLE scan_dependencies (
     -- compared. Value set = docs/contracts/REQ-004-notice-and-outputs.md §4.4.
     lock_integrity            TEXT    NULL CHECK (lock_integrity IN
         ('match', 'mismatch', 'not_comparable')),
+    -- NuGet license not classified (008, REQ-006, ADR-008 Karar 12): not a
+    -- status value; only with status no_license / source none. Value set =
+    -- docs/contracts/REQ-004-notice-and-outputs.md §4.5.
+    license_unclassified      TEXT    NULL CHECK (license_unclassified IN ('file', 'url')),
     UNIQUE (scan_id, package_id, manifest_path, scope),
     CONSTRAINT scan_dependencies_license_f3_together
         CHECK ((license_source IS NULL) = (license_enrichment_status IS NULL))
@@ -434,7 +456,9 @@ COMMENT ON COLUMN scan_dependencies.license_source IS
 COMMENT ON COLUMN scan_dependencies.notice_archive_id IS
   'registry_archive_cache row used for NOTICE/copyright; set to NULL when the cache is cleared (rescan required).';
 COMMENT ON COLUMN scan_dependencies.lock_integrity IS
-  'npm lockfile sha512 vs registry dist.integrity (REQ-005 L-5, ADR-007 Karar 12). NULL = not compared (enrichment off, non-npm, scan before F4).';
+  'Lockfile hash vs registry archive (REQ-005 L-5, ADR-007 Karar 12; NuGet: .nupkg vs lock/assets hash, ADR-008 Karar 10). NULL = not compared (enrichment off, PyPI, scan before F4 / NuGet before F5).';
+COMMENT ON COLUMN scan_dependencies.license_unclassified IS
+  'NuGet license not classified (REQ-006 AC-P21-5/6, ADR-008 Karar 12): file | url; only with status no_license, source none and lock_integrity <> mismatch. NULL otherwise. Never returned by the API.';
 
 -- =============================================================================
 -- LICENSES
@@ -811,7 +835,8 @@ CREATE INDEX idx_scan_deps_parent  ON scan_dependencies(parent_dep_id) WHERE par
 CREATE INDEX idx_scan_dependencies_notice_archive ON scan_dependencies(notice_archive_id) WHERE notice_archive_id IS NOT NULL;
 
 -- registry_package_cache / registry_archive_cache: no extra index; the primary
--- key and registry_archive_cache_key cover every lookup (006, ADR-006 Karar 10, 12).
+-- key and registry_archive_cache_key cover every lookup (006, ADR-006 Karar 10, 12),
+-- including the NuGet canonical_name LEFT JOIN of the recheck scope (008, ADR-008 Karar 13.4).
 
 -- vulnerabilities
 CREATE INDEX idx_vulns_cve       ON vulnerabilities(cve_id)                        WHERE cve_id IS NOT NULL;

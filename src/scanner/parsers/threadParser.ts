@@ -68,6 +68,11 @@ export function defaultThreadScript(): string {
  * Vitest) there is no compiled `thread.js`; the thread then registers the
  * `ts-node` dev dependency itself (no `execArgv` needed) and loads
  * `thread.ts`. Compiled builds (`dist/`) never take this path.
+ *
+ * Same logic as `src/lib/threadBootstrap.ts` (ADR-006 Karar 1, used by the
+ * archive thread). This module keeps its own copy until the parser import
+ * guards (tests/unit/parserThread.test.ts, tests/security/staticCode.test.ts)
+ * allow `../../lib/threadBootstrap` here (ADR-006 Karar 16).
  */
 function sourceModeBootstrap(): string | null {
   if (!__filename.endsWith('.ts')) return null;

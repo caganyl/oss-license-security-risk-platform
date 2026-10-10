@@ -12,7 +12,10 @@
  *   unknown  — unrecognized or proprietary; requires legal review
  */
 
-export type LicenseRiskLevel = 'safe' | 'medium' | 'high' | 'critical' | 'unknown';
+import { classifierTerm } from '../enrichment/classifiers';
+import { buildIdIndex, canonicalizeSpdxExpression } from '../lib/spdxExpression';
+
+export type LicenseRiskLevel ='safe' | 'medium' | 'high' | 'critical' | 'unknown';
 
 export interface NormalizationResult {
   /** Canonical SPDX identifier, null when the license is unrecognized or proprietary. */
@@ -385,6 +388,77 @@ export function normalizeLicense(raw: string): NormalizationResult {
 
   // Unrecognized
   return { spdxId: null, normalized: trimmed, riskLevel: 'unknown', isSpdxExpression: false, originalRaw: raw };
+}
+
+// ---------------------------------------------------------------------------
+// REQ-004 extensions (D-78): trove classifiers, ` AND ` join, canonical SPDX
+// output. The alias map, risk map and `normalizeLicense` above are unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * Joins license terms with ` AND ` (conservative choice, D-78): blank terms
+ * dropped, duplicates (case-insensitive) dropped keeping the first spelling,
+ * a term containing ` OR ` is parenthesized. Null when nothing is left.
+ */
+export function joinLicenseTermsAnd(terms: readonly string[]): string | null {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const raw of terms) {
+    if (typeof raw !== 'string') continue;
+    const term = raw.trim();
+    if (term.length === 0 || seen.has(term.toLowerCase())) continue;
+    seen.add(term.toLowerCase());
+    kept.push(term);
+  }
+  if (kept.length === 0) return null;
+  if (kept.length === 1) return kept[0];
+  return kept.map((t) => (/\sOR\s/i.test(t) && !/^\(.*\)$/.test(t) ? `(${t})` : t)).join(' AND ');
+}
+
+/**
+ * License declared by PyPI trove classifiers (AC-P14-3): mapped classifiers
+ * give their SPDX id, version-less ones their raw last segment (left to the
+ * alias map when the result is normalized), name-less and non-license
+ * classifiers are ignored; several different licenses are joined with
+ * ` AND `. Null when no classifier names a license.
+ */
+export function licenseFromClassifiers(classifiers: readonly unknown[]): string | null {
+  const terms: string[] = [];
+  for (const classifier of classifiers) {
+    if (typeof classifier !== 'string') continue;
+    const term = classifierTerm(classifier);
+    if (term) terms.push(term.kind === 'spdx' ? term.id : term.text);
+  }
+  return joinLicenseTermsAnd(terms);
+}
+
+/** Known SPDX ids of the normalizer (AC-P16-3 id set without the `licenses` table). */
+export const KNOWN_SPDX_IDS: readonly string[] = Object.freeze(Object.keys(SPDX_RISK_MAP));
+
+/**
+ * Canonical SPDX expression for SBOM output (AC-P16-3): `raw` itself when it
+ * is a valid expression over the known ids (plus `extraIds`, e.g.
+ * `licenses.spdx_id`), else its normalized form (`normalizeLicense`) when
+ * that is valid, else null (caller writes `NOASSERTION`).
+ */
+export function canonicalSpdx(raw: string | null | undefined, extraIds: Iterable<string> = []): string | null {
+  if (typeof raw !== 'string' || raw.trim() === '') return null;
+  const ids = buildIdIndex([...KNOWN_SPDX_IDS, ...extraIds]);
+  const direct = canonicalizeSpdxExpression(raw, ids);
+  if (direct !== null) return direct;
+  const normalized = normalizeLicense(raw);
+  if (normalized.spdxId !== null && !normalized.isSpdxExpression) return canonicalizeSpdxExpression(normalized.spdxId, ids);
+  return null;
+}
+
+/**
+ * True when the normalizer maps `raw` to a known SPDX id or a valid SPDX
+ * expression (AC-P14-2 step 2).
+ */
+export function isRecognizedLicense(raw: string): boolean {
+  const result = normalizeLicense(raw);
+  if (result.isSpdxExpression) return canonicalizeSpdxExpression(raw, KNOWN_SPDX_IDS) !== null;
+  return result.spdxId !== null;
 }
 
 /**

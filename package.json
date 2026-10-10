@@ -4,7 +4,7 @@
   "description": "OSS License & Security Risk Platform Backend",
   "main": "dist/main.js",
   "engines": {
-    "node": ">=22"
+    "node": "^22.21.0 || >=24.5.0"
   },
   "scripts": {
     "build": "tsc",

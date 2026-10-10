@@ -128,12 +128,18 @@ export async function listenApp(options: AppDeps, env: NodeJS.ProcessEnv = proce
   }
   // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
   const scanRoots = await canonicalizeScanRoots(options.scanRoots ?? parseScanRoots(env.SCAN_ROOTS));
-  const app = createApp({ ...options, port, host, scanRoots });
-  const server = http.createServer(app);
+  const server = http.createServer();
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {
       server.off('error', reject);
+      // The Host/Origin allow-list comes from the port the socket is really
+      // bound to (an injected `port: 0` gets a free port; security review
+      // I-1), never from a request. The handler is attached in the
+      // `listening` callback, before any connection can be accepted.
+      const bound = server.address();
+      const boundPort = bound && typeof bound === 'object' ? bound.port : port;
+      server.on('request', createApp({ ...options, port: boundPort, host, scanRoots }));
       resolve();
     });
   });

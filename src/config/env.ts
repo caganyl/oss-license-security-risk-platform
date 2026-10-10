@@ -28,11 +28,33 @@ export function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(host.toLowerCase());
 }
 
-/** Port from deps, else PORT env, else 3001. */
+export const INVALID_PORT_MESSAGE = 'PORT geçersiz: 1 ile 65535 arasında bir tam sayı olmalı.';
+
+function isListenPort(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 65535;
+}
+
+/**
+ * Start-up check of the PORT variable (REQ-003 security review I-1): unset or
+ * blank is fine (default 3001); anything else must be an integer 1–65535.
+ * `PORT=0` (a random port the user cannot know) is refused. Throws with a
+ * message that names the variable but not its value.
+ */
+export function assertValidPortEnv(env: NodeJS.ProcessEnv = process.env): void {
+  const raw = env.PORT;
+  if (raw === undefined || raw.trim() === '') return;
+  if (!/^\d+$/.test(raw.trim()) || !isListenPort(Number(raw.trim()))) throw new Error(INVALID_PORT_MESSAGE);
+}
+
+/**
+ * Port from deps, else PORT env (1–65535), else 3001. An injected `port: 0`
+ * (tests) is kept: `listenApp` then builds the Host/Origin allow-list from
+ * the port actually bound.
+ */
 export function resolvePort(port: number | undefined, env: NodeJS.ProcessEnv = process.env): number {
   if (port !== undefined) return port;
   const fromEnv = Number(env.PORT);
-  return Number.isInteger(fromEnv) && fromEnv >= 0 ? fromEnv : 3001;
+  return isListenPort(fromEnv) ? fromEnv : 3001;
 }
 
 /** Bind host from deps, else HOST env, else loopback only (AC-P01-9). */

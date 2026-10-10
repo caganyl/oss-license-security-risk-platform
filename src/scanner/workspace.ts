@@ -2,8 +2,10 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { boundedNumber } from '../lib/bounds';
 import { sanitizeErrorText } from '../lib/errorText';
 import { assertRemoteUrl } from '../lib/scanSource';
+import { MAX_JOB_TIMEOUT_MS } from './sandbox/runner.config';
 
 export { scrubSecrets } from '../lib/errorText';
 
@@ -275,7 +277,13 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
   const env = buildGitEnv(process.env, workspace, credential);
   await prepareGitIsolation(workspace);
 
-  const timeoutMs = Number(process.env.SCAN_CLONE_TIMEOUT_MS) || DEFAULT_CLONE_TIMEOUT_MS;
+  // Range-checked (I-3): a negative value used to time every clone out at once, a huge one overflowed the timer.
+  const timeoutMs = boundedNumber(process.env.SCAN_CLONE_TIMEOUT_MS, DEFAULT_CLONE_TIMEOUT_MS, {
+    name: 'SCAN_CLONE_TIMEOUT_MS',
+    min: 1,
+    max: MAX_JOB_TIMEOUT_MS,
+    integer: true,
+  });
   const child = spawn('git', args, {
     shell: false,
     windowsHide: true,

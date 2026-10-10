@@ -16,7 +16,11 @@ const SECRET_ENV_VARS = ['DATABASE_URL', 'PGPASSWORD', 'ENCRYPTION_KEY', 'NVD_AP
 const MIN_SECRET_LENGTH = 4;
 
 // URL user info with or without a password (the user name can be sensitive too).
-const CREDENTIAL_URL_RE = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi;
+// The scheme is bounded (real schemes are short) and has no `\b` anchor: an
+// unbounded `[a-z0-9+.-]*` retried at every word boundary of a long
+// "a.a.a.…" run is quadratic on untrusted git stderr (REQ-003 security review
+// M-1 sweep), and `\b` let `x_https://user@host` escape.
+const CREDENTIAL_URL_RE = /([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@'"]+@/gi;
 
 function secretValues(env: NodeJS.ProcessEnv): string[] {
   const out = new Set<string>();

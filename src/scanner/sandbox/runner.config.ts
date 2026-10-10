@@ -9,7 +9,21 @@
  * with the key they mirror so the worker can override them at runtime.
  */
 
+import { boundedNumber } from '../../lib/bounds';
 import type { TechEcosystem } from '../../types/scan';
+
+// Upper bounds of the queue settings (security review I-3). Each one keeps
+// every derived timer below the `setTimeout` limit (2^31-1 ms, ~24.8 days).
+/** `scan.max_retries` / SCAN_MAX_RETRIES: total attempts including the first. */
+export const MAX_SCAN_ATTEMPTS = 10;
+/** `scan.timeout_minutes`: 24 hours. */
+export const MAX_TIMEOUT_MINUTES = 24 * 60;
+/** Job/clone/report time limits in ms: 24 hours. */
+export const MAX_JOB_TIMEOUT_MS = MAX_TIMEOUT_MINUTES * 60_000;
+/** Poll intervals: 1 hour. */
+export const MAX_POLL_INTERVAL_MS = 60 * 60_000;
+/** Concurrent scans/reports. */
+export const MAX_WORKER_CONCURRENCY = 32;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,10 +123,18 @@ export interface SandboxRunnerConfig {
 // Default configuration
 // ---------------------------------------------------------------------------
 
+// Environment overrides are range-checked (security review I-3): out of range -> default + warning.
+const env = process.env;
+
 export const sandboxRunnerConfig: SandboxRunnerConfig = {
   scan: {
     // 60 minutes — mirrors system_settings scan.timeout_minutes = 60
-    timeoutMs: Number(process.env.SCAN_TIMEOUT_MS) || 60 * 60 * 1000,
+    timeoutMs: boundedNumber(env.SCAN_TIMEOUT_MS, 60 * 60 * 1000, {
+      name: 'SCAN_TIMEOUT_MS',
+      min: 1,
+      max: MAX_JOB_TIMEOUT_MS,
+      integer: true,
+    }),
     shallowDepth: 1,
     maxRepoSizeMb: 512,
     // MVP: Node.js and Python only
@@ -121,7 +143,12 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
 
   retry: {
     // Mirrors system_settings scan.max_retries = 3
-    maxAttempts: Number(process.env.SCAN_MAX_RETRIES) || 3,
+    maxAttempts: boundedNumber(env.SCAN_MAX_RETRIES, 3, {
+      name: 'SCAN_MAX_RETRIES',
+      min: 1,
+      max: MAX_SCAN_ATTEMPTS,
+      integer: true,
+    }),
     // 30 s, 60 s, 120 s, ... capped at 10 min (REQ-003 D-40, ADR-004 Karar 8).
     initialBackoffMs: 30_000,
     maxBackoffMs: 600_000,
@@ -133,8 +160,18 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
   },
 
   worker: {
-    maxConcurrentScans: Number(process.env.WORKER_MAX_CONCURRENT) || 4,
-    pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS) || 5_000,
+    maxConcurrentScans: boundedNumber(env.WORKER_MAX_CONCURRENT, 4, {
+      name: 'WORKER_MAX_CONCURRENT',
+      min: 1,
+      max: MAX_WORKER_CONCURRENCY,
+      integer: true,
+    }),
+    pollIntervalMs: boundedNumber(env.WORKER_POLL_INTERVAL_MS, 5_000, {
+      name: 'WORKER_POLL_INTERVAL_MS',
+      min: 1,
+      max: MAX_POLL_INTERVAL_MS,
+      integer: true,
+    }),
   },
 
   parser: {

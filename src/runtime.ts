@@ -11,7 +11,14 @@ import type http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client, type Pool } from 'pg';
 import { listenApp } from './app';
-import { assertRequiredEnv, MissingConfigError, isLoopbackHost, resolveHost } from './config/env';
+import {
+  assertRequiredEnv,
+  assertValidPortEnv,
+  INVALID_PORT_MESSAGE,
+  MissingConfigError,
+  isLoopbackHost,
+  resolveHost,
+} from './config/env';
 import {
   RUNTIME_LOCK_APPLICATION_NAME,
   acquireInstanceLock,
@@ -180,6 +187,15 @@ class Runtime implements RuntimeHandle {
         assertRequiredEnv(this.env);
       } catch (err) {
         throw new RuntimeStartupError(err instanceof MissingConfigError ? err.message : 'Ortam yapılandırması geçersiz.');
+      }
+      // PORT=0 or an invalid PORT is refused before anything opens (I-1); an
+      // injected `port` (tests: 0 = free port) is used as given.
+      if (this.options.port === undefined) {
+        try {
+          assertValidPortEnv(this.env);
+        } catch {
+          throw new RuntimeStartupError(INVALID_PORT_MESSAGE);
+        }
       }
       const connectionString = this.env.DATABASE_URL as string;
 
@@ -446,6 +462,14 @@ class Runtime implements RuntimeHandle {
       if (!drained) this.logger.warn('Süren raporlar beklenen sürede bitmedi; pending yapılacak.');
 
       // 6. Sweep: this run's `running` scans -> queued, every `generating` report -> pending.
+      //    After `lock-lost` the lock (and the queue) belongs to another
+      //    instance: report rows carry no owner (run id on reports: F3,
+      //    schema change), so their sweep would return that instance's
+      //    `generating` reports to `pending` and they would be generated
+      //    twice (security review L-5); it is skipped. The scan sweep stays:
+      //    it is fenced by this run's id, so it touches only rows this
+      //    process claimed and that the other instance does not own.
+      const sweepReports = reason !== 'lock-lost';
       if (this.pool) {
         try {
           const res = await this.pool.query<{ scans: number; reports: number }>(
@@ -455,10 +479,10 @@ class Runtime implements RuntimeHandle {
                WHERE status = 'running' AND worker_id = $1
                RETURNING id
              ), r AS (
-               UPDATE reports SET status = 'pending' WHERE status = 'generating' RETURNING id
+               UPDATE reports SET status = 'pending' WHERE status = 'generating' AND $2::boolean RETURNING id
              )
              SELECT (SELECT count(*) FROM s)::int AS scans, (SELECT count(*) FROM r)::int AS reports`,
-            [this.runId],
+            [this.runId, sweepReports],
           );
           const row = res.rows[0];
           if (row && (row.scans > 0 || row.reports > 0)) {

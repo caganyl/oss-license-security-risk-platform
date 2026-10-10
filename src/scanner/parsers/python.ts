@@ -15,6 +15,7 @@ import {
   isPyDict,
   linkErrors,
   manifestDir,
+  matchRequirementLine,
   parseError,
   pyGet,
   pyItems,
@@ -35,10 +36,14 @@ import { parseTomlText } from './toml';
 
 // Python regex semantics: `\s` is the `str.isspace` set, `.` is "anything
 // but \n" and a trailing `$` also matches before a final "\n".
-const REQUIREMENT_RE = new RegExp(
-  `^[${PY_WS}]*([A-Za-z0-9_.-]+)[${PY_WS}]*(\\[[^\\n]*?\\])?[${PY_WS}]*([^\\n]*)(?=\\n?$)`,
-  'u',
-);
+//
+// The requirement line pattern (`^\s*([A-Za-z0-9_.-]+)\s*(\[.*?\])?\s*(.*)$`)
+// is matched by the linear `matchRequirementLine` (common.ts): as a regex it
+// backtracks cubically on a text with an embedded "\n" (security review M-1).
+//
+// The two patterns below stay regexes: each `[WS]*` borders a character class
+// disjoint from `PY_WS`, so a failed attempt gives back at most one run once
+// and the match is linear (also checked for M-1).
 /** A requirement is pinned only by a single "==X" / "===X" clause without wildcards. */
 const EXACT_PIN_RE = new RegExp(`^[${PY_WS}]*={2,3}[${PY_WS}]*([^,;*${PY_WS}]+)[${PY_WS}]*(?=\\n?$)`, 'u');
 /** Poetry treats a bare version ("1.2.3") as an exact pin. */
@@ -197,9 +202,9 @@ function parseRequirementLine(rawLine: string): [string, string] | null {
     return null;
   }
   line = pyStrip(line.split(';', 1)[0]);
-  const match = REQUIREMENT_RE.exec(line);
+  const match = matchRequirementLine(line);
   if (!match) return null;
-  return [match[1], pyStrip(match[3])];
+  return [match[0], pyStrip(match[1])];
 }
 
 /**

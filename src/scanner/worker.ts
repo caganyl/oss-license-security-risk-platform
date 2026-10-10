@@ -12,6 +12,7 @@ import { type GitVersionProvider, assertGitForRemoteScan, getGitVersion } from '
 import {
   NonRetryableScanError,
   ORPHAN_RECOVERY_MESSAGE,
+  ATTEMPTS_EXHAUSTED_MESSAGE,
   ScanAbortError,
   type ScanAbortReason,
   type ScanQueueSettings,
@@ -189,6 +190,8 @@ export class ScanWorker {
   private readonly deps: ScanWorkerDeps;
   /** Active job set (ADR-004 Karar 9): scan id -> job. */
   private readonly activeJobs = new Map<string, ClaimedJob>();
+  /** Out-of-range `system_settings` warnings already logged (I-3). */
+  private readonly settingsWarnings = new Set<string>();
 
   constructor(deps: Partial<ScanWorkerDeps> = {}) {
     if (!deps.db) {
@@ -418,7 +421,43 @@ export class ScanWorker {
     const res = await client.query<{ key: string; value: unknown }>(
       `SELECT key, value FROM system_settings WHERE key IN ('scan.max_retries', 'scan.timeout_minutes')`,
     );
-    return parseScanQueueSettings(res.rows);
+    return parseScanQueueSettings(res.rows, (message) => {
+      // Read on every poll: each rejected value is logged once per process.
+      if (this.settingsWarnings.has(message)) return;
+      this.settingsWarnings.add(message);
+      this.logger.warn(message);
+    });
+  }
+
+  /**
+   * Waiting scans whose attempts are already used up can no longer be
+   * claimed (`retry_count < scan.max_retries`); this happens when
+   * `scan.max_retries` is lowered while they wait (I-3). As in ADR-004 Karar
+   * 8 a scan without an attempt left fails: `failed` + `scan_failed`, the last
+   * failure text is kept. Runs inside the claim transaction.
+   */
+  private async failExhaustedScans(client: PoolClient, maxAttempts: number): Promise<void> {
+    const res = await client.query<{ id: string }>(
+      `WITH exhausted AS (
+         SELECT id FROM scans
+         WHERE status IN ('pending', 'queued') AND retry_count >= $1
+         FOR UPDATE SKIP LOCKED
+       ), failed AS (
+         UPDATE scans s
+         SET status = 'failed', completed_at = NOW(), next_attempt_at = NULL, worker_id = NULL,
+             error_message = COALESCE(s.error_message, $2), updated_at = NOW()
+         FROM exhausted e
+         WHERE s.id = e.id
+         RETURNING s.id
+       )
+       INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
+       SELECT 'scan_failed'::audit_action, 'scan', id, NOW() FROM failed
+       RETURNING entity_id AS id`,
+      [maxAttempts, scanErrorText(ATTEMPTS_EXHAUSTED_MESSAGE, this.errorContext())],
+    );
+    for (const row of res.rows) {
+      this.logger.warn(`Tarama ${row.id} için deneme hakkı kalmadı (scan.max_retries=${maxAttempts}); failed.`);
+    }
   }
 
   private async claimNextJob(): Promise<ClaimedJob | null> {
@@ -427,6 +466,7 @@ export class ScanWorker {
       await client.query('BEGIN');
 
       const settings = await this.readSettings(client);
+      await this.failExhaustedScans(client, settings.maxAttempts);
 
       // Claim query of ADR-004 Karar 8: a retry waiting for its backoff is
       // skipped, so it never blocks a newer scan (AC-P13-7).
@@ -604,7 +644,8 @@ export class ScanWorker {
         .map((r) => r.ecosystem)
         .filter((e) => e === 'nodejs' || e === 'python');
     } catch (err) {
-      this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId}:`, err);
+      // Class/code only, never the raw error object (ADR-004 Karar 6; security review I-6).
+      this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId} (${errorCode(err)}).`);
     }
     // Fallback to all supported MVP ecosystems
     return ecosystems.length > 0 ? ecosystems : ['nodejs', 'python'];

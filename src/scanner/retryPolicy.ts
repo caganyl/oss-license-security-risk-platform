@@ -3,7 +3,8 @@
  * ADR-004 Karar 7, 8, 9). Pure functions and error classes only: the worker
  * (`src/scanner/worker.ts`) does the database writes.
  */
-import { sandboxRunnerConfig } from './sandbox/runner.config';
+import { boundedNumber } from '../lib/bounds';
+import { MAX_SCAN_ATTEMPTS, MAX_TIMEOUT_MINUTES, sandboxRunnerConfig } from './sandbox/runner.config';
 
 /**
  * Deterministic failure (invalid source, ref or token): the scan fails
@@ -127,17 +128,44 @@ export const DEFAULT_TIMEOUT_MINUTES = 60;
 
 /**
  * Reads `scan.max_retries` / `scan.timeout_minutes` rows (`{ key, value }`);
- * a missing or invalid value falls back to the defaults.
+ * a missing, invalid or out-of-range value falls back to the default
+ * (security review I-3): `scan.max_retries` is an integer 1–10,
+ * `scan.timeout_minutes` is greater than 0 and at most 1440 (24 h; keeps the
+ * job timer below the `setTimeout` limit). `warn` receives one message per
+ * rejected value (the caller de-duplicates; the rows are read on every poll).
  */
-export function parseScanQueueSettings(rows: ReadonlyArray<{ key: string; value: unknown }>): ScanQueueSettings {
+export function parseScanQueueSettings(
+  rows: ReadonlyArray<{ key: string; value: unknown }>,
+  warn: (message: string) => void = () => undefined,
+): ScanQueueSettings {
   const settings: ScanQueueSettings = {
     maxAttempts: sandboxRunnerConfig.retry.maxAttempts,
     timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
   };
   for (const row of rows) {
-    const value = Number(row.value);
-    if (row.key === 'scan.max_retries' && Number.isInteger(value) && value >= 1) settings.maxAttempts = value;
-    if (row.key === 'scan.timeout_minutes' && Number.isFinite(value) && value > 0) settings.timeoutMinutes = value;
+    // A JSON/text `null` is "not set", like a missing row.
+    const raw = row.value === null ? undefined : typeof row.value === 'string' || typeof row.value === 'number' ? row.value : String(row.value);
+    if (row.key === 'scan.max_retries') {
+      settings.maxAttempts = boundedNumber(raw, settings.maxAttempts, {
+        name: 'system_settings scan.max_retries',
+        min: 1,
+        max: MAX_SCAN_ATTEMPTS,
+        integer: true,
+        warn,
+      });
+    }
+    if (row.key === 'scan.timeout_minutes') {
+      settings.timeoutMinutes = boundedNumber(raw, settings.timeoutMinutes, {
+        name: 'system_settings scan.timeout_minutes',
+        min: 0,
+        exclusiveMin: true,
+        max: MAX_TIMEOUT_MINUTES,
+        warn,
+      });
+    }
   }
   return settings;
 }
+
+/** `error_message` fallback of a waiting scan whose attempts are used up after `scan.max_retries` was lowered (I-3). */
+export const ATTEMPTS_EXHAUSTED_MESSAGE = 'Deneme hakkı bitti (scan.max_retries düşürüldü); tarama yeniden denenmeyecek.';

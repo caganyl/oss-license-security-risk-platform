@@ -216,15 +216,22 @@ export class ExportWorker {
     this.logger.log(`Starting generation of report ${reportId}...`);
     const timeoutMs = this.deps.config.timeoutMs;
 
+    // The time limit aborts `processReport` (security review L-5): after it
+    // fires the service writes no file and never sets `ready`. The race still
+    // frees this job slot at once, because a running pdfkit/exceljs render
+    // cannot be interrupted and only stops at the service's next checkpoint.
+    const controller = new AbortController();
     let timeoutId: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`Report generation timed out after ${timeoutMs}ms`));
+        const reason = new Error(`Report generation timed out after ${timeoutMs}ms`);
+        controller.abort(reason);
+        reject(reason);
       }, timeoutMs);
     });
 
     try {
-      await Promise.race([this.deps.reportService.processReport(reportId), timeoutPromise]);
+      await Promise.race([this.deps.reportService.processReport(reportId, controller.signal), timeoutPromise]);
       this.logger.log(`Report ${reportId} successfully generated.`);
     } catch (err) {
       // L-5 (ADR-002 Ek E3): the same sanitized text for the log and error_message.

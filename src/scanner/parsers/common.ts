@@ -91,17 +91,109 @@ export function extendResult(target: ParseResult, other: ParseResult): void {
  */
 export const PY_WS = '\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
 
-const STRIP_RE = new RegExp(`^[${PY_WS}]+|[${PY_WS}]+$`, 'gu');
-const RSTRIP_RE = new RegExp(`[${PY_WS}]+$`, 'u');
-
-/** Python `str.strip()` without arguments. */
-export function pyStrip(value: string): string {
-  return value.replace(STRIP_RE, '');
+/**
+ * The `PY_WS` set as a UTF-16 code unit test. Every member is a single BMP
+ * code unit outside the surrogate range, so testing code units is the same as
+ * testing code points.
+ */
+export function isPyWhitespace(code: number): boolean {
+  return (
+    (code >= 0x09 && code <= 0x0d) || // \t \n \x0b \x0c \r
+    (code >= 0x1c && code <= 0x20) || // \x1c-\x1f and space
+    code === 0x85 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000
+  );
 }
 
-/** Python `str.rstrip()` without arguments. */
+/**
+ * Python `str.strip()` without arguments.
+ *
+ * Index scan from both ends instead of a `[WS]+$` regex: a backtracking
+ * engine retries the trailing alternative at every start position of a long
+ * whitespace run that is not at the end, which is quadratic on untrusted
+ * manifest lines (REQ-003 security review M-1). This is linear.
+ */
+export function pyStrip(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isPyWhitespace(value.charCodeAt(start))) start++;
+  while (end > start && isPyWhitespace(value.charCodeAt(end - 1))) end--;
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
+/** Python `str.rstrip()` without arguments (linear, see `pyStrip`). */
 export function pyRstrip(value: string): string {
-  return value.replace(RSTRIP_RE, '');
+  let end = value.length;
+  while (end > 0 && isPyWhitespace(value.charCodeAt(end - 1))) end--;
+  return end === value.length ? value : value.slice(0, end);
+}
+
+/** Python `str.lstrip()` without arguments (linear). */
+function pyLstripIndex(value: string, from: number): number {
+  let i = from;
+  while (i < value.length && isPyWhitespace(value.charCodeAt(i))) i++;
+  return i;
+}
+
+const REQUIREMENT_NAME_CHAR = /^[A-Za-z0-9_.-]$/;
+
+function isRequirementNameChar(ch: string): boolean {
+  return REQUIREMENT_NAME_CHAR.test(ch);
+}
+
+/**
+ * Linear equivalent of the Python requirement regex
+ * `^\s*([A-Za-z0-9_.-]+)\s*(\[.*?\])?\s*(.*)$` (Python `\s` = `PY_WS`, `.` =
+ * anything but `\n`, `$` = end or before a final `\n`). Returns
+ * `[name, rest]` (groups 1 and 3) or `null`.
+ *
+ * The regex form backtracks cubically when the text holds a `\n` that the
+ * last group cannot cross (e.g. a TOML requirement string with an embedded
+ * newline, M-1). The first match of the backtracking engine is reproduced
+ * exactly:
+ * - leading whitespace and the name are maximal (giving any of them back
+ *   never yields a match that the maximal choice does not yield first);
+ * - after the name and its maximal whitespace run, the bracket is tried
+ *   first and its lazy body ends at each `]` in turn (never across `\n`);
+ *   after each candidate the maximal whitespace run is taken and the rest
+ *   must hold no `\n` except a final one; then the bracket is skipped.
+ */
+export function matchRequirementLine(value: string): [string, string] | null {
+  const len = value.length;
+  const nameStart = pyLstripIndex(value, 0);
+  let nameEnd = nameStart;
+  while (nameEnd < len && isRequirementNameChar(value[nameEnd])) nameEnd++;
+  if (nameEnd === nameStart) return null;
+  const name = value.slice(nameStart, nameEnd);
+
+  // `(.*)$`: the rest may hold a `\n` only as the very last character.
+  const finalNewline = len > 0 && value.charCodeAt(len - 1) === 0x0a;
+  // `lastIndexOf` clamps a negative start to 0, so the one-character text "\n" is handled apart.
+  const lastInnerNewline = finalNewline ? (len >= 2 ? value.lastIndexOf('\n', len - 2) : -1) : value.lastIndexOf('\n');
+  const restFrom = (t: number): string | null => {
+    if (t <= lastInnerNewline) return null;
+    return value.slice(t, finalNewline && t < len ? len - 1 : len);
+  };
+
+  const afterName = pyLstripIndex(value, nameEnd);
+  if (afterName < len && value[afterName] === '[') {
+    for (let j = afterName + 1; j < len && value[j] !== '\n'; j++) {
+      if (value[j] !== ']') continue;
+      const rest = restFrom(pyLstripIndex(value, j + 1));
+      if (rest !== null) return [name, rest];
+    }
+  }
+  // Bracket skipped: the character at `afterName` is not whitespace, so the
+  // second whitespace group is empty and the rest starts there.
+  const rest = restFrom(afterName);
+  return rest === null ? null : [name, rest];
 }
 
 /** Python `str.strip(chars)` / `rstrip(chars)` with an explicit character set. */
@@ -344,7 +436,7 @@ export interface TreeWalk {
   byDir: Map<string, Map<string, WalkedFile>>;
   /** Links (or reparse points resolving outside the root) with a manifest name. */
   fileLinks: FileLink[];
-  /** `filesystem` records: skipped directory links and unreadable directories. */
+  /** `filesystem` records: skipped links without a manifest name (folder or file) and unreadable directories. */
   errors: ParseErrorRecord[];
 }
 
@@ -377,9 +469,10 @@ function realOrResolved(p: string): string {
 
 /**
  * Single, stack-based walk of the scan root. Uses `lstat` for every entry:
- * symbolic links and junctions are never followed, `SKIP_DIRS` directories
- * are never entered, and every manifest file is re-checked with
- * `realpath` against the root (second defence for reparse points).
+ * symbolic links and junctions are never followed nor resolved (L-2),
+ * `SKIP_DIRS` directories are never entered, and every regular manifest
+ * file is re-checked with `realpath` against the root (second defence for
+ * reparse points that are not reported as links).
  */
 export function walkTree(rootDir: string): TreeWalk {
   const rootReal = realOrResolved(rootDir);
@@ -414,17 +507,21 @@ export function walkTree(rootDir: string): TreeWalk {
       }
 
       if (stat.isSymbolicLink()) {
-        if (SKIP_DIRS.has(name)) continue;
-        let targetIsDir = false;
-        try {
-          targetIsDir = fs.statSync(abs).isDirectory();
-        } catch {
-          targetIsDir = false; // dangling link
-        }
-        if (targetIsDir) {
-          walk.errors.push({ ecosystem: 'filesystem', file: rel, error: LINK_NOT_FOLLOWED_MESSAGE });
-        } else if (ALL_MANIFEST_NAMES.has(name)) {
+        // The link target is never resolved, not even to learn whether it is
+        // a folder: `stat`/`realpath` on a link to `\\host\share\…` opens an
+        // SMB session and can send the user's NTLM hash (security review
+        // L-2). Windows `lstat` reports junctions and folder/file symlinks
+        // alike (no folder bit), so the record is chosen by name only:
+        // - a manifest name -> record of its ecosystem (AC-P10-11);
+        // - a SKIP_DIRS name -> silently skipped, as an unlinked folder would be;
+        // - any other name -> one `filesystem` record. This includes file
+        //   links with an unrelated name, which ADR-005 Karar 6 skipped
+        //   silently; telling them apart from folder links would need the
+        //   target (reported deviation, see the REQ-003 handoff).
+        if (ALL_MANIFEST_NAMES.has(name)) {
           walk.fileLinks.push({ relPath: rel, name });
+        } else if (!SKIP_DIRS.has(name)) {
+          walk.errors.push({ ecosystem: 'filesystem', file: rel, error: LINK_NOT_FOLLOWED_MESSAGE });
         }
         continue;
       }
@@ -436,6 +533,11 @@ export function walkTree(rootDir: string): TreeWalk {
 
       if (!stat.isFile() || !ALL_MANIFEST_NAMES.has(name)) continue;
 
+      // Second defence (ADR-005 Karar 6), only for entries that `lstat`
+      // reports as regular files, never for links: a folder reached through a
+      // reparse point that libuv does not report as a link (e.g. a volume
+      // mount point, which Windows only allows to local volumes) can still
+      // place the file outside the root.
       if (!isInside(realOrResolved(abs), rootReal)) {
         walk.fileLinks.push({ relPath: rel, name });
         continue;
@@ -544,7 +646,18 @@ function escapeRegExp(value: string): string {
 /**
  * Replaces the scan root (both separators, case-insensitive on Windows) in
  * an error text. File system messages are never used (they carry absolute
- * paths); this is the last guard for library messages (ADR-005 Karar 7).
+ * paths); this is the last guard for library messages inside the thread
+ * (ADR-005 Karar 7).
+ *
+ * `%TEMP%` and the profile folder (also required by ADR-005 Karar 7) are not
+ * replaced here on purpose: the thread runs with `env: {}` and cannot see
+ * them reliably. They are replaced on the main thread instead: the only way
+ * a `parse_errors` text leaves the scan is the warning that
+ * `ScanWorker` joins and passes through `scanErrorText` ->
+ * `sanitizeErrorText` (workspace, SCAN_ROOTS, `os.tmpdir()`,
+ * `os.homedir()`, secrets, control characters; ADR-002 Ek E3) before it is
+ * written to `scans.error_message`. Any new consumer of `parse_errors` must
+ * go through the same funnel.
  */
 export function scrubRoot(text: string, rootDir: string): string {
   let out = text;

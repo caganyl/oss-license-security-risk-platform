@@ -149,7 +149,14 @@ export class ReportService {
     return toRecord(result.rows[0]);
   }
 
-  async processReport(reportId: string): Promise<ReportRecord> {
+  /**
+   * Generates one report. `signal` (the worker's time limit, security review
+   * L-5) is checked between the steps: pdfkit/exceljs rendering itself cannot
+   * be interrupted, but once the signal fires no file is written and the row
+   * is never set to `ready`; the abort reason is the error (row -> `failed`).
+   */
+  async processReport(reportId: string, signal?: AbortSignal): Promise<ReportRecord> {
+    signal?.throwIfAborted();
     const reportResult = await this.db.query<ReportRow>(
       `SELECT ${REPORT_COLUMNS}
        FROM reports
@@ -166,14 +173,18 @@ export class ReportService {
 
     try {
       const data = await this.loadReportData(scanId);
+      signal?.throwIfAborted();
       const content = await this.renderContent(data, record.reportType, record.format);
+      signal?.throwIfAborted();
       const checksum = crypto.createHash('sha256').update(content).digest('hex');
       const outputDir = process.env.REPORT_OUTPUT_DIR ?? path.join(process.cwd(), 'report-output');
       await fs.mkdir(outputDir, { recursive: true });
 
       const filename = `report-${scanId}-${record.reportType}.${FORMAT_META[record.format].ext}`;
       const storageKey = path.join(outputDir, filename);
+      signal?.throwIfAborted();
       await fs.writeFile(storageKey, content);
+      signal?.throwIfAborted();
 
       const result = await this.db.query<ReportRow>(
         `UPDATE reports

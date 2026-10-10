@@ -26,17 +26,23 @@ import { createSlidingWindowLimiter } from '../../src/vulnerability/rateLimiter'
 import { vulnerabilityDataStatusOf, vulnerabilitySummaryLines } from '../../src/vulnerability/summaryLines';
 import { NORMALIZED_RECORD_VERSION, type CachedNvd, type CachedOsvRecord, type VulnCache } from '../../src/vulnerability/vulnCache';
 import type { OsvVulnerability } from '../../src/vulnerability/normalize';
-import type { VulnerabilityConfig } from '../../src/scanner/sandbox/runner.config';
+import { VULNERABILITY_LIMITS, type VulnerabilityConfig } from '../../src/scanner/sandbox/runner.config';
 import { type FakeOsv, PASSTHROUGH, nvdBody, osvKey, startFakeOsv } from '../helpers/fakeOsv';
 
 let osv: FakeOsv;
 const clients: VulnerabilityClient[] = [];
 let sleeps: number[] = [];
 let nowMs = Date.parse('2026-10-10T08:00:00Z');
+/**
+ * Fake clock: `sleep` records the wait and advances `nowMs` by it, so the NVD
+ * limiter's waits (6 s spacing without a key, 35 s window, 429 pause — Y-2)
+ * elapse instead of looping on an unchanged time.
+ */
 const clock: AppClock = {
   now: () => nowMs,
   sleep: async (ms) => {
     sleeps.push(ms);
+    nowMs += ms;
   },
 };
 let warnings: string[] = [];
@@ -373,8 +379,11 @@ describe('AC-P17-13: NVD rate limit and cache', () => {
     nowMs += 2 * 3_600_000;
     osv.resetCounts();
     osv.override('/rest/json/cves/2.0', { status: 503, body: {} });
+    sleeps = [];
     const failed = await engine.lookup([npm('a')], { signal: signal() });
     expect(osv.nvdCount()).toBe(3);
+    // Y-2 (no key): retry backoff 1 s, then the rest of the 6 s spacing (5 s); backoff 2 s, then 4 s.
+    expect(sleeps).toEqual([1000, 5000, 2000, 4000]);
     expect(mem.nvdWrites).toHaveLength(1);
     expect(failed.status).toBe('complete');
     expect(failed.summaryLines).toEqual(['[nvd] CVSS unavailable for 1 vulnerability record(s); severity taken from OSV data or the default.']);
@@ -384,33 +393,151 @@ describe('AC-P17-13: NVD rate limit and cache', () => {
     seedNvdCase();
     osv.override('/rest/json/cves/2.0', [{ status: 429, headers: { 'retry-after': '5' }, body: {} }, PASSTHROUGH]);
     const result = await lookupEngine(vulnClient()).lookup([npm('a')], { signal: signal() });
-    expect(sleeps).toContain(5000);
+    // Retry-After 5 s, then (no key, Y-2) the remaining 1 s of the 6 s spacing.
+    expect(sleeps).toEqual([5000, 1000]);
     expect(osv.nvdCount()).toBe(2);
     expect(result.counts.nvdUnavailable).toBe(0);
   });
 
-  it('AC-P17-13: sliding window without key: 5 immediate attempts, the 6th waits 30 s (injected clock); with key 50', async () => {
-    let t = 0;
-    const waits: number[] = [];
+  /** Fake clock local to a limiter test: `sleep` advances `t`. */
+  function limiterClock() {
+    const state = { t: 0, waits: [] as number[] };
     const fake: AppClock = {
-      now: () => t,
+      now: () => state.t,
       sleep: async (ms) => {
-        waits.push(ms);
-        t += ms;
+        state.waits.push(ms);
+        state.t += ms;
       },
     };
-    const limiter = createSlidingWindowLimiter({ windowMs: 30_000, max: 5, clock: fake });
+    return { state, fake };
+  }
+
+  it('AC-P17-13 / Y-2: production limits are a 35 s window, 5 / 50 requests, 6 s spacing only without a key', () => {
+    expect(VULNERABILITY_LIMITS.nvd).toMatchObject({ windowMs: 35_000, requestsWithoutKey: 5, requestsWithKey: 50, minSpacingWithoutKeyMs: 6_000 });
+  });
+
+  it('AC-P17-13 / Y-2: sliding window (35 s, no spacing): 5 immediate attempts, the 6th waits 35 s; with key 50 immediate; aborted waiter -> false', async () => {
+    const { state, fake } = limiterClock();
+    const windowMs = VULNERABILITY_LIMITS.nvd.windowMs;
+    const limiter = createSlidingWindowLimiter({ windowMs, max: VULNERABILITY_LIMITS.nvd.requestsWithoutKey, clock: fake });
     for (let i = 0; i < 5; i++) expect(await limiter.acquire(signal())).toBe(true);
-    expect(waits).toEqual([]);
+    expect(state.waits).toEqual([]);
     expect(await limiter.acquire(signal())).toBe(true);
-    expect(waits).toEqual([30_000]);
-    const keyed = createSlidingWindowLimiter({ windowMs: 30_000, max: 50, clock: fake });
-    waits.length = 0;
+    expect(state.waits).toEqual([35_000]);
+    expect(state.t).toBe(35_000);
+    const keyed = createSlidingWindowLimiter({ windowMs, max: VULNERABILITY_LIMITS.nvd.requestsWithKey, minSpacingMs: 0, clock: fake });
+    state.waits.length = 0;
     for (let i = 0; i < 50; i++) await keyed.acquire(signal());
-    expect(waits).toEqual([]);
+    expect(state.waits).toEqual([]);
     const aborted = new AbortController();
     aborted.abort();
     expect(await keyed.acquire(aborted.signal)).toBe(false);
+  });
+
+  it('AC-P17-13 / Y-2: without key (35 s window + 6 s spacing) starts are at 0, 6, 12, 18, 24 s, the 6th at 35 s, the 7th at 41 s', async () => {
+    const { state, fake } = limiterClock();
+    const limiter = createSlidingWindowLimiter({
+      windowMs: VULNERABILITY_LIMITS.nvd.windowMs,
+      max: VULNERABILITY_LIMITS.nvd.requestsWithoutKey,
+      minSpacingMs: VULNERABILITY_LIMITS.nvd.minSpacingWithoutKeyMs,
+      clock: fake,
+    });
+    const starts: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      expect(await limiter.acquire(signal())).toBe(true);
+      starts.push(state.t);
+    }
+    expect(starts).toEqual([0, 6_000, 12_000, 18_000, 24_000, 35_000, 41_000]);
+    expect(state.waits).toEqual([6_000, 6_000, 6_000, 6_000, 11_000, 6_000]);
+    // No 30 s rolling window ever holds more than 5 starts (NVD's published limit).
+    for (const s of starts) expect(starts.filter((x) => x >= s && x < s + 30_000).length).toBeLessThanOrEqual(5);
+  });
+
+  it('AC-P17-13 / Y-2: pause(ms) blocks every new start for ms; a shorter later pause never shortens it; 0 / NaN / negative are ignored', async () => {
+    const { state, fake } = limiterClock();
+    const limiter = createSlidingWindowLimiter({ windowMs: 35_000, max: 50, clock: fake });
+    expect(await limiter.acquire(signal())).toBe(true);
+    limiter.pause(35_000);
+    limiter.pause(5_000);
+    limiter.pause(0);
+    limiter.pause(Number.NaN);
+    limiter.pause(-1);
+    expect(await limiter.acquire(signal())).toBe(true);
+    expect(state.waits).toEqual([35_000]);
+    state.waits.length = 0;
+    limiter.pause(0);
+    limiter.pause(Number.NaN);
+    expect(await limiter.acquire(signal())).toBe(true);
+    expect(state.waits).toEqual([]);
+    // A waiter aborted during a pause takes no slot.
+    limiter.pause(10_000);
+    const ac = new AbortController();
+    ac.abort();
+    expect(await limiter.acquire(ac.signal)).toBe(false);
+  });
+
+  /** NVD handler recording the fake-clock time of every NVD request (start time; the clock only moves in `sleep`). */
+  function recordNvd(responses: Array<{ status: number; headers?: Record<string, string> } | 'ok'>, cve = 'CVE-2024-22222'): number[] {
+    const at: number[] = [];
+    osv.override('/rest/json/cves/2.0', () => {
+      const step = responses[Math.min(at.length, responses.length - 1)];
+      at.push(nowMs);
+      return step === 'ok' ? { body: nvdBody(cve, 9.8, 'CRITICAL') } : { status: step.status, headers: step.headers ?? {}, body: {} };
+    });
+    return at;
+  }
+
+  it('AC-P17-13 / Y-2: NVD 429 without Retry-After pauses NVD for one 35 s window (retry starts at +35 s), then succeeds', async () => {
+    seedNvdCase();
+    const t0 = nowMs;
+    const at = recordNvd([{ status: 429 }, 'ok']);
+    const result = await lookupEngine(vulnClient()).lookup([npm('a')], { signal: signal() });
+    expect(at.map((t) => t - t0)).toEqual([0, 35_000]);
+    // Retry backoff 1 s, then the rest of the 35 s pause.
+    expect(sleeps).toEqual([1000, 34_000]);
+    expect(result.counts.nvdUnavailable).toBe(0);
+  });
+
+  it('AC-P17-13 / Y-2: NVD 429 with a usable Retry-After (20 s <= 30 s) pauses exactly that long (retry at +20 s)', async () => {
+    seedNvdCase();
+    const t0 = nowMs;
+    const at = recordNvd([{ status: 429, headers: { 'retry-after': '20' } }, 'ok']);
+    const result = await lookupEngine(vulnClient()).lookup([npm('a')], { signal: signal() });
+    expect(at.map((t) => t - t0)).toEqual([0, 20_000]);
+    expect(sleeps).toEqual([20_000]);
+    expect(result.counts.nvdUnavailable).toBe(0);
+  });
+
+  it('AC-P17-13 / Y-2: with a key there is no 6 s spacing (Retry-After 5 -> retry at +5 s; 5xx retries wait only the backoff)', async () => {
+    seedNvdCase();
+    const t0 = nowMs;
+    const at = recordNvd([{ status: 429, headers: { 'retry-after': '5' } }, 'ok']);
+    await lookupEngine(vulnClient({ env: { NVD_API_KEY: 'nvd-test-key-0123456789' } })).lookup([npm('a')], { signal: signal() });
+    expect(at.map((t) => t - t0)).toEqual([0, 5_000]);
+    expect(sleeps).toEqual([5_000]);
+
+    sleeps = [];
+    const t1 = nowMs;
+    const at2 = recordNvd([{ status: 503 }, { status: 502 }, 'ok']);
+    await lookupEngine(vulnClient({ env: { NVD_API_KEY: 'nvd-test-key-0123456789' } })).lookup([npm('a')], { signal: signal() });
+    expect(at2.map((t) => t - t1)).toEqual([0, 1_000, 3_000]);
+    expect(sleeps).toEqual([1_000, 2_000]);
+  });
+
+  it('AC-P17-13 / Y-2: an unusable Retry-After (120 s > 30 s) gives up at once but pauses NVD for one window; the next lookup (new session, same process limiter) starts at +35 s', async () => {
+    seedNvdCase();
+    const t0 = nowMs;
+    const at = recordNvd([{ status: 429, headers: { 'retry-after': '120' } }, 'ok']);
+    const c = vulnClient();
+    const engine = lookupEngine(c);
+    const first = await engine.lookup([npm('a')], { signal: signal() });
+    expect(at).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+    expect(first.counts.nvdUnavailable).toBe(1);
+    const second = await engine.lookup([npm('a')], { signal: signal() });
+    expect(at.map((t) => t - t0)).toEqual([0, 35_000]);
+    expect(sleeps).toEqual([35_000]);
+    expect(second.counts.nvdUnavailable).toBe(0);
   });
 
   it('AC-P17-7: a CVE id outside ^CVE-\\d{4}-\\d{4,}$ is never requested', async () => {

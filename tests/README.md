@@ -66,6 +66,7 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `unit/errorText.test.ts` | L-5 (AC-T-4): `sanitizeErrorText` — 2000 kod noktası, yollar (iki ayırıcı, harf duyarsız, sınır kuralı), sırlar, kontrol karakterleri |
 | `unit/gitVersion.test.ts` | AC-T-3: `parseGitVersion` tablosu, gereksinim mesajı, `GitUnavailableError`, `defaultCheckGit` (yalnız log), gerçek `git --version` |
 | `unit/mainEntry.test.ts` | D-52 / REQ-002 AC-P09-3: `main()` `DATABASE_URL` yokken tek hata satırı + `exit(1)` (`dotenv/config` taklit edilir, `.env` okunmaz) |
+| `integration/f4Reverification.test.ts` | REQ-005 güvenlik yeniden doğrulaması Y-1 (yeniden kontrol arama bütçesi 5/6) ve Y-3 (`40P01`/`40001` savepoint ve proje transaction'ı tekrar denemesi; sorgu casusuyla SQLSTATE enjeksiyonu) |
 | `integration/lockIntegrityE2E.test.ts` | REQ-005 L-5 uçtan uca (AC-L5-2, AC-L5-4): `ScanWorker.runOnce` + gerçek ayrıştırıcı iş parçacığı + sahte kayıt defteri; çıktılar `ReportService`/`NoticeService`/`SbomService` ile veritabanından |
 | `integration/errorTextPersistence.test.ts` | L-5 uçtan uca: tarama (clone, ayrıştırıcı, `parse_errors`) ve rapor (`ReportService` dosya hatası, atılan hata) `error_message` yazımları |
 | `integration/excelExport.test.ts` | AC-T-5: `uuid` 11.1.1 ile Excel raporu üretilir, `.xlsx` ExcelJS ile geri okunur (sayfa, başlık, satır) |
@@ -474,6 +475,18 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | L-6 (çakışmaya dayanıklı katalog upsert) | `integration/f4PostReview.test.ts` "L-6 …" (iki eşzamanlı transaction aynı açığı ekler, ikisi de commit eder, tek satır) |
 | L-7 (sayfalı kapsam) | `integration/f4PostReview.test.ts` "L-7 …" (10 001 paket → 10 000 kontrol + `osv:package_limit`; sorgu casusu: kapsam sorguları sayfa başına ≤ 5000 satır) |
 | I-2 (`NVD_API_KEY` testte yok) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 security I-2 …" |
+
+#### Yeniden doğrulama izlemeleri → test (`docs/quality/security-reports/REQ-005-security-review.md` "Yeniden doğrulama (2026-10-11)", `f79d3d5`)
+
+`unit/vulnLookup.test.ts` ortak sahte saatinin `sleep`'i artık `nowMs`'i bekleme kadar ilerletir; bu
+olmadan anahtarsız 6 sn aralık ve 429 duraklaması hiç dolmuyordu (AC-P17-13'ün iki testi kırmızıydı).
+Kesin `sleeps` beklentileri aralık/duraklama beklemelerini içerir.
+
+| Bulgu | Dosya / test adı öneki |
+| --- | --- |
+| Y-2 (NVD sınırlayıcı: 35 sn pencere, anahtarsız 6 sn aralık, 429'da duraklama) | `unit/vulnLookup.test.ts` "AC-P17-13 / Y-2: …" — üretim sınırları (35 sn, 5/50, 6 sn); 35 sn pencerede 5 anında başlangıç, 6. +35 sn; anahtarsız başlangıçlar 0/6/12/18/24/35/41 sn (hiçbir 30 sn pencerede > 5 yok); `pause()` uzatır, kısaltmaz, 0/NaN/negatif yok sayılır; NVD 429 `Retry-After`'sız → yeniden deneme +35 sn; kullanılabilir `Retry-After: 20` → +20 sn; anahtarla aralık yok (`Retry-After: 5` → +5 sn, 5xx yalnız 1 s/2 s); kullanılamaz `Retry-After: 120` → hemen vazgeçer ama süreç geneli duraklama, sonraki arama +35 sn. Düzeltilen: "AC-P17-13: \"no CVSS\" …" (503 ×3 → `[1000, 5000, 2000, 4000]`), "AC-P17-13: 429 with Retry-After: 5 …" (`[5000, 1000]`) |
+| Y-1 (yeniden kontrol arama bütçesi = çalışma sınırının 5/6'sı) | `integration/f4Reverification.test.ts` "Y-1: …" — bütçe 25 dk; arama bütçeyi tamamen doldursa da proje yazılır (`completed`, 1 bulgu); bütçe çalışma başından sayılır (P-19 3 dk sürerse 22 dk); 12 dk sınır → 10 dk |
+| Y-3 (`40P01`/`40001` tekrar denemesi) | `integration/f4Reverification.test.ts` "Y-3: …" — havuz/istemci sorgu casusu SQLSTATE enjekte eder (önce gerçek `SELECT 1/0` ile transaction'ı iptal eder): `upsertVulnerability` savepoint içinde bir kez yeniden dener (`SAVEPOINT` → `ROLLBACK TO SAVEPOINT` → `RELEASE`), transaction'ın önceki işi korunur (`40P01` ve `40001`); ikinci hata fırlatılır; geçici olmayan hata (`23514`) yeniden denenmez; yeniden kontrol proje transaction'ı `40P01`'de bir kez yeniden denenir (100–200 ms bekleme, proje yazılır, `completed`); ikinci hata → proje geri alınır, `partial` + `error_summary='db:40'`, diğer proje yine yazılır, ham hata metni loglanmaz |
 
 Bilinen kırmızılar: yok. (`integration/f4PostReview.test.ts` "L-3: pause() aborts the running P-19 evaluation even
 when another expiry tick is queued behind it" — kuyruktaki tick `expiryController`'ı eziyordu — `3cda79a` ile düzeltildi:

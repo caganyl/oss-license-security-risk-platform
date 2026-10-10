@@ -490,6 +490,23 @@ D-42, D-49.
    bu D-28 a'nın kendisidir.
 3. Implementation tamamlandığında `docs/handoffs/REQ-003.md` güncellenmelidir.
 
+## ADR-008 notu (2026-10-11)
+
+> **ADR-008 ile kısmen superseded (2026-10-11).** REQ-006 (F5) için `dotnet`
+> ayrıştırıcısı eklenir. Karar 6'daki "yürüyüş yalnız sabit manifest adlarını
+> tanır" kuralı genişler: `walkTree(rootDir, { dotnet })` seçeneği yalnız
+> `dotnet` istendiğinde .NET adlarını (`packages.lock.json`,
+> `obj/project.assets.json`, `Directory.Packages.props`, `packages.config`) ve
+> uzantıyla tanınan proje dosyalarını (`.csproj`/`.fsproj`/`.vbproj`) toplar.
+> Bu durumda .NET adlı bağlantılar `filesystem` yerine `dotnet` kaydı üretir.
+> Seçenek yoksa veya `false` ise yürüyüş bu ADR'deki davranışla bayt bayt
+> aynıdır. Karar 1'in iş parçacığı sınır kuralı yeni dosyalar (`xmlReader`,
+> `nugetIdentity`, `nugetLock`, `nugetAssets`, `msbuildProject`, `nuget`) için
+> aynen geçerlidir. `SKIP_DIRS`, 32 MiB sınırı, sabit hata metinleri ve
+> golden dondurma (npm/PyPI) değişmez; NuGet golden'ları F5 ile donar.
+> Ayrıntı: `docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md`
+> Karar 1–7.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

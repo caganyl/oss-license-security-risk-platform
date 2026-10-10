@@ -1172,6 +1172,36 @@ tanımlı yedek veya uygulama sırasında teyit adımı vardır (Karar 3, 5, 13)
 > product-analyst'tedir. Ayrıntı: ADR-007 "REQ-005 güvenlik düzeltmesi
 > (2026-10-11)" notu.
 
+## ADR-008 notu (2026-10-11)
+
+> **ADR-008 ile kısmen superseded (2026-10-11).** REQ-006 (F5) için NuGet
+> üçüncü kayıt defteri olarak eklenir:
+> - **Karar 1:** `RegistryEcosystem` `npm | pypi | nuget` olur,
+>   `dotnet → nuget`. İkili `npm ? … : pypi` varsayımları tükenmeli
+>   eşlemelerle değişir.
+> - **Karar 3:** tek yeni köken `https://api.nuget.org` eklenir. Amaçlar
+>   `metadata-nuget` (yalnız `/v3-flatcontainer/<id>/<ver>/<id>.nuspec`,
+>   ≤ 3 aynı köken yönlendirmesi, 1 MiB, XML) ve `archive-nuget` (yalnız
+>   `…/<id>.<ver>.nupkg`, yönlendirmesiz, 64 MiB) olur.
+> - **Karar 6:** NuGet'te arşiv adayı kayıt defterinden değil, taramanın
+>   lock/assets özetinden kurulur. Özet yoksa indirme yapılmaz
+>   (`no_candidate`). Doğrulama indirilen baytlar üzerinde yapılır; kabul
+>   edilen değerler ham SHA-512 veya NuGet imzalı paket içerik özetidir.
+>   "Bütünlüğü doğrulanamayan arşiv kullanılmaz" ilkesi korunur.
+> - **Karar 7:** `ArchiveKind 'nuget'` ve `nupkg` yerleşimi eklenir: kökteki
+>   D-67 önekli dosyalar ve `.nuspec`'te bildirilen dosya.
+> - **Karar 9:** göç `008` önbellek ve `license_source` CHECK kümelerine
+>   `nuget`/`registry:nuget` değerlerini, önbelleğe üç NuGet kolonunu ve
+>   `scan_dependencies.license_unclassified`'ı ekler.
+> - **Karar 11:** `type="file"` ve sınıflandırılmamış URL `no_license`
+>   olarak işlenir.
+>
+> İstemci kuralları (vekil, sınırlar, deneme, devre kesici, bütçe,
+> fail-closed anahtar) aynen geçerlidir. Meta veri çıkarıcı sürümü ekosistem
+> başına tutulur; npm/PyPI değerleri değişmez. Ayrıntı:
+> `docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md`
+> Karar 8–12, 14.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

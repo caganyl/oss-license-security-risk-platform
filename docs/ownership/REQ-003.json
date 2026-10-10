@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-003",
+  "title": "REQ-003: F2 — Windows'ta tek komut (P-10…P-13)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (daimi talimat: \"gerisi için de bana sorma, tavsiye edilen sistemle git\"; Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-10T00:40:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-003.md",
+    "acceptance_criteria": "docs/product/REQ-003.md",
+    "contracts": [],
+    "contract_exception": {
+      "reason": "REQ-003 D-43: HTTP API, arayüz ve dış sözleşme değişmez; frontend/backend paralel geliştirme yok. Göç 005 yalnız iç kuyruk kolonu ekler (ADR-004).",
+      "approved_by": "Çağan Yılmaz (daimi talimat; Claude Code tarafından kaydedildi)",
+      "approved_at": "2026-10-10T00:40:00Z"
+    },
+    "adrs": [
+      "docs/architecture/adr/ADR-002-dockersiz-tarama-calisma-alani.md",
+      "docs/architecture/adr/ADR-004-tek-surec-calisma-zamani-ve-goc-araci.md",
+      "docs/architecture/adr/ADR-005-typescript-ayristiricilar.md"
+    ]
+  },
+  "owners": [
+    { "agent": "database-engineer", "write_paths": ["db", "src/db"] },
+    { "agent": "backend-engineer",  "write_paths": ["src/app.ts", "src/main.ts", "src/runtime.ts", "src/config", "src/lib", "src/middleware", "src/controllers", "src/routes", "src/scanner", "src/reports", "src/types", "src/analysis", "src/sbom", "README.md", "docker-compose.yml", "package.json", "tsconfig.json"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json"] }
+  ]
+}

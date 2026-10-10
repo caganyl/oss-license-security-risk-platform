@@ -1,0 +1,8 @@
+{
+  "name": "fixture-npm-prototype-keys-yarn",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "toString": "^2.0.0"
+  }
+}

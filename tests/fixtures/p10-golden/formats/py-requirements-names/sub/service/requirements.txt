@@ -1,0 +1,2 @@
+shared==1.0.0
+service-only==0.1.0

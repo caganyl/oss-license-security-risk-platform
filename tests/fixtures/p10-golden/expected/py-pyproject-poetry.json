@@ -1,0 +1,422 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "pep621-and-poetry",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": ">=8",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "pep621-and-poetry",
+   "name": "click",
+   "purl": "pkg:pypi/click",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==13.7.1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "pep621-and-poetry",
+   "name": "rich",
+   "purl": "pkg:pypi/rich@13.7.1",
+   "scope": "optional",
+   "version": "13.7.1"
+  },
+  {
+   "declared_range": "^2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "0.27.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "httpx",
+   "purl": "pkg:pypi/httpx@0.27.0",
+   "scope": "direct",
+   "version": "0.27.0"
+  },
+  {
+   "declared_range": "4.2",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "django",
+   "purl": "pkg:pypi/django@4.2",
+   "scope": "direct",
+   "version": "4.2"
+  },
+  {
+   "declared_range": "*",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "anyver",
+   "purl": "pkg:pypi/anyver",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "~1.2",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "tilde",
+   "purl": "pkg:pypi/tilde",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.2.3",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "eq",
+   "purl": "pkg:pypi/eq@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "===2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "eq-triple",
+   "purl": "pkg:pypi/eq-triple@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": ">=1.0,<2.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "ranged",
+   "purl": "pkg:pypi/ranged",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "spaced",
+   "purl": "pkg:pypi/spaced@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "1.2.3.post1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "postrel",
+   "purl": "pkg:pypi/postrel@1.2.3.post1",
+   "scope": "direct",
+   "version": "1.2.3.post1"
+  },
+  {
+   "declared_range": "1!2.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "epoch",
+   "purl": "pkg:pypi/epoch@1%212.0",
+   "scope": "direct",
+   "version": "1!2.0"
+  },
+  {
+   "declared_range": "1.0+cpu",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "localver",
+   "purl": "pkg:pypi/localver@1.0%2Bcpu",
+   "scope": "direct",
+   "version": "1.0+cpu"
+  },
+  {
+   "declared_range": "1.0a1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "prerel",
+   "purl": "pkg:pypi/prerel@1.0a1",
+   "scope": "direct",
+   "version": "1.0a1"
+  },
+  {
+   "declared_range": "v1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "vprefix",
+   "purl": "pkg:pypi/vprefix",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.0 || 2.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "oror",
+   "purl": "pkg:pypi/oror",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "emptystr",
+   "purl": "pkg:pypi/emptystr",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "blankstr",
+   "purl": "pkg:pypi/blankstr",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "4.10.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "Typing_Extensions",
+   "purl": "pkg:pypi/typing-extensions@4.10.0",
+   "scope": "direct",
+   "version": "4.10.0"
+  },
+  {
+   "declared_range": "6.2",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "zope.interface",
+   "purl": "pkg:pypi/zope.interface@6.2",
+   "scope": "direct",
+   "version": "6.2"
+  },
+  {
+   "declared_range": "^1.2",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-ver",
+   "purl": "pkg:pypi/table-ver",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-exact",
+   "purl": "pkg:pypi/table-exact@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-no-version",
+   "purl": "pkg:pypi/table-no-version",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-git",
+   "purl": "pkg:pypi/table-git",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-path",
+   "purl": "pkg:pypi/table-path",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "table-url",
+   "purl": "pkg:pypi/table-url",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "multi",
+   "purl": "pkg:pypi/multi",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "intver",
+   "purl": "pkg:pypi/intver",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "^8.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest",
+   "scope": "dev",
+   "version": null
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "legacy-dev",
+   "purl": "pkg:pypi/legacy-dev@1.0.0",
+   "scope": "dev",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "24.1.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "black",
+   "purl": "pkg:pypi/black@24.1.0",
+   "scope": "dev",
+   "version": "24.1.0"
+  },
+  {
+   "declared_range": "^1.9",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "mypy",
+   "purl": "pkg:pypi/mypy",
+   "scope": "dev",
+   "version": null
+  },
+  {
+   "declared_range": "^3.11",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "python",
+   "purl": "pkg:pypi/python",
+   "scope": "dev",
+   "version": null
+  },
+  {
+   "declared_range": "1.5.3",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "mkdocs",
+   "purl": "pkg:pypi/mkdocs@1.5.3",
+   "scope": "dev",
+   "version": "1.5.3"
+  },
+  {
+   "declared_range": "2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "main-group-pkg",
+   "purl": "pkg:pypi/main-group-pkg@2.0.0",
+   "scope": "dev",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "==3.11",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "python-capital",
+   "name": "Python",
+   "purl": "pkg:pypi/python@3.11",
+   "scope": "direct",
+   "version": "3.11"
+  },
+  {
+   "declared_range": "2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "python-capital",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-pyproject-poetry",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "a94a23ec8171c0569f2ed04d7026f020e4625922724e6e6afb9d8de850f9b562",
+   "file_path": "pep621-and-poetry/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 309
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "9265432b6a8acb846d76c84058c812ef970838600f82fd68099747b773249ab6",
+   "file_path": "pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 1388
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "f1ef08c30aa3c4f441c71c51fd08ca3a439a77458fcc20ef74893ac73cf52845",
+   "file_path": "python-capital/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 166
+  }
+ ],
+ "total_deps": 39
+}

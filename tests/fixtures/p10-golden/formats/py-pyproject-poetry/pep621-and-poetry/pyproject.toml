@@ -1,0 +1,16 @@
+[project]
+name = "pep621-and-poetry"
+version = "0.1.0"
+dependencies = ["requests==2.31.0", "click>=8"]
+
+[project.optional-dependencies]
+cli = ["rich==13.7.1"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "2.31.0"
+click = "^8.1"
+rich = "13.7.1"
+
+[tool.poetry.group.dev.dependencies]
+rich = "13.7.1"

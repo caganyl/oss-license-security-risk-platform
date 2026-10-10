@@ -1,0 +1,4 @@
+[project]
+name = "duplicate-key"
+name = "duplicate-key-again"
+dependencies = ["requests==2.31.0"]

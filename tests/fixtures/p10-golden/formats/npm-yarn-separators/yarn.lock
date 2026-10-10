@@ -1,0 +1,19 @@
+# yarn lockfile v1 (byte template, see MANIFEST-bytes.md)
+
+alpha@^1.0.0:
+  version "1.0.0"
+
+beta@^1.0.0:  version "2.0.0"
+
+gamma@^1.0.0:
+  version "3.0.0" 
+
+caf�@^1.0.0:
+  version "4.0.0"
+
+delta@^1.0.0:  version "5.0.0"
+
+epsilon@^1.0.0:   version "6.0.0"
+
+zeta@^1.0.0:
+  version "7.0.0"​

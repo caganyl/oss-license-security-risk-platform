@@ -1,0 +1,9 @@
+[project]
+name = "python-capital"
+version = "0.1.0"
+dependencies = ["Python==3.11"]
+
+[tool.poetry.dependencies]
+Python = "^3.10"
+PYTHON = ">=3.9"
+requests = "2.31.0"

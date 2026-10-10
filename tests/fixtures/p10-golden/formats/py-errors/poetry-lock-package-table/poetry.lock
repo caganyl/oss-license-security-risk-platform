@@ -1,0 +1,3 @@
+[package]
+name = "single-table-not-array"
+version = "1.0.0"

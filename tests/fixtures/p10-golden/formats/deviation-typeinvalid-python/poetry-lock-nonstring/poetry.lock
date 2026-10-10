@@ -1,0 +1,28 @@
+[[package]]
+name = "int-version"
+version = 1
+
+[[package]]
+name = "float-version"
+version = 1.0
+
+[[package]]
+name = "date-version"
+version = 2024-01-01
+
+[[package]]
+name = "datetime-version"
+version = 2024-01-01T10:00:00Z
+
+[[package]]
+name = "bool-version"
+version = true
+
+[[package]]
+name = 123
+version = "1.0.0"
+
+[[package]]
+name = "category-not-string"
+version = "1.0.0"
+category = ["dev"]

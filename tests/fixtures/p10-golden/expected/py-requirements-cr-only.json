@@ -1,0 +1,48 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "alpha",
+   "purl": "pkg:pypi/alpha@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": ">=2.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "beta",
+   "purl": "pkg:pypi/beta",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==3.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "gamma",
+   "purl": "pkg:pypi/gamma@3.0.0",
+   "scope": "direct",
+   "version": "3.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-requirements-cr-only",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "3fb62822c65ce05dcef3539e558f47e5ac46b2389a857bbc39db929cc08f55ef",
+   "file_path": "requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 103
+  }
+ ],
+ "total_deps": 3
+}

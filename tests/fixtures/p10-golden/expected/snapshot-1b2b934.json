@@ -1,0 +1,2866 @@
+{
+ "dependencies": [
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@cspotcode/source-map-support",
+   "purl": "pkg:npm/@cspotcode/source-map-support@0.8.1",
+   "scope": "dev",
+   "version": "0.8.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@fast-csv/format",
+   "purl": "pkg:npm/@fast-csv/format@4.3.5",
+   "scope": "transitive",
+   "version": "4.3.5"
+  },
+  {
+   "declared_range": "^20.12.7",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/node",
+   "purl": "pkg:npm/@types/node@14.18.63",
+   "scope": "dev",
+   "version": "14.18.63"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@fast-csv/parse",
+   "purl": "pkg:npm/@fast-csv/parse@4.3.6",
+   "scope": "transitive",
+   "version": "4.3.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@jridgewell/resolve-uri",
+   "purl": "pkg:npm/@jridgewell/resolve-uri@3.1.2",
+   "scope": "dev",
+   "version": "3.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@jridgewell/sourcemap-codec",
+   "purl": "pkg:npm/@jridgewell/sourcemap-codec@1.5.5",
+   "scope": "dev",
+   "version": "1.5.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@jridgewell/trace-mapping",
+   "purl": "pkg:npm/@jridgewell/trace-mapping@0.3.9",
+   "scope": "dev",
+   "version": "0.3.9"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@noble/ciphers",
+   "purl": "pkg:npm/@noble/ciphers@1.3.0",
+   "scope": "transitive",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@noble/hashes",
+   "purl": "pkg:npm/@noble/hashes@1.8.0",
+   "scope": "transitive",
+   "version": "1.8.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@swc/helpers",
+   "purl": "pkg:npm/@swc/helpers@0.5.23",
+   "scope": "transitive",
+   "version": "0.5.23"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@tsconfig/node10",
+   "purl": "pkg:npm/@tsconfig/node10@1.0.12",
+   "scope": "dev",
+   "version": "1.0.12"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@tsconfig/node12",
+   "purl": "pkg:npm/@tsconfig/node12@1.0.11",
+   "scope": "dev",
+   "version": "1.0.11"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@tsconfig/node14",
+   "purl": "pkg:npm/@tsconfig/node14@1.0.3",
+   "scope": "dev",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@tsconfig/node16",
+   "purl": "pkg:npm/@tsconfig/node16@1.0.4",
+   "scope": "dev",
+   "version": "1.0.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/body-parser",
+   "purl": "pkg:npm/@types/body-parser@1.19.6",
+   "scope": "dev",
+   "version": "1.19.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/connect",
+   "purl": "pkg:npm/@types/connect@3.4.38",
+   "scope": "dev",
+   "version": "3.4.38"
+  },
+  {
+   "declared_range": "^4.17.21",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/express",
+   "purl": "pkg:npm/@types/express@4.17.25",
+   "scope": "dev",
+   "version": "4.17.25"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/express-serve-static-core",
+   "purl": "pkg:npm/@types/express-serve-static-core@4.19.8",
+   "scope": "dev",
+   "version": "4.19.8"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/http-errors",
+   "purl": "pkg:npm/@types/http-errors@2.0.5",
+   "scope": "dev",
+   "version": "2.0.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/mime",
+   "purl": "pkg:npm/@types/mime@1.3.5",
+   "scope": "dev",
+   "version": "1.3.5"
+  },
+  {
+   "declared_range": "^20.12.7",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/node",
+   "purl": "pkg:npm/@types/node@20.19.41",
+   "scope": "dev",
+   "version": "20.19.41"
+  },
+  {
+   "declared_range": "^0.17.6",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/pdfkit",
+   "purl": "pkg:npm/@types/pdfkit@0.17.6",
+   "scope": "dev",
+   "version": "0.17.6"
+  },
+  {
+   "declared_range": "^8.11.5",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/pg",
+   "purl": "pkg:npm/@types/pg@8.20.0",
+   "scope": "dev",
+   "version": "8.20.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/qs",
+   "purl": "pkg:npm/@types/qs@6.15.1",
+   "scope": "dev",
+   "version": "6.15.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/range-parser",
+   "purl": "pkg:npm/@types/range-parser@1.2.7",
+   "scope": "dev",
+   "version": "1.2.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/send",
+   "purl": "pkg:npm/@types/send@1.2.1",
+   "scope": "dev",
+   "version": "1.2.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/serve-static",
+   "purl": "pkg:npm/@types/serve-static@1.15.10",
+   "scope": "dev",
+   "version": "1.15.10"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@types/send",
+   "purl": "pkg:npm/@types/send@0.17.6",
+   "scope": "dev",
+   "version": "0.17.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "accepts",
+   "purl": "pkg:npm/accepts@1.3.8",
+   "scope": "transitive",
+   "version": "1.3.8"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "acorn",
+   "purl": "pkg:npm/acorn@8.16.0",
+   "scope": "dev",
+   "version": "8.16.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "acorn-walk",
+   "purl": "pkg:npm/acorn-walk@8.3.5",
+   "scope": "dev",
+   "version": "8.3.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "archiver",
+   "purl": "pkg:npm/archiver@5.3.2",
+   "scope": "transitive",
+   "version": "5.3.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "archiver-utils",
+   "purl": "pkg:npm/archiver-utils@2.1.0",
+   "scope": "transitive",
+   "version": "2.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "readable-stream",
+   "purl": "pkg:npm/readable-stream@2.3.8",
+   "scope": "transitive",
+   "version": "2.3.8"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "safe-buffer",
+   "purl": "pkg:npm/safe-buffer@5.1.2",
+   "scope": "transitive",
+   "version": "5.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "string_decoder",
+   "purl": "pkg:npm/string_decoder@1.1.1",
+   "scope": "transitive",
+   "version": "1.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "arg",
+   "purl": "pkg:npm/arg@4.1.3",
+   "scope": "dev",
+   "version": "4.1.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "array-flatten",
+   "purl": "pkg:npm/array-flatten@1.1.1",
+   "scope": "transitive",
+   "version": "1.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "async",
+   "purl": "pkg:npm/async@3.2.6",
+   "scope": "transitive",
+   "version": "3.2.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "balanced-match",
+   "purl": "pkg:npm/balanced-match@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "base64-js",
+   "purl": "pkg:npm/base64-js@1.5.1",
+   "scope": "transitive",
+   "version": "1.5.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Unlicense"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "big-integer",
+   "purl": "pkg:npm/big-integer@1.6.52",
+   "scope": "transitive",
+   "version": "1.6.52"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "binary",
+   "purl": "pkg:npm/binary@0.3.0",
+   "scope": "transitive",
+   "version": "0.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "bl",
+   "purl": "pkg:npm/bl@4.1.0",
+   "scope": "transitive",
+   "version": "4.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "bluebird",
+   "purl": "pkg:npm/bluebird@3.4.7",
+   "scope": "transitive",
+   "version": "3.4.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "body-parser",
+   "purl": "pkg:npm/body-parser@1.20.5",
+   "scope": "transitive",
+   "version": "1.20.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "brace-expansion",
+   "purl": "pkg:npm/brace-expansion@1.1.15",
+   "scope": "transitive",
+   "version": "1.1.15"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "brotli",
+   "purl": "pkg:npm/brotli@1.3.3",
+   "scope": "transitive",
+   "version": "1.3.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "browserify-zlib",
+   "purl": "pkg:npm/browserify-zlib@0.2.0",
+   "scope": "transitive",
+   "version": "0.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "buffer",
+   "purl": "pkg:npm/buffer@5.7.1",
+   "scope": "transitive",
+   "version": "5.7.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "buffer-crc32",
+   "purl": "pkg:npm/buffer-crc32@0.2.13",
+   "scope": "transitive",
+   "version": "0.2.13"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "buffer-indexof-polyfill",
+   "purl": "pkg:npm/buffer-indexof-polyfill@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "buffers",
+   "purl": "pkg:npm/buffers@0.1.1",
+   "scope": "transitive",
+   "version": "0.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "bytes",
+   "purl": "pkg:npm/bytes@3.1.2",
+   "scope": "transitive",
+   "version": "3.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "call-bind-apply-helpers",
+   "purl": "pkg:npm/call-bind-apply-helpers@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "call-bound",
+   "purl": "pkg:npm/call-bound@1.0.4",
+   "scope": "transitive",
+   "version": "1.0.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT/X11"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "chainsaw",
+   "purl": "pkg:npm/chainsaw@0.1.0",
+   "scope": "transitive",
+   "version": "0.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "clone",
+   "purl": "pkg:npm/clone@2.1.2",
+   "scope": "transitive",
+   "version": "2.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "compress-commons",
+   "purl": "pkg:npm/compress-commons@4.1.2",
+   "scope": "transitive",
+   "version": "4.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "concat-map",
+   "purl": "pkg:npm/concat-map@0.0.1",
+   "scope": "transitive",
+   "version": "0.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "content-disposition",
+   "purl": "pkg:npm/content-disposition@0.5.4",
+   "scope": "transitive",
+   "version": "0.5.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "content-type",
+   "purl": "pkg:npm/content-type@1.0.5",
+   "scope": "transitive",
+   "version": "1.0.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "cookie",
+   "purl": "pkg:npm/cookie@0.7.2",
+   "scope": "transitive",
+   "version": "0.7.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "cookie-signature",
+   "purl": "pkg:npm/cookie-signature@1.0.7",
+   "scope": "transitive",
+   "version": "1.0.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "core-util-is",
+   "purl": "pkg:npm/core-util-is@1.0.3",
+   "scope": "transitive",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "crc-32",
+   "purl": "pkg:npm/crc-32@1.2.2",
+   "scope": "transitive",
+   "version": "1.2.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "crc32-stream",
+   "purl": "pkg:npm/crc32-stream@4.0.3",
+   "scope": "transitive",
+   "version": "4.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "create-require",
+   "purl": "pkg:npm/create-require@1.1.1",
+   "scope": "dev",
+   "version": "1.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "dayjs",
+   "purl": "pkg:npm/dayjs@1.11.21",
+   "scope": "transitive",
+   "version": "1.11.21"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "debug",
+   "purl": "pkg:npm/debug@2.6.9",
+   "scope": "transitive",
+   "version": "2.6.9"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "depd",
+   "purl": "pkg:npm/depd@2.0.0",
+   "scope": "transitive",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "destroy",
+   "purl": "pkg:npm/destroy@1.2.0",
+   "scope": "transitive",
+   "version": "1.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "dfa",
+   "purl": "pkg:npm/dfa@1.2.0",
+   "scope": "transitive",
+   "version": "1.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-3-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "diff",
+   "purl": "pkg:npm/diff@4.0.4",
+   "scope": "dev",
+   "version": "4.0.4"
+  },
+  {
+   "declared_range": "^16.4.5",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-2-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "dotenv",
+   "purl": "pkg:npm/dotenv@16.6.1",
+   "scope": "direct",
+   "version": "16.6.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "dunder-proto",
+   "purl": "pkg:npm/dunder-proto@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-3-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "duplexer2",
+   "purl": "pkg:npm/duplexer2@0.1.4",
+   "scope": "transitive",
+   "version": "0.1.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ee-first",
+   "purl": "pkg:npm/ee-first@1.1.1",
+   "scope": "transitive",
+   "version": "1.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "encodeurl",
+   "purl": "pkg:npm/encodeurl@2.0.0",
+   "scope": "transitive",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "end-of-stream",
+   "purl": "pkg:npm/end-of-stream@1.4.5",
+   "scope": "transitive",
+   "version": "1.4.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "es-define-property",
+   "purl": "pkg:npm/es-define-property@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "es-errors",
+   "purl": "pkg:npm/es-errors@1.3.0",
+   "scope": "transitive",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "es-object-atoms",
+   "purl": "pkg:npm/es-object-atoms@1.1.2",
+   "scope": "transitive",
+   "version": "1.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "escape-html",
+   "purl": "pkg:npm/escape-html@1.0.3",
+   "scope": "transitive",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "etag",
+   "purl": "pkg:npm/etag@1.8.1",
+   "scope": "transitive",
+   "version": "1.8.1"
+  },
+  {
+   "declared_range": "^4.4.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "exceljs",
+   "purl": "pkg:npm/exceljs@4.4.0",
+   "scope": "direct",
+   "version": "4.4.0"
+  },
+  {
+   "declared_range": "^4.19.2",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "express",
+   "purl": "pkg:npm/express@4.22.2",
+   "scope": "direct",
+   "version": "4.22.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fast-csv",
+   "purl": "pkg:npm/fast-csv@4.3.6",
+   "scope": "transitive",
+   "version": "4.3.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fast-deep-equal",
+   "purl": "pkg:npm/fast-deep-equal@3.1.3",
+   "scope": "transitive",
+   "version": "3.1.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "finalhandler",
+   "purl": "pkg:npm/finalhandler@1.3.2",
+   "scope": "transitive",
+   "version": "1.3.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fontkit",
+   "purl": "pkg:npm/fontkit@2.0.4",
+   "scope": "transitive",
+   "version": "2.0.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "forwarded",
+   "purl": "pkg:npm/forwarded@0.2.0",
+   "scope": "transitive",
+   "version": "0.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fresh",
+   "purl": "pkg:npm/fresh@0.5.2",
+   "scope": "transitive",
+   "version": "0.5.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fs-constants",
+   "purl": "pkg:npm/fs-constants@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fs.realpath",
+   "purl": "pkg:npm/fs.realpath@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "fstream",
+   "purl": "pkg:npm/fstream@1.0.12",
+   "scope": "transitive",
+   "version": "1.0.12"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "function-bind",
+   "purl": "pkg:npm/function-bind@1.1.2",
+   "scope": "transitive",
+   "version": "1.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "get-intrinsic",
+   "purl": "pkg:npm/get-intrinsic@1.3.0",
+   "scope": "transitive",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "get-proto",
+   "purl": "pkg:npm/get-proto@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "glob",
+   "purl": "pkg:npm/glob@7.2.3",
+   "scope": "transitive",
+   "version": "7.2.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "gopd",
+   "purl": "pkg:npm/gopd@1.2.0",
+   "scope": "transitive",
+   "version": "1.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "graceful-fs",
+   "purl": "pkg:npm/graceful-fs@4.2.11",
+   "scope": "transitive",
+   "version": "4.2.11"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "has-symbols",
+   "purl": "pkg:npm/has-symbols@1.1.0",
+   "scope": "transitive",
+   "version": "1.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "hasown",
+   "purl": "pkg:npm/hasown@2.0.4",
+   "scope": "transitive",
+   "version": "2.0.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "http-errors",
+   "purl": "pkg:npm/http-errors@2.0.1",
+   "scope": "transitive",
+   "version": "2.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "iconv-lite",
+   "purl": "pkg:npm/iconv-lite@0.4.24",
+   "scope": "transitive",
+   "version": "0.4.24"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-3-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ieee754",
+   "purl": "pkg:npm/ieee754@1.2.1",
+   "scope": "transitive",
+   "version": "1.2.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "immediate",
+   "purl": "pkg:npm/immediate@3.0.6",
+   "scope": "transitive",
+   "version": "3.0.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "inflight",
+   "purl": "pkg:npm/inflight@1.0.6",
+   "scope": "transitive",
+   "version": "1.0.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "inherits",
+   "purl": "pkg:npm/inherits@2.0.4",
+   "scope": "transitive",
+   "version": "2.0.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ipaddr.js",
+   "purl": "pkg:npm/ipaddr.js@1.9.1",
+   "scope": "transitive",
+   "version": "1.9.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "isarray",
+   "purl": "pkg:npm/isarray@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "js-md5",
+   "purl": "pkg:npm/js-md5@0.8.3",
+   "scope": "transitive",
+   "version": "0.8.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "(MIT OR GPL-3.0-or-later)"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "jszip",
+   "purl": "pkg:npm/jszip@3.10.1",
+   "scope": "transitive",
+   "version": "3.10.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lazystream",
+   "purl": "pkg:npm/lazystream@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lie",
+   "purl": "pkg:npm/lie@3.3.0",
+   "scope": "transitive",
+   "version": "3.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "linebreak",
+   "purl": "pkg:npm/linebreak@1.1.0",
+   "scope": "transitive",
+   "version": "1.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "base64-js",
+   "purl": "pkg:npm/base64-js@0.0.8",
+   "scope": "transitive",
+   "version": "0.0.8"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "listenercount",
+   "purl": "pkg:npm/listenercount@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.defaults",
+   "purl": "pkg:npm/lodash.defaults@4.2.0",
+   "scope": "transitive",
+   "version": "4.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.difference",
+   "purl": "pkg:npm/lodash.difference@4.5.0",
+   "scope": "transitive",
+   "version": "4.5.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.escaperegexp",
+   "purl": "pkg:npm/lodash.escaperegexp@4.1.2",
+   "scope": "transitive",
+   "version": "4.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.flatten",
+   "purl": "pkg:npm/lodash.flatten@4.4.0",
+   "scope": "transitive",
+   "version": "4.4.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.groupby",
+   "purl": "pkg:npm/lodash.groupby@4.6.0",
+   "scope": "transitive",
+   "version": "4.6.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isboolean",
+   "purl": "pkg:npm/lodash.isboolean@3.0.3",
+   "scope": "transitive",
+   "version": "3.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isequal",
+   "purl": "pkg:npm/lodash.isequal@4.5.0",
+   "scope": "transitive",
+   "version": "4.5.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isfunction",
+   "purl": "pkg:npm/lodash.isfunction@3.0.9",
+   "scope": "transitive",
+   "version": "3.0.9"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isnil",
+   "purl": "pkg:npm/lodash.isnil@4.0.0",
+   "scope": "transitive",
+   "version": "4.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isplainobject",
+   "purl": "pkg:npm/lodash.isplainobject@4.0.6",
+   "scope": "transitive",
+   "version": "4.0.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.isundefined",
+   "purl": "pkg:npm/lodash.isundefined@3.0.1",
+   "scope": "transitive",
+   "version": "3.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.union",
+   "purl": "pkg:npm/lodash.union@4.6.0",
+   "scope": "transitive",
+   "version": "4.6.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash.uniq",
+   "purl": "pkg:npm/lodash.uniq@4.5.0",
+   "scope": "transitive",
+   "version": "4.5.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "make-error",
+   "purl": "pkg:npm/make-error@1.3.6",
+   "scope": "dev",
+   "version": "1.3.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "math-intrinsics",
+   "purl": "pkg:npm/math-intrinsics@1.1.0",
+   "scope": "transitive",
+   "version": "1.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "media-typer",
+   "purl": "pkg:npm/media-typer@0.3.0",
+   "scope": "transitive",
+   "version": "0.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "merge-descriptors",
+   "purl": "pkg:npm/merge-descriptors@1.0.3",
+   "scope": "transitive",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "methods",
+   "purl": "pkg:npm/methods@1.1.2",
+   "scope": "transitive",
+   "version": "1.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "mime",
+   "purl": "pkg:npm/mime@1.6.0",
+   "scope": "transitive",
+   "version": "1.6.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "mime-db",
+   "purl": "pkg:npm/mime-db@1.52.0",
+   "scope": "transitive",
+   "version": "1.52.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "mime-types",
+   "purl": "pkg:npm/mime-types@2.1.35",
+   "scope": "transitive",
+   "version": "2.1.35"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "minimatch",
+   "purl": "pkg:npm/minimatch@3.1.5",
+   "scope": "transitive",
+   "version": "3.1.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "minimist",
+   "purl": "pkg:npm/minimist@1.2.8",
+   "scope": "transitive",
+   "version": "1.2.8"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "mkdirp",
+   "purl": "pkg:npm/mkdirp@0.5.6",
+   "scope": "transitive",
+   "version": "0.5.6"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ms",
+   "purl": "pkg:npm/ms@2.0.0",
+   "scope": "transitive",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "negotiator",
+   "purl": "pkg:npm/negotiator@0.6.3",
+   "scope": "transitive",
+   "version": "0.6.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "normalize-path",
+   "purl": "pkg:npm/normalize-path@3.0.0",
+   "scope": "transitive",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "object-inspect",
+   "purl": "pkg:npm/object-inspect@1.13.4",
+   "scope": "transitive",
+   "version": "1.13.4"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "on-finished",
+   "purl": "pkg:npm/on-finished@2.4.1",
+   "scope": "transitive",
+   "version": "2.4.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "once",
+   "purl": "pkg:npm/once@1.4.0",
+   "scope": "transitive",
+   "version": "1.4.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "(MIT AND Zlib)"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pako",
+   "purl": "pkg:npm/pako@1.0.11",
+   "scope": "transitive",
+   "version": "1.0.11"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "parseurl",
+   "purl": "pkg:npm/parseurl@1.3.3",
+   "scope": "transitive",
+   "version": "1.3.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "path-is-absolute",
+   "purl": "pkg:npm/path-is-absolute@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "path-to-regexp",
+   "purl": "pkg:npm/path-to-regexp@0.1.13",
+   "scope": "transitive",
+   "version": "0.1.13"
+  },
+  {
+   "declared_range": "^0.18.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pdfkit",
+   "purl": "pkg:npm/pdfkit@0.18.0",
+   "scope": "direct",
+   "version": "0.18.0"
+  },
+  {
+   "declared_range": "^8.11.5",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg",
+   "purl": "pkg:npm/pg@8.21.0",
+   "scope": "direct",
+   "version": "8.21.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-cloudflare",
+   "purl": "pkg:npm/pg-cloudflare@1.4.0",
+   "scope": "optional",
+   "version": "1.4.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-connection-string",
+   "purl": "pkg:npm/pg-connection-string@2.13.0",
+   "scope": "transitive",
+   "version": "2.13.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-int8",
+   "purl": "pkg:npm/pg-int8@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-pool",
+   "purl": "pkg:npm/pg-pool@3.14.0",
+   "scope": "transitive",
+   "version": "3.14.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-protocol",
+   "purl": "pkg:npm/pg-protocol@1.14.0",
+   "scope": "transitive",
+   "version": "1.14.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pg-types",
+   "purl": "pkg:npm/pg-types@2.2.0",
+   "scope": "transitive",
+   "version": "2.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pgpass",
+   "purl": "pkg:npm/pgpass@1.0.5",
+   "scope": "transitive",
+   "version": "1.0.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "png-js",
+   "purl": "pkg:npm/png-js@1.1.0",
+   "scope": "transitive",
+   "version": "1.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "postgres-array",
+   "purl": "pkg:npm/postgres-array@2.0.0",
+   "scope": "transitive",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "postgres-bytea",
+   "purl": "pkg:npm/postgres-bytea@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "postgres-date",
+   "purl": "pkg:npm/postgres-date@1.0.7",
+   "scope": "transitive",
+   "version": "1.0.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "postgres-interval",
+   "purl": "pkg:npm/postgres-interval@1.2.0",
+   "scope": "transitive",
+   "version": "1.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "process-nextick-args",
+   "purl": "pkg:npm/process-nextick-args@2.0.1",
+   "scope": "transitive",
+   "version": "2.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "proxy-addr",
+   "purl": "pkg:npm/proxy-addr@2.0.7",
+   "scope": "transitive",
+   "version": "2.0.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-3-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "qs",
+   "purl": "pkg:npm/qs@6.15.2",
+   "scope": "transitive",
+   "version": "6.15.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "range-parser",
+   "purl": "pkg:npm/range-parser@1.2.1",
+   "scope": "transitive",
+   "version": "1.2.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "raw-body",
+   "purl": "pkg:npm/raw-body@2.5.3",
+   "scope": "transitive",
+   "version": "2.5.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "readable-stream",
+   "purl": "pkg:npm/readable-stream@3.6.2",
+   "scope": "transitive",
+   "version": "3.6.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "readdir-glob",
+   "purl": "pkg:npm/readdir-glob@1.1.3",
+   "scope": "transitive",
+   "version": "1.1.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "brace-expansion",
+   "purl": "pkg:npm/brace-expansion@2.1.1",
+   "scope": "transitive",
+   "version": "2.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "minimatch",
+   "purl": "pkg:npm/minimatch@5.1.9",
+   "scope": "transitive",
+   "version": "5.1.9"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "restructure",
+   "purl": "pkg:npm/restructure@3.0.2",
+   "scope": "transitive",
+   "version": "3.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "rimraf",
+   "purl": "pkg:npm/rimraf@2.7.1",
+   "scope": "transitive",
+   "version": "2.7.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "safe-buffer",
+   "purl": "pkg:npm/safe-buffer@5.2.1",
+   "scope": "transitive",
+   "version": "5.2.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "safer-buffer",
+   "purl": "pkg:npm/safer-buffer@2.1.2",
+   "scope": "transitive",
+   "version": "2.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "saxes",
+   "purl": "pkg:npm/saxes@5.0.1",
+   "scope": "transitive",
+   "version": "5.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "send",
+   "purl": "pkg:npm/send@0.19.2",
+   "scope": "transitive",
+   "version": "0.19.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ms",
+   "purl": "pkg:npm/ms@2.1.3",
+   "scope": "transitive",
+   "version": "2.1.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "serve-static",
+   "purl": "pkg:npm/serve-static@1.16.3",
+   "scope": "transitive",
+   "version": "1.16.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "setimmediate",
+   "purl": "pkg:npm/setimmediate@1.0.5",
+   "scope": "transitive",
+   "version": "1.0.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "setprototypeof",
+   "purl": "pkg:npm/setprototypeof@1.2.0",
+   "scope": "transitive",
+   "version": "1.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "side-channel",
+   "purl": "pkg:npm/side-channel@1.1.0",
+   "scope": "transitive",
+   "version": "1.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "side-channel-list",
+   "purl": "pkg:npm/side-channel-list@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "side-channel-map",
+   "purl": "pkg:npm/side-channel-map@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "side-channel-weakmap",
+   "purl": "pkg:npm/side-channel-weakmap@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "split2",
+   "purl": "pkg:npm/split2@4.2.0",
+   "scope": "transitive",
+   "version": "4.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "statuses",
+   "purl": "pkg:npm/statuses@2.0.2",
+   "scope": "transitive",
+   "version": "2.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "string_decoder",
+   "purl": "pkg:npm/string_decoder@1.3.0",
+   "scope": "transitive",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tar-stream",
+   "purl": "pkg:npm/tar-stream@2.2.0",
+   "scope": "transitive",
+   "version": "2.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tiny-inflate",
+   "purl": "pkg:npm/tiny-inflate@1.0.3",
+   "scope": "transitive",
+   "version": "1.0.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tmp",
+   "purl": "pkg:npm/tmp@0.2.7",
+   "scope": "transitive",
+   "version": "0.2.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "toidentifier",
+   "purl": "pkg:npm/toidentifier@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT/X11"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "traverse",
+   "purl": "pkg:npm/traverse@0.3.9",
+   "scope": "transitive",
+   "version": "0.3.9"
+  },
+  {
+   "declared_range": "^10.9.2",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "ts-node",
+   "purl": "pkg:npm/ts-node@10.9.2",
+   "scope": "dev",
+   "version": "10.9.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "0BSD"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tslib",
+   "purl": "pkg:npm/tslib@2.8.1",
+   "scope": "transitive",
+   "version": "2.8.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "type-is",
+   "purl": "pkg:npm/type-is@1.6.18",
+   "scope": "transitive",
+   "version": "1.6.18"
+  },
+  {
+   "declared_range": "^5.4.5",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "typescript",
+   "purl": "pkg:npm/typescript@5.9.3",
+   "scope": "dev",
+   "version": "5.9.3"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "undici-types",
+   "purl": "pkg:npm/undici-types@6.21.0",
+   "scope": "dev",
+   "version": "6.21.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "unicode-properties",
+   "purl": "pkg:npm/unicode-properties@1.4.1",
+   "scope": "transitive",
+   "version": "1.4.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "unicode-trie",
+   "purl": "pkg:npm/unicode-trie@2.0.0",
+   "scope": "transitive",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "pako",
+   "purl": "pkg:npm/pako@0.2.9",
+   "scope": "transitive",
+   "version": "0.2.9"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "unpipe",
+   "purl": "pkg:npm/unpipe@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "unzipper",
+   "purl": "pkg:npm/unzipper@0.10.14",
+   "scope": "transitive",
+   "version": "0.10.14"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "util-deprecate",
+   "purl": "pkg:npm/util-deprecate@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "utils-merge",
+   "purl": "pkg:npm/utils-merge@1.0.1",
+   "scope": "transitive",
+   "version": "1.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "uuid",
+   "purl": "pkg:npm/uuid@8.3.2",
+   "scope": "transitive",
+   "version": "8.3.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "v8-compile-cache-lib",
+   "purl": "pkg:npm/v8-compile-cache-lib@3.0.1",
+   "scope": "dev",
+   "version": "3.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "vary",
+   "purl": "pkg:npm/vary@1.1.2",
+   "scope": "transitive",
+   "version": "1.1.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "ISC"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "wrappy",
+   "purl": "pkg:npm/wrappy@1.0.2",
+   "scope": "transitive",
+   "version": "1.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "xmlchars",
+   "purl": "pkg:npm/xmlchars@2.2.0",
+   "scope": "transitive",
+   "version": "2.2.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "xtend",
+   "purl": "pkg:npm/xtend@4.0.2",
+   "scope": "transitive",
+   "version": "4.0.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "yn",
+   "purl": "pkg:npm/yn@3.1.1",
+   "scope": "dev",
+   "version": "3.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "zip-stream",
+   "purl": "pkg:npm/zip-stream@4.1.1",
+   "scope": "transitive",
+   "version": "4.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "archiver-utils",
+   "purl": "pkg:npm/archiver-utils@3.0.4",
+   "scope": "transitive",
+   "version": "3.0.4"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "snapshot-1b2b934",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "51f3228e8b7cd0327b70e82ddaed533b495809f341491e8733165f014efd6640",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 795
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "bd27015b3cb2402db8dcd71b44872884aa8fa789ad649d08a8f3adf2995affdb",
+   "file_path": "package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 95067
+  }
+ ],
+ "total_deps": 219
+}

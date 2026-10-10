@@ -1,0 +1,13 @@
+{
+  "name": "fixture-npm-prototype-keys-no-lock",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "constructor": "1.0.0",
+    "__proto__": "2.0.0"
+  },
+  "devDependencies": {
+    "hasOwnProperty": "^3.0.0",
+    "isPrototypeOf": "4.0.0"
+  }
+}

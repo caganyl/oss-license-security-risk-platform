@@ -1,0 +1,4 @@
+{
+  "name": "section-array",
+  "dependencies": ["left-pad", "is-odd"]
+}

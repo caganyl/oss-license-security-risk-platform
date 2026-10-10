@@ -1,0 +1,99 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": ">=8",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "click",
+   "purl": "pkg:pypi/click",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "8.1.1",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": ".",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest@8.1.1",
+   "scope": "dev",
+   "version": "8.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": "nested",
+   "name": "orphan-lock-dep",
+   "purl": "pkg:pypi/orphan-lock-dep@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "click",
+   "purl": "pkg:pypi/click@8.1.7",
+   "scope": "transitive",
+   "version": "8.1.7"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "colorama",
+   "purl": "pkg:pypi/colorama@0.4.6",
+   "scope": "transitive",
+   "version": "0.4.6"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-poetry-project-and-lock",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "1bc46411108bb7ccc97a53550dee2638d1f40f31cd722eeb58afa3281cdd7b03",
+   "file_path": "requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 26
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "9f9c8595b71151c79de5add3ecea63ca561900f61c6a79a16f0c7a431ad48d29",
+   "file_path": "pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 329
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "2802e38a5ec692f31ec0144d275306176279798ee12c469da61eaef838a86949",
+   "file_path": "nested/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 73
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "0ca9a9b731a11d0798196053f2c61e52404821c3c7effef8b5dbfc60cb163ee2",
+   "file_path": "poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 858
+  }
+ ],
+ "total_deps": 6
+}

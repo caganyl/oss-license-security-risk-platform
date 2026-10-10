@@ -1,0 +1,288 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==3.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "flask",
+   "purl": "pkg:pypi/flask@3.0.0",
+   "scope": "direct",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": "===4.2.11",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "Django",
+   "purl": "pkg:pypi/django@4.2.11",
+   "scope": "direct",
+   "version": "4.2.11"
+  },
+  {
+   "declared_range": ">=2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ">=1.26,<3",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "urllib3",
+   "purl": "pkg:pypi/urllib3",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "~=3.6",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "idna",
+   "purl": "pkg:pypi/idna",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "!=3.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "charset-normalizer",
+   "purl": "pkg:pypi/charset-normalizer",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "<2025",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "certifi",
+   "purl": "pkg:pypi/certifi",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "six",
+   "purl": "pkg:pypi/six",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "== 8.1.7",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "click",
+   "purl": "pkg:pypi/click@8.1.7",
+   "scope": "direct",
+   "version": "8.1.7"
+  },
+  {
+   "declared_range": "==3.1.3",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "jinja2",
+   "purl": "pkg:pypi/jinja2@3.1.3",
+   "scope": "direct",
+   "version": "3.1.3"
+  },
+  {
+   "declared_range": "==2.1.*",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "markupsafe",
+   "purl": "pkg:pypi/markupsafe",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==1.3.1",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "requests-oauthlib",
+   "purl": "pkg:pypi/requests-oauthlib@1.3.1",
+   "scope": "direct",
+   "version": "1.3.1"
+  },
+  {
+   "declared_range": ">= 2.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "pydantic",
+   "purl": "pkg:pypi/pydantic",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "uvicorn",
+   "purl": "pkg:pypi/uvicorn",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==0.4.6",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "colorama",
+   "purl": "pkg:pypi/colorama@0.4.6",
+   "scope": "direct",
+   "version": "0.4.6"
+  },
+  {
+   "declared_range": "==2.0.1",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "tomli",
+   "purl": "pkg:pypi/tomli@2.0.1",
+   "scope": "direct",
+   "version": "2.0.1"
+  },
+  {
+   "declared_range": ">=21.2",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "gunicorn",
+   "purl": "pkg:pypi/gunicorn",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==2.1.2",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "itsdangerous",
+   "purl": "pkg:pypi/itsdangerous@2.1.2",
+   "scope": "direct",
+   "version": "2.1.2"
+  },
+  {
+   "declared_range": "==3.0.1",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "werkzeug",
+   "purl": "pkg:pypi/werkzeug@3.0.1",
+   "scope": "direct",
+   "version": "3.0.1"
+  },
+  {
+   "declared_range": "==1.7.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "blinker",
+   "purl": "pkg:pypi/blinker@1.7.0",
+   "scope": "direct",
+   "version": "1.7.0"
+  },
+  {
+   "declared_range": "@ https://example.invalid/named_url-2.0.0.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "named-url",
+   "purl": "pkg:pypi/named-url",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "@ git+https://github.com/example/named-vcs.git@v2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "named-vcs",
+   "purl": "pkg:pypi/named-vcs",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "@ https://example.invalid/named_frag-1.0.tar.gz",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "named-frag",
+   "purl": "pkg:pypi/named-frag",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==4.10.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "typing_extensions",
+   "purl": "pkg:pypi/typing-extensions@4.10.0",
+   "scope": "direct",
+   "version": "4.10.0"
+  },
+  {
+   "declared_range": "==6.2",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "zope.interface",
+   "purl": "pkg:pypi/zope.interface@6.2",
+   "scope": "direct",
+   "version": "6.2"
+  },
+  {
+   "declared_range": "==3.1.1",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "Flask_SQLAlchemy",
+   "purl": "pkg:pypi/flask-sqlalchemy@3.1.1",
+   "scope": "direct",
+   "version": "3.1.1"
+  },
+  {
+   "declared_range": ">=6.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": ".",
+   "name": "PyYAML",
+   "purl": "pkg:pypi/pyyaml",
+   "scope": "direct",
+   "version": null
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-requirements-crlf",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "f6f738ca1f755f1d3d804204aed4dcb766a10c1075894ce1af02dcefdef5b48c",
+   "file_path": "requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 1330
+  }
+ ],
+ "total_deps": 27
+}

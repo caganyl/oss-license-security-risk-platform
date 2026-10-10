@@ -1,0 +1,12 @@
+{
+  "name": "fixture-npm-lock-and-yarn",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "left-pad": "^1.3.0",
+    "is-odd": "^3.0.0"
+  },
+  "devDependencies": {
+    "kind-of": "^6.0.0"
+  }
+}

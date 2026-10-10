@@ -1,0 +1,4 @@
+[[package]]
+name = "invalid-utf8-lock"
+version = "1.0.0"
+description = "contains an invalid UTF-8 byte: ÿ"

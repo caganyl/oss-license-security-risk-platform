@@ -1,0 +1,118 @@
+{
+ "dependencies": [
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "certifi",
+   "purl": "pkg:pypi/certifi@2024.2.2",
+   "scope": "transitive",
+   "version": "2024.2.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest@8.1.1",
+   "scope": "dev",
+   "version": "8.1.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "transitive",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "black",
+   "purl": "pkg:pypi/black@24.1.0",
+   "scope": "transitive",
+   "version": "24.1.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "Typing_Extensions",
+   "purl": "pkg:pypi/typing-extensions@4.10.0",
+   "scope": "transitive",
+   "version": "4.10.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "spaced-version",
+   "purl": "pkg:pypi/spaced-version@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "post-release",
+   "purl": "pkg:pypi/post-release@2.0.0.post1",
+   "scope": "transitive",
+   "version": "2.0.0.post1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "local-ver",
+   "purl": "pkg:pypi/local-ver@1.0.0%2Bcpu",
+   "scope": "transitive",
+   "version": "1.0.0+cpu"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "not-pep440",
+   "purl": "pkg:pypi/not-pep440@latest",
+   "scope": "transitive",
+   "version": "latest"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "poetry.lock",
+   "manifest_path": ".",
+   "name": "category-uppercase",
+   "purl": "pkg:pypi/category-uppercase@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/py-poetry-lock",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "d53e3bd53d0fcb52c7760af8edc4868e9bf94b07eb00ccb0f010506f3115420c",
+   "file_path": "poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 1792
+  }
+ ],
+ "total_deps": 10
+}

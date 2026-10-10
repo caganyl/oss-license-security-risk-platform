@@ -1,0 +1,2 @@
+# Fixture bytes are test input (file hashes, BOM, CRLF cases): never convert line endings.
+* -text

@@ -1,0 +1,7 @@
+[project]
+name = "no-dependencies"
+version = "0.1.0"
+description = "PEP 621 project without dependency keys"
+
+[tool.black]
+line-length = 100

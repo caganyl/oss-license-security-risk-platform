@@ -1,0 +1,146 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "\u0130stanbul Ofis",
+   "name": "\u00e7i\u00e7ek",
+   "purl": "pkg:npm/%C3%A7i%C3%A7ek@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "\u0130stanbul Ofis",
+   "name": "@\u015firket/\u00fcr\u00fcn",
+   "purl": "pkg:npm/@%C5%9Firket/%C3%BCr%C3%BCn@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn/\u00e7ekirdek",
+   "name": "\u00e7i\u00e7ek",
+   "purl": "pkg:npm/%C3%A7i%C3%A7ek@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn/\u00e7ekirdek",
+   "name": "\u0131\u011fd\u0131r-pkg",
+   "purl": "pkg:npm/%C4%B1%C4%9Fd%C4%B1r-pkg@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "^3.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn/\u00e7ekirdek",
+   "name": "\u00f6\u011frenci",
+   "purl": "pkg:npm/%C3%B6%C4%9Frenci",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "4.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn/\u00e7ekirdek",
+   "name": "\u00d6\u011eRENC\u0130-UPPER",
+   "purl": "pkg:npm/%C3%96%C4%9ERENC%C4%B0-UPPER@4.0.0",
+   "scope": "dev",
+   "version": "4.0.0"
+  },
+  {
+   "declared_range": "\u00fcrk\u00e7e-paket==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn",
+   "name": "t",
+   "purl": "pkg:pypi/t",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "\u015firket-\u00fcr\u00fcn",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": "==0.27.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "\u011f\u00fc\u015fi\u00f6\u00e7",
+   "name": "httpx",
+   "purl": "pkg:pypi/httpx@0.27.0",
+   "scope": "direct",
+   "version": "0.27.0"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "\u011f\u00fc\u015fi\u00f6\u00e7",
+   "name": "\u00e7i\u00e7ek",
+   "purl": "pkg:pypi/%C3%A7i%C3%A7ek@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/unicode-path",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "13afd333bd44a8686ef8e06c00314c2387d8ef90d045964665064fd0d10cb22e",
+   "file_path": "\u0130stanbul Ofis/package.json",
+   "filename": "package.json",
+   "size_bytes": 134
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "6db69ee29cd2d434234f1d17d1ea9f2307dd24dfe02dc4b1dc3e51a017de2145",
+   "file_path": "\u0130stanbul Ofis/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 100
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "b995eee8dbc428249094848fb8e2403db444fbb0e58f16ef436f0cc789fe21d3",
+   "file_path": "\u015firket-\u00fcr\u00fcn/\u00e7ekirdek/package.json",
+   "filename": "package.json",
+   "size_bytes": 236
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "919af9fd6e62b6ae06fd10f6144cb58025075768cc02a11ab9ac2df3637dfb63",
+   "file_path": "\u015firket-\u00fcr\u00fcn/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 169
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "0bed3fcd6dfccc69d4b580b57db513770d2ba5c561cc374707c5f8b55c7ec464",
+   "file_path": "\u011f\u00fc\u015fi\u00f6\u00e7/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 144
+  }
+ ],
+ "total_deps": 10
+}

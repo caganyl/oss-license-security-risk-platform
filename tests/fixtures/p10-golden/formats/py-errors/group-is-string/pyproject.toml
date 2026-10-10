@@ -1,0 +1,6 @@
+[tool.poetry]
+name = "group-is-string"
+group = "not a table"
+
+[tool.poetry.dependencies]
+requests = "2.31.0"

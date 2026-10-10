@@ -1,0 +1,8 @@
+{
+  "name": "istanbul-ofis",
+  "version": "1.0.0",
+  "dependencies": {
+    "çiçek": "^1.0.0",
+    "@şirket/ürün": "^2.0.0"
+  }
+}

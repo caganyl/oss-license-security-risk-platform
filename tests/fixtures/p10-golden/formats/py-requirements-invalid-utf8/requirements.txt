@@ -1,0 +1,9 @@
+# Byte template, see MANIFEST-bytes.md. Decoded with errors="replace".
+café==1.0.0
+valid-one==1.0.0
+# comment with an invalid byte ÿ
+truncâ‚==2.0.0
+pkg==Ã1.0
+latinéname>=1
+surrogate-bytes==í €1.0
+valid-two==2.0.0

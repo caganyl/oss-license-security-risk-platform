@@ -4,11 +4,13 @@
 --
 -- Reference snapshot of the schema after migrations
 --   001_initial_core_schema, 002_local_auth, 003_declared_range,
---   004_finding_fingerprint
+--   004_finding_fingerprint, 005_scan_next_attempt
 -- The migrations in db/migrations/ are the source of truth and are applied
--- with db/migrate.sh. Do not load this file into a database that is (or will
--- be) managed by db/migrate.sh: it does not populate schema_migrations, so a
--- later "migrate.sh up" would try to re-create every object and fail.
+-- with `npm run db:migrate` (src/db/migrate.ts). Do not load this file into a
+-- database that is (or will be) managed by the migration tool: it does not
+-- populate schema_migrations, so a later `npm run db:migrate` would try to
+-- re-create every object and fail (and `npm start` would refuse to start
+-- because every migration looks pending).
 -- Keep this file in sync whenever a migration is added.
 -- =============================================================================
 
@@ -253,8 +255,14 @@ CREATE TABLE scans (
     worker_id               TEXT,
     initiated_by            UUID         REFERENCES users(id) ON DELETE SET NULL,
     created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    -- Retry backoff (005, REQ-003 P-13, ADR-004 Karar 8): earliest time a
+    -- queued scan may be claimed again, database clock. NULL = immediately.
+    next_attempt_at         TIMESTAMPTZ  NULL
 );
+
+COMMENT ON COLUMN scans.next_attempt_at IS
+  'Earliest time a queued scan may be claimed again (retry backoff, REQ-003 P-13). NULL = immediately.';
 
 CREATE TABLE scan_files (
     id          UUID           PRIMARY KEY DEFAULT gen_random_uuid(),

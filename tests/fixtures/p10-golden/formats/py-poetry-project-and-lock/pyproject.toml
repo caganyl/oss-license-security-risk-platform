@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "fixture-poetry-project-and-lock"
+version = "0.1.0"
+description = "pyproject + poetry.lock + requirements.txt in one folder"
+authors = ["fixture <fixture@example.invalid>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "2.31.0"
+click = "^8.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.1.1"

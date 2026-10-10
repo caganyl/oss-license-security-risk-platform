@@ -138,3 +138,49 @@ export function useTestDatabase(options: UseTestDatabaseOptions = {}): TestDatab
     },
   };
 }
+
+export interface ScratchDatabase {
+  readonly name: string;
+  /** postgres://user:password@127.0.0.1:port/name (test cluster, random per-run password). */
+  readonly url: string;
+  readonly cluster: ClusterInfo;
+  /** Small pool (max 3) for assertions; closed together with the database. */
+  readonly pool: Pool;
+  query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<R[]>;
+}
+
+/**
+ * Extra throw-away databases on the cluster of `base`. REQ-003 P-11/P-12
+ * tests need several per test (empty, F1 state, migrated, a second database
+ * for the per-database instance lock). Every database created through the
+ * returned function is dropped (WITH FORCE) after the test.
+ */
+export function useScratchDatabases(base: TestDatabase): (options?: { migrated?: boolean }) => Promise<ScratchDatabase> {
+  const created: Array<{ name: string; pool: Pool; cluster: ClusterInfo }> = [];
+
+  afterEach(async () => {
+    for (const db of created.splice(0)) {
+      await db.pool.end().catch(() => undefined);
+      await dropDatabase(db.cluster, db.name).catch(() => undefined);
+    }
+  }, 60_000);
+
+  return async (options = {}) => {
+    const cluster = base.cluster;
+    const name = uniqueDbName('s');
+    await createDatabase(cluster, name, options.migrated === false ? 'template0' : TEMPLATE_DB);
+    const url = databaseUrl(cluster, name);
+    const pool = new Pool({ connectionString: url, max: 3 });
+    pool.on('error', () => undefined);
+    created.push({ name, pool, cluster });
+    return {
+      name,
+      url,
+      cluster,
+      pool,
+      async query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<R[]> {
+        return (await pool.query<R>(text, values)).rows;
+      },
+    };
+  };
+}

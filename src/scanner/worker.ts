@@ -1,20 +1,36 @@
-import { spawn } from 'child_process';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
 import type { Pool, PoolClient } from 'pg';
-import { pool as defaultPool } from '../lib/db';
+import { errorCode } from '../db/advisoryLock';
+import { createRunId } from '../lib/runId';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
+import { ParserFailedError, createThreadParser } from './parsers/threadParser';
+import { type ErrorTextContext, scanErrorMessage, scanErrorText, shortErrorForLog } from './errorMessage';
+import { type GitVersionProvider, assertGitForRemoteScan, getGitVersion } from './gitVersion';
+import {
+  NonRetryableScanError,
+  ORPHAN_RECOVERY_MESSAGE,
+  ATTEMPTS_EXHAUSTED_MESSAGE,
+  ScanAbortError,
+  type ScanAbortReason,
+  type ScanQueueSettings,
+  abortReasonOf,
+  classifyScanFailure,
+  decideRetry,
+  parseScanQueueSettings,
+  timeoutMessage,
+} from './retryPolicy';
 import {
   type CloneRepoFn,
   cloneRepo as defaultCloneRepo,
+  gitTokenSecretForms,
   isValidRef,
-  sanitizedChildEnv,
   sweepStaleWorkspaces,
   withTempWorkspace,
 } from './workspace';
-import { isRuntimeScope, type SandboxScanResult } from '../types/scan';
+import { isRuntimeScope, type RunParserFn, type SandboxScanResult } from '../types/scan';
 import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import {
@@ -23,8 +39,6 @@ import {
   type NormalizedVulnerability,
   type VulnerabilitySeverity,
 } from '../analysis/vulnerabilityLookup';
-
-const WORKER_ID = sandboxRunnerConfig.worker.workerId;
 
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
@@ -77,7 +91,7 @@ export function decryptToken(encrypted: Buffer | null | undefined, keyString?: s
   return decrypted.toString('utf8');
 }
 
-export type RunParserFn = (workDir: string, ecosystems: string[], scanId: string) => Promise<SandboxScanResult>;
+export type { RunParserFn };
 export type WorkerLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 
 export interface ScanWorkerDeps {
@@ -87,6 +101,31 @@ export interface ScanWorkerDeps {
   scanRoots: string[];
   tmpRoot: string;
   logger: WorkerLogger;
+  /**
+   * Run id written to `scans.worker_id` and used as the write fence (ADR-004
+   * Karar 4). Default: a fresh `createRunId()`; the runtime passes its own.
+   */
+  runId: string;
+  /**
+   * Git version gate of remote scans (REQ-003 AC-T-3, ADR-002 Ek E2): git
+   * missing or older than 2.32 fails the scan permanently before a temp
+   * folder is created. Default: the cached `git --version`
+   * (`getGitVersion`) with the real `cloneRepo`; `null` (the default when a
+   * `cloneRepo` is injected, since it does not run git) skips the gate.
+   */
+  gitVersion: GitVersionProvider | null;
+}
+
+export { NonRetryableScanError };
+
+/** Options of the (internal) result write. */
+interface PersistOptions {
+  /** Fence: only a `running` row owned by this run id is written (ADR-004 Karar 4). */
+  runId?: string;
+  /** Job abort signal: checked before every dependency; abort rolls back. */
+  signal?: AbortSignal;
+  /** Sanitizer context of the parse warning text (L-5). */
+  errorContext?: ErrorTextContext;
 }
 
 /** normalized_license of a runtime package whose license could not be found (AC-P06-1). */
@@ -115,13 +154,22 @@ interface StoredVulnerability {
   cveId: string | null;
 }
 
-/** Deterministic failure (invalid source, ref or token): the scan fails without retry. */
-class NonRetryableScanError extends Error {}
-
+/**
+ * A claimed scan job. It is in the worker's active set from the claim commit
+ * (same tick) until its last write succeeded or was given up (ADR-004 Karar 9).
+ */
 interface ClaimedJob {
   scanRow: ScanJobRow;
-  timeoutMs: number;
-  maxAttempts: number;
+  settings: ScanQueueSettings;
+  controller: AbortController;
+  timer: NodeJS.Timeout | null;
+  /** Resolves when the job has finished (never rejects). */
+  done: Promise<void>;
+  resolveDone: () => void;
+  /** Token forms of this job (raw + Basic base64), masked in `error_message` (L-5). */
+  secrets: string[];
+  /** Temp workspace(s) of this job, replaced by `<workspace>` (L-5). */
+  workspaceDirs: string[];
 }
 
 interface ScanJobRow {
@@ -136,23 +184,41 @@ interface ScanJobRow {
 }
 
 export class ScanWorker {
-  private activeScans = 0;
-  private isRunning = false;
+  private polling = false;
+  private paused = false;
   private pollTimeout: NodeJS.Timeout | null = null;
   private readonly deps: ScanWorkerDeps;
-  /** Per-scan parser timeout (system_settings scan.timeout_minutes), keyed by scan id. */
-  private readonly parserTimeouts = new Map<string, number>();
+  /** Active job set (ADR-004 Karar 9): scan id -> job. */
+  private readonly activeJobs = new Map<string, ClaimedJob>();
+  /** Out-of-range `system_settings` warnings already logged (I-3). */
+  private readonly settingsWarnings = new Set<string>();
 
   constructor(deps: Partial<ScanWorkerDeps> = {}) {
+    if (!deps.db) {
+      // There is no global pool any more (ADR-004 Karar 1): the runtime injects the single pool.
+      throw new Error('ScanWorker requires deps.db');
+    }
     this.deps = {
-      db: deps.db ?? defaultPool,
+      db: deps.db,
       cloneRepo: deps.cloneRepo ?? defaultCloneRepo,
-      runParser: deps.runParser ?? ((workDir, ecosystems, scanId) => this.runPythonParser(workDir, ecosystems, scanId)),
+      // TypeScript parsers in a worker_threads thread (REQ-003 P-10, ADR-005 Karar 5).
+      runParser: deps.runParser ?? createThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
       scanRoots: deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS),
       tmpRoot: deps.tmpRoot ?? os.tmpdir(),
       logger: deps.logger ?? console,
+      runId: deps.runId ?? createRunId(),
+      gitVersion: deps.gitVersion !== undefined ? deps.gitVersion : deps.cloneRepo ? null : getGitVersion,
     };
-    this.deps.logger.log(`Scan Worker initialized with Worker ID: ${WORKER_ID}`);
+  }
+
+  /** L-5 sanitizer context (ADR-002 Ek E3): job secrets/workspace, SCAN_ROOTS, temp roots. */
+  private errorContext(job?: ClaimedJob): ErrorTextContext {
+    return {
+      secrets: job?.secrets ?? [],
+      workspaceDirs: job?.workspaceDirs ?? [],
+      scanRoots: this.deps.scanRoots,
+      tempDirs: [this.deps.tmpRoot, os.tmpdir()],
+    };
   }
 
   private get db(): Pool {
@@ -163,102 +229,235 @@ export class ScanWorker {
     return this.deps.logger;
   }
 
-  public async start(): Promise<void> {
-    this.logger.log('Scan Worker starting...');
-    // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
-    this.deps.scanRoots = await canonicalizeScanRoots(this.deps.scanRoots);
-    await sweepStaleWorkspaces(this.deps.tmpRoot, STALE_WORKSPACE_MAX_AGE_MS, this.logger);
-    this.isRunning = true;
-    await this.cleanupOrphanedScans();
-    this.schedulePoll(0);
+  /** Run id written to `scans.worker_id` (write fence). */
+  public get runId(): string {
+    return this.deps.runId;
   }
 
-  public stop(): void {
-    this.isRunning = false;
-    if (this.pollTimeout) {
-      clearTimeout(this.pollTimeout);
-    }
-    this.logger.log('Scan Worker stopped.');
+  /** Ids of the jobs currently in the active set. */
+  public get activeScanIds(): string[] {
+    return [...this.activeJobs.keys()];
   }
 
   /**
-   * Claims the next pending/queued scan and processes it to the end (DB
-   * updated) without starting the poll loop. Returns the scan id, or `null`
-   * when the queue is empty.
+   * Stand-alone start (tests): canonicalize SCAN_ROOTS, sweep stale
+   * workspaces, recover orphaned scans, poll. The runtime runs these steps
+   * itself in the ADR-004 Karar 2 order.
+   */
+  public async start(): Promise<void> {
+    // An invalid SCAN_ROOTS entry is an explicit startup error (ADR-002 karar 4).
+    this.deps.scanRoots = await canonicalizeScanRoots(this.deps.scanRoots);
+    await this.recoverOrphanedScans();
+    await this.sweepWorkspaces();
+    this.startPolling();
+  }
+
+  /** Removes stale `ossrisk-scan-*` folders (best effort). */
+  public async sweepWorkspaces(): Promise<void> {
+    await sweepStaleWorkspaces(this.deps.tmpRoot, STALE_WORKSPACE_MAX_AGE_MS, this.logger);
+  }
+
+  public startPolling(): void {
+    if (this.polling) return;
+    this.polling = true;
+    this.logger.log(`Tarama worker'ı başladı (çalışma kimliği ${this.runId}).`);
+    this.schedulePoll(0);
+  }
+
+  /** Stops polling (running jobs continue). */
+  public stop(): void {
+    const wasPolling = this.polling;
+    this.polling = false;
+    if (this.pollTimeout) {
+      clearTimeout(this.pollTimeout);
+      this.pollTimeout = null;
+    }
+    if (wasPolling) this.logger.log("Tarama worker'ı yoklamayı bıraktı.");
+  }
+
+  /** Degraded mode (ADR-004 Karar 3): no claims and no orphan sweep; running jobs continue. */
+  public pause(): void {
+    this.paused = true;
+  }
+
+  public resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.schedulePoll(0);
+  }
+
+  /**
+   * Aborts every active job with `reason` and resolves once all of them have
+   * finished (their own return/failure write included). Never rejects.
+   */
+  public async abortActiveJobs(reason: ScanAbortReason): Promise<void> {
+    const jobs = [...this.activeJobs.values()];
+    for (const job of jobs) {
+      if (!job.controller.signal.aborted) job.controller.abort(new ScanAbortError(reason));
+    }
+    await Promise.all(jobs.map((job) => job.done));
+  }
+
+  /**
+   * One poll iteration processed to the end without the poll loop: orphan
+   * sweep, claim of the next pending/queued scan, processing (DB updated).
+   * Returns the scan id, or `null` when nothing was claimable.
    */
   public async runOnce(): Promise<string | null> {
+    await this.recoverOrphanedScans();
     const job = await this.claimNextJob();
     if (!job) return null;
     await this.processJob(job);
     return job.scanRow.id;
   }
 
-  private async cleanupOrphanedScans(): Promise<void> {
+  /**
+   * Orphan recovery (AC-P12-11, ADR-004 Karar 9): every `running` scan that
+   * is not in this process's active set is handled as a transient failure
+   * (retry with backoff, or `failed` + `scan_failed` when no attempt is left),
+   * independent of its `worker_id`. Safe only under the single-instance lock.
+   * At start-up the active set is empty, so all `running` rows are recovered.
+   * Errors are logged (class/code only), never thrown.
+   */
+  public async recoverOrphanedScans(): Promise<number> {
+    let client: PoolClient | null = null;
     try {
-      this.logger.log('Cleaning up orphaned running scans for this worker...');
-      const result = await this.db.query(
-        `
-        UPDATE scans
-        SET status = 'failed',
-            error_message = 'Worker restarted while scan was running',
-            completed_at = NOW(),
-            updated_at = NOW()
-        WHERE worker_id = $1 AND status = 'running'
-        RETURNING id
-        `,
-        [WORKER_ID]
+      client = await this.db.connect();
+      await client.query('BEGIN');
+      const settings = await this.readSettings(client);
+      const orphans = await client.query<{ id: string; retry_count: number }>(
+        `SELECT id, retry_count FROM scans
+         WHERE status = 'running' AND NOT (id = ANY($1::uuid[]))
+         ORDER BY created_at
+         FOR UPDATE SKIP LOCKED`,
+        [this.activeScanIds],
       );
-      if (result.rowCount && result.rowCount > 0) {
-        this.logger.log(`Recovered and failed ${result.rowCount} orphaned running scans.`);
+      const logs: string[] = [];
+      for (const row of orphans.rows) {
+        const decision = decideRetry('transient', row.retry_count, settings.maxAttempts);
+        const message = scanErrorText(ORPHAN_RECOVERY_MESSAGE, this.errorContext());
+        if (decision.action === 'retry') {
+          const res = await client.query<{ next_attempt_at: Date }>(
+            `UPDATE scans
+             SET status = 'queued', retry_count = $2,
+                 next_attempt_at = NOW() + make_interval(secs => $3),
+                 error_message = $4, worker_id = NULL, updated_at = NOW()
+             WHERE id = $1 AND status = 'running'
+             RETURNING next_attempt_at`,
+            [row.id, decision.attempt, decision.delaySeconds, message],
+          );
+          logs.push(retryLogLine(row.id, decision.attempt, decision.maxAttempts, res.rows[0]?.next_attempt_at, message));
+        } else {
+          await client.query(
+            `UPDATE scans
+             SET status = 'failed', completed_at = NOW(), next_attempt_at = NULL,
+                 error_message = $2, updated_at = NOW()
+             WHERE id = $1 AND status = 'running'`,
+            [row.id, message],
+          );
+          await client.query(
+            `INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
+             VALUES ('scan_failed', 'scan', $1, NOW())`,
+            [row.id],
+          );
+          logs.push(`Tarama ${row.id} sahipsiz kaldı ve deneme hakkı bitti (${decision.attempt}/${decision.maxAttempts}); failed.`);
+        }
       }
-    } catch (error) {
-      this.logger.error('Failed to cleanup orphaned scans:', error);
+      await client.query('COMMIT');
+      for (const line of logs) this.logger.warn(line);
+      return orphans.rows.length;
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => undefined);
+      this.logger.error(`Sahipsiz tarama kurtarma başarısız (${errorCode(err)}).`);
+      return 0;
+    } finally {
+      client?.release();
     }
   }
 
   private schedulePoll(delayMs: number): void {
-    if (!this.isRunning) return;
+    if (!this.polling || this.paused) return;
     if (this.pollTimeout) clearTimeout(this.pollTimeout);
-    this.pollTimeout = setTimeout(() => this.poll(), delayMs);
+    this.pollTimeout = setTimeout(() => {
+      this.pollTimeout = null;
+      this.poll().catch((err) => {
+        this.logger.error(`Tarama yoklaması başarısız (${errorCode(err)}).`);
+        this.schedulePoll(sandboxRunnerConfig.worker.pollIntervalMs);
+      });
+    }, delayMs);
   }
 
   private async poll(): Promise<void> {
-    if (!this.isRunning) return;
+    if (!this.polling || this.paused) return;
 
-    // Check if worker is at maximum capacity
     const maxConcurrent = sandboxRunnerConfig.worker.maxConcurrentScans;
-    if (this.activeScans >= maxConcurrent) {
-      // Postpone poll and check again later
+    if (this.activeJobs.size >= maxConcurrent) {
       this.schedulePoll(sandboxRunnerConfig.worker.pollIntervalMs);
       return;
     }
 
     try {
+      // Orphan sweep before every claim (ADR-004 Karar 9); logs its own errors.
+      await this.recoverOrphanedScans();
+      if (!this.polling || this.paused) return;
       const job = await this.claimNextJob();
       if (job) {
-        this.activeScans++;
-        // Run job asynchronously; free the slot and poll again when it ends.
-        this.processJob(job)
-          .catch((err) => {
-            this.logger.error(`Unhandled error running scan ${job.scanRow.id}:`, err);
-          })
-          .finally(() => {
-            this.activeScans--;
-            this.schedulePoll(0);
-          });
-
-        // If we still have capacity, immediately try to poll for another job
-        if (this.activeScans < maxConcurrent) {
+        // Run asynchronously; poll again when it ends (processJob never rejects).
+        this.processJob(job).finally(() => this.schedulePoll(0));
+        if (this.activeJobs.size < maxConcurrent) {
           this.schedulePoll(0);
           return;
         }
       }
     } catch (err) {
-      this.logger.error('Error claiming scan job from database:', err);
+      // Database outage (AC-P12-8): log the class only and retry on the next poll.
+      this.logger.error(`Tarama işi sahiplenilemedi (${errorCode(err)}).`);
     }
 
-    // Schedule next regular poll
     this.schedulePoll(sandboxRunnerConfig.worker.pollIntervalMs);
+  }
+
+  private async readSettings(client: PoolClient): Promise<ScanQueueSettings> {
+    const res = await client.query<{ key: string; value: unknown }>(
+      `SELECT key, value FROM system_settings WHERE key IN ('scan.max_retries', 'scan.timeout_minutes')`,
+    );
+    return parseScanQueueSettings(res.rows, (message) => {
+      // Read on every poll: each rejected value is logged once per process.
+      if (this.settingsWarnings.has(message)) return;
+      this.settingsWarnings.add(message);
+      this.logger.warn(message);
+    });
+  }
+
+  /**
+   * Waiting scans whose attempts are already used up can no longer be
+   * claimed (`retry_count < scan.max_retries`); this happens when
+   * `scan.max_retries` is lowered while they wait (I-3). As in ADR-004 Karar
+   * 8 a scan without an attempt left fails: `failed` + `scan_failed`, the last
+   * failure text is kept. Runs inside the claim transaction.
+   */
+  private async failExhaustedScans(client: PoolClient, maxAttempts: number): Promise<void> {
+    const res = await client.query<{ id: string }>(
+      `WITH exhausted AS (
+         SELECT id FROM scans
+         WHERE status IN ('pending', 'queued') AND retry_count >= $1
+         FOR UPDATE SKIP LOCKED
+       ), failed AS (
+         UPDATE scans s
+         SET status = 'failed', completed_at = NOW(), next_attempt_at = NULL, worker_id = NULL,
+             error_message = COALESCE(s.error_message, $2), updated_at = NOW()
+         FROM exhausted e
+         WHERE s.id = e.id
+         RETURNING s.id
+       )
+       INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
+       SELECT 'scan_failed'::audit_action, 'scan', id, NOW() FROM failed
+       RETURNING entity_id AS id`,
+      [maxAttempts, scanErrorText(ATTEMPTS_EXHAUSTED_MESSAGE, this.errorContext())],
+    );
+    for (const row of res.rows) {
+      this.logger.warn(`Tarama ${row.id} için deneme hakkı kalmadı (scan.max_retries=${maxAttempts}); failed.`);
+    }
   }
 
   private async claimNextJob(): Promise<ClaimedJob | null> {
@@ -266,19 +465,11 @@ export class ScanWorker {
     try {
       await client.query('BEGIN');
 
-      // Fetch dynamic settings from system_settings
-      const settingsResult = await client.query(
-        `SELECT key, value FROM system_settings WHERE key IN ('scan.max_retries', 'scan.timeout_minutes')`
-      );
-      let maxAttempts = sandboxRunnerConfig.retry.maxAttempts;
-      let timeoutMinutes = 60;
-      for (const row of settingsResult.rows) {
-        if (row.key === 'scan.max_retries') maxAttempts = Number(row.value);
-        if (row.key === 'scan.timeout_minutes') timeoutMinutes = Number(row.value);
-      }
-      const timeoutMs = timeoutMinutes * 60 * 1000;
+      const settings = await this.readSettings(client);
+      await this.failExhaustedScans(client, settings.maxAttempts);
 
-      // Select next pending or queued scan using FOR UPDATE SKIP LOCKED
+      // Claim query of ADR-004 Karar 8: a retry waiting for its backoff is
+      // skipped, so it never blocks a newer scan (AC-P13-7).
       const scanResult = await client.query(
         `
         SELECT s.id, s.project_id, s.integration_id, s.ref, s.ref_type, s.retry_count,
@@ -287,12 +478,14 @@ export class ScanWorker {
         FROM scans s
         JOIN projects p ON p.id = s.project_id
         LEFT JOIN integrations i ON i.id = s.integration_id
-        WHERE s.status IN ('pending', 'queued') AND s.retry_count < $1
+        WHERE s.status IN ('pending', 'queued')
+          AND s.retry_count < $1
+          AND (s.next_attempt_at IS NULL OR s.next_attempt_at <= NOW())
         ORDER BY s.created_at ASC
         LIMIT 1
         FOR UPDATE OF s SKIP LOCKED
         `,
-        [maxAttempts]
+        [settings.maxAttempts]
       );
 
       if (scanResult.rows.length === 0) {
@@ -302,17 +495,20 @@ export class ScanWorker {
 
       const scanRow = scanResult.rows[0];
 
-      // Update scan record as running
+      // timeout_at is informational (AC-P13-6); the local timer decides.
+      // A fractional scan.timeout_minutes is allowed, hence the interval product.
       await client.query(
         `
         UPDATE scans
         SET status = 'running',
             worker_id = $1,
             started_at = NOW(),
+            timeout_at = NOW() + ($3::double precision * INTERVAL '1 minute'),
+            next_attempt_at = NULL,
             updated_at = NOW()
         WHERE id = $2
         `,
-        [WORKER_ID, scanRow.id]
+        [this.runId, scanRow.id, settings.timeoutMinutes]
       );
 
       // Log the start action
@@ -325,27 +521,46 @@ export class ScanWorker {
       );
 
       await client.query('COMMIT');
-      return { scanRow, timeoutMs, maxAttempts };
+      // No await between the commit and the active-set insert (ADR-004
+      // implementer warning 4): the orphan sweep must never see this row
+      // as `running` without its job.
+      return this.registerJob(scanRow, settings);
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
       client.release();
     }
   }
 
+  private registerJob(scanRow: ScanJobRow, settings: ScanQueueSettings): ClaimedJob {
+    let resolveDone: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    const controller = new AbortController();
+    const job: ClaimedJob = { scanRow, settings, controller, timer: null, done, resolveDone, secrets: [], workspaceDirs: [] };
+    // Job time limit (D-42, AC-P13-6): covers clone, parse, OSV and the result write.
+    job.timer = setTimeout(() => {
+      if (!controller.signal.aborted) controller.abort(new ScanAbortError('timeout'));
+    }, settings.timeoutMinutes * 60_000);
+    this.activeJobs.set(scanRow.id, job);
+    return job;
+  }
+
   /**
    * Single execution path (ADR-002 karar 1): decrypt token -> classify the
    * source (TOCTOU re-check) -> local directory in place, or shallow clone
-   * into a temp workspace -> parser -> results. There is no other folder to
+   * into a temp workspace -> parser (worker thread) -> results. There is no other folder to
    * fall back to: an unresolvable source fails the scan.
    */
   private async processJob(job: ClaimedJob): Promise<void> {
-    const { scanRow, timeoutMs, maxAttempts } = job;
+    const { scanRow } = job;
     const scanId = scanRow.id;
+    const signal = job.controller.signal;
     this.logger.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
-    this.parserTimeouts.set(scanId, timeoutMs);
     try {
+      signal.throwIfAborted();
       // Before any clone: a token that cannot be decrypted fails the scan (D-14).
       let token: string | null;
       try {
@@ -353,6 +568,7 @@ export class ScanWorker {
       } catch (err) {
         throw new NonRetryableScanError((err as Error).message);
       }
+      if (token) job.secrets.push(token);
 
       const repoUrl = scanRow.integration_repo_url || scanRow.project_repo_url;
       if (!repoUrl) {
@@ -368,36 +584,52 @@ export class ScanWorker {
 
       const ecosystems = await this.loadEcosystems(scanRow.project_id);
       let result: SandboxScanResult;
+      signal.throwIfAborted();
       if (source.kind === 'local') {
-        result = await this.deps.runParser(source.path, ecosystems, scanId);
+        result = await this.deps.runParser(source.path, ecosystems, scanId, signal);
       } else {
         const ref = scanRow.ref || scanRow.default_branch || null;
         if (ref !== null && !isValidRef(ref)) {
           throw new NonRetryableScanError('Invalid git ref for the scan');
         }
         const remoteUrl = source.url;
+        job.secrets.push(...gitTokenSecretForms(token ? { url: remoteUrl, token } : null));
+        // Git missing/older than 2.32: permanent, before any temp folder (AC-T-3).
+        if (this.deps.gitVersion) await assertGitForRemoteScan(this.deps.gitVersion);
+        signal.throwIfAborted();
         result = await withTempWorkspace(
           async (workspace) => {
+            job.workspaceDirs.push(workspace);
             const repoDir = path.join(workspace, 'repo');
-            await this.deps.cloneRepo(remoteUrl, ref, repoDir, token);
-            return this.deps.runParser(repoDir, ecosystems, scanId);
+            // The clone and the parser thread are awaited (killed/terminated on
+            // abort) before withTempWorkspace removes the folder.
+            await this.deps.cloneRepo(remoteUrl, ref, repoDir, token, signal);
+            signal.throwIfAborted();
+            return this.deps.runParser(repoDir, ecosystems, scanId, signal);
           },
           { tmpRoot: this.deps.tmpRoot, logger: this.logger },
         );
       }
 
       if (result.status === 'failed') {
-        throw new Error('Dependency parser reported a parsing failure.');
+        // Permanent (D-41): the same input fails the same way.
+        throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
-      await this.saveScanResults(scanId, scanRow.project_id, result);
-      this.logger.log(`Scan ${scanId} results stored.`);
+      const stored = await this.persistResults(scanId, scanRow.project_id, result, {
+        runId: this.runId,
+        signal,
+        errorContext: this.errorContext(job),
+      });
+      if (stored) this.logger.log(`Scan ${scanId} results stored.`);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Scan ${scanId} failed: ${errMsg}`);
-      await this.handleScanFailure(scanId, scanRow.retry_count, maxAttempts, errMsg, !(err instanceof NonRetryableScanError));
+      await this.handleScanFailure(job, err);
     } finally {
-      this.parserTimeouts.delete(scanId);
+      if (job.timer) clearTimeout(job.timer);
+      job.timer = null;
+      // Removed only after the last write succeeded or was given up (ADR-004 Karar 9).
+      this.activeJobs.delete(scanId);
+      job.resolveDone();
     }
   }
 
@@ -412,81 +644,55 @@ export class ScanWorker {
         .map((r) => r.ecosystem)
         .filter((e) => e === 'nodejs' || e === 'python');
     } catch (err) {
-      this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId}:`, err);
+      // Class/code only, never the raw error object (ADR-004 Karar 6; security review I-6).
+      this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId} (${errorCode(err)}).`);
     }
     // Fallback to all supported MVP ecosystems
     return ecosystems.length > 0 ? ecosystems : ['nodejs', 'python'];
   }
 
   /**
-   * Default parser: the Python parsers run directly on this machine (F1
-   * interim state, ADR-002 karar 5) with `spawn(PYTHON_BIN, args)` and no
-   * shell. The scan directory is passed as an argument; the process cwd is
-   * the platform root only so `-m src.scanner…` resolves.
+   * Writes a parse result for `scanId` (tests call it directly). Without the
+   * run-id fence: the internal job path uses the fenced `persistResults`.
    */
-  private async runPythonParser(scanDir: string, ecosystems: string[], scanId: string): Promise<SandboxScanResult> {
-    const platformRoot = path.resolve(__dirname, '../..');
-    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
-    const timeoutMs = this.parserTimeouts.get(scanId) ?? sandboxRunnerConfig.scan.timeoutMs;
-    const args = [
-      '-m', 'src.scanner.sandbox.parsers.scan',
-      '--scan-id', scanId,
-      '--work-dir', scanDir,
-      '--ecosystems', ecosystems.join(','),
-    ];
-
-    const child = spawn(pythonBin, args, {
-      cwd: platformRoot,
-      shell: false,
-      windowsHide: true,
-      env: sanitizedChildEnv({ PYTHONPATH: platformRoot }),
-    });
-    let stdoutData = '';
-    let stderrData = '';
-    child.stdout.on('data', (chunk: Buffer) => { stdoutData += chunk.toString('utf8'); });
-    child.stderr.on('data', (chunk: Buffer) => { stderrData = (stderrData + chunk.toString('utf8')).slice(-64 * 1024); });
-
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    const code = await new Promise<number | null>((resolve, reject) => {
-      child.once('error', (err) => {
-        clearTimeout(timer);
-        reject(new Error(`Dependency parser could not be started (${pythonBin}): ${err.message}`));
-      });
-      child.once('close', (exitCode) => {
-        clearTimeout(timer);
-        resolve(exitCode);
-      });
-    });
-
-    if (timedOut) throw new Error(`Dependency parser timed out after ${Math.round(timeoutMs / 60000)} minutes.`);
-    if (code !== 0) {
-      throw new Error(`Dependency parser exited with code ${code}. Stderr: ${stderrData.trim().slice(-1024)}`);
-    }
-    const lines = stdoutData.trim().split('\n');
-    const lastLine = lines[lines.length - 1];
-    if (!lastLine) throw new Error('Dependency parser produced no output.');
-    try {
-      return JSON.parse(lastLine) as SandboxScanResult;
-    } catch (parseErr) {
-      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-      throw new Error(`Failed to parse dependency parser output: ${msg}`);
-    }
-  }
-
   public async saveScanResults(
     scanId: string,
     projectId: string,
     result: SandboxScanResult
   ): Promise<void> {
-    const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies);
+    await this.persistResults(scanId, projectId, result, {});
+  }
+
+  /**
+   * Result write transaction. With `options.runId` it first locks the row
+   * with the fence (`status = 'running' AND worker_id = $runId`); if the row
+   * is no longer ours the result is dropped (returns false, ADR-004 Karar 4).
+   * `options.signal` is checked before every dependency; an abort rolls back.
+   */
+  private async persistResults(
+    scanId: string,
+    projectId: string,
+    result: SandboxScanResult,
+    options: PersistOptions,
+  ): Promise<boolean> {
+    const { runId, signal, errorContext = this.errorContext() } = options;
+    const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies, signal);
+    signal?.throwIfAborted();
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
+
+      if (runId !== undefined) {
+        const owned = await client.query(
+          `SELECT id FROM scans WHERE id = $1 AND status = 'running' AND worker_id = $2 FOR UPDATE`,
+          [scanId, runId],
+        );
+        if (owned.rows.length === 0) {
+          await client.query('ROLLBACK');
+          this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; sonuç atıldı.`);
+          return false;
+        }
+      }
 
       let totalVulns = 0;
       let criticalVulns = 0;
@@ -518,6 +724,8 @@ export class ScanWorker {
 
       // Process dependencies
       for (const dep of result.dependencies) {
+        // Abort (time limit/shutdown) rolls the whole write back (ADR-004 Karar 7).
+        signal?.throwIfAborted();
         const scope = dep.scope || 'direct';
         // packages.version holds only an exact version; unknown -> NULL (ADR-003 a).
         const version = dep.version === null || dep.version === undefined || dep.version === '' ? null : dep.version;
@@ -723,13 +931,15 @@ export class ScanWorker {
       // Handle warnings from parse errors if any
       let warningMsg: string | null = null;
       if (result.parse_errors && result.parse_errors.length > 0) {
-        warningMsg = result.parse_errors
-          .map(pe => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`)
-          .join('\n');
+        warningMsg = scanErrorText(
+          result.parse_errors.map((pe) => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`).join('\n'),
+          errorContext,
+        );
       }
 
-      // Update scan row
-      await client.query(
+      signal?.throwIfAborted();
+      // Update scan row (fenced when called for a claimed job).
+      const updated = await client.query(
         `
         UPDATE scans
         SET status = 'completed',
@@ -742,8 +952,10 @@ export class ScanWorker {
             low_vulns = $6,
             license_violations = $7,
             error_message = COALESCE(error_message, $8),
+            next_attempt_at = NULL,
             updated_at = NOW()
         WHERE id = $9
+          AND ($10::text IS NULL OR (status = 'running' AND worker_id = $10::text))
         `,
         [
           result.total_deps,
@@ -755,8 +967,14 @@ export class ScanWorker {
           licenseViolations,
           warningMsg,
           scanId,
+          runId ?? null,
         ]
       );
+      if (runId !== undefined && updated.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; sonuç atıldı.`);
+        return false;
+      }
 
       // Audit log scan completed
       await client.query(
@@ -768,8 +986,9 @@ export class ScanWorker {
       );
 
       await client.query('COMMIT');
+      return true;
     } catch (err) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw err;
     } finally {
       client.release();
@@ -1001,70 +1220,99 @@ export class ScanWorker {
     return { findingId: last.id, status: last.status as 'false_positive' | 'accepted', reviewId: source.id };
   }
 
-  private async handleScanFailure(
-    scanId: string,
-    retryCount: number,
-    maxAttempts: number,
-    errorMessage: string,
-    retryable: boolean
-  ): Promise<void> {
-    const client = await this.db.connect();
+  /**
+   * Failure/abort write of a claimed job (ADR-004 Karar 5, 8). Every UPDATE
+   * is fenced with `status = 'running' AND worker_id = $runId`. Never throws:
+   * if the write itself fails the row stays `running` and the next orphan
+   * sweep recovers it (ADR-004 Karar 6, 9).
+   */
+  private async handleScanFailure(job: ClaimedJob, err: unknown): Promise<void> {
+    const scanId = job.scanRow.id;
+    const signal = job.controller.signal;
+    const failureClass = classifyScanFailure(err, signal);
+    let client: PoolClient | null = null;
     try {
-      await client.query('BEGIN');
+      client = await this.db.connect();
 
-      const nextRetry = retryCount + 1;
-      // Validation/token errors are deterministic and never retried (ADR-002 karar 3, 6).
-      const canRetry = retryable && nextRetry < maxAttempts;
-
-      if (canRetry) {
-        await client.query(
-          `
-          UPDATE scans
-          SET status = 'queued',
-              retry_count = $1,
-              error_message = $2,
-              updated_at = NOW()
-          WHERE id = $3
-          `,
-          [nextRetry, errorMessage, scanId]
+      if (failureClass === 'return-to-queue') {
+        // Shutdown return: retry_count, error_message unchanged (AC-P12-10).
+        const res = await client.query(
+          `UPDATE scans
+           SET status = 'queued', next_attempt_at = NULL, worker_id = NULL, updated_at = NOW()
+           WHERE id = $1 AND status = 'running' AND worker_id = $2`,
+          [scanId, this.runId],
         );
-        this.logger.log(`Scan ${scanId} failed (attempt ${nextRetry}/${maxAttempts}). Rescheduling. Error: ${errorMessage}`);
-      } else {
-        await client.query(
-          `
-          UPDATE scans
-          SET status = 'failed',
-              completed_at = NOW(),
-              error_message = $1,
-              updated_at = NOW()
-          WHERE id = $2
-          `,
-          [errorMessage, scanId]
+        this.logger.log(
+          res.rowCount === 1
+            ? `Tarama ${scanId} kapanış nedeniyle durduruldu ve kuyruğa geri bırakıldı.`
+            : `Tarama ${scanId} başka bir örnek tarafından devralındı; iade yazılmadı.`,
         );
-
-        // Audit log scan failure
-        await client.query(
-          `
-          INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
-          VALUES ('scan_failed', 'scan', $1, NOW())
-          `,
-          [scanId]
-        );
-        this.logger.error(
-          retryable
-            ? `Scan ${scanId} failed all ${maxAttempts} attempts. Error: ${errorMessage}`
-            : `Scan ${scanId} failed (not retried). Error: ${errorMessage}`,
-        );
+        return;
       }
 
+      const message = scanErrorText(
+        abortReasonOf(signal) === 'timeout' ? timeoutMessage(job.settings.timeoutMinutes) : scanErrorMessage(err),
+        this.errorContext(job),
+      );
+      const decision = decideRetry(failureClass, job.scanRow.retry_count, job.settings.maxAttempts);
+
+      await client.query('BEGIN');
+      if (decision.action === 'retry') {
+        const res = await client.query<{ next_attempt_at: Date }>(
+          `UPDATE scans
+           SET status = 'queued', retry_count = $3,
+               next_attempt_at = NOW() + make_interval(secs => $4),
+               error_message = $5, worker_id = NULL, updated_at = NOW()
+           WHERE id = $1 AND status = 'running' AND worker_id = $2
+           RETURNING next_attempt_at`,
+          [scanId, this.runId, decision.attempt, decision.delaySeconds, message],
+        );
+        if (res.rowCount !== 1) {
+          await client.query('ROLLBACK');
+          this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; hata yazılmadı.`);
+          return;
+        }
+        await client.query('COMMIT');
+        this.logger.warn(retryLogLine(scanId, decision.attempt, decision.maxAttempts, res.rows[0]?.next_attempt_at, message));
+        return;
+      }
+
+      const res = await client.query(
+        `UPDATE scans
+         SET status = 'failed', completed_at = NOW(), next_attempt_at = NULL,
+             error_message = $3, updated_at = NOW()
+         WHERE id = $1 AND status = 'running' AND worker_id = $2`,
+        [scanId, this.runId, message],
+      );
+      if (res.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; hata yazılmadı.`);
+        return;
+      }
+      await client.query(
+        `INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
+         VALUES ('scan_failed', 'scan', $1, NOW())`,
+        [scanId],
+      );
       await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      this.logger.error(`Failed to update database for failed scan ${scanId}:`, err);
+      this.logger.error(
+        failureClass === 'transient'
+          ? `Tarama ${scanId} deneme ${decision.attempt}/${decision.maxAttempts} başarısız; deneme hakkı bitti: ${shortErrorForLog(message)}`
+          : `Tarama ${scanId} yeniden denenmeyecek bir hatayla başarısız: ${shortErrorForLog(message)}`,
+      );
+    } catch (writeErr) {
+      if (client) await client.query('ROLLBACK').catch(() => undefined);
+      this.logger.error(`Tarama ${scanId} için hata durumu yazılamadı (${errorCode(writeErr)}); sonraki yoklamada kurtarılacak.`);
     } finally {
-      client.release();
+      client?.release();
     }
   }
+}
+
+/** Retry log line (AC-P13-8): attempt n/max, next attempt time, shortened error. */
+function retryLogLine(scanId: string, attempt: number, maxAttempts: number, nextAttemptAt: Date | undefined, message: string): string {
+  const when = nextAttemptAt instanceof Date ? nextAttemptAt.toISOString() : String(nextAttemptAt ?? '?');
+  return `Tarama ${scanId} deneme ${attempt}/${maxAttempts} başarısız; sonraki deneme ${when}: ${shortErrorForLog(message)}`;
 }
 
 function mergeVulnerabilities(vulnerabilities: NormalizedVulnerability[]): NormalizedVulnerability[] {
@@ -1094,27 +1342,4 @@ function mergeVulnerabilities(vulnerabilities: NormalizedVulnerability[]): Norma
   }
 
   return Array.from(merged.values());
-}
-
-// Start worker process directly if called as main module
-if (require.main === module) {
-  const worker = new ScanWorker();
-  
-  // Clean shutdown handlers
-  const shutdown = () => {
-    console.log('Shutdown signal received.');
-    worker.stop();
-    defaultPool.end().then(() => {
-      console.log('Database connections closed. Exiting.');
-      process.exit(0);
-    });
-  };
-
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
-
-  worker.start().catch((err) => {
-    console.error('Fatal worker startup error:', err);
-    process.exit(1);
-  });
 }

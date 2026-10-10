@@ -1,0 +1,12 @@
+{
+  "name": "fixture-npm-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "devDependencies": {
+    "prettier": "3.2.5"
+  }
+}

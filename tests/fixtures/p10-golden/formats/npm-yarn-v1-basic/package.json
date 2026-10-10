@@ -1,0 +1,18 @@
+{
+  "name": "fixture-npm-yarn-v1",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "@babel/code-frame": "^7.22.13"
+  },
+  "devDependencies": {
+    "@types/node": "*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
+  }
+}

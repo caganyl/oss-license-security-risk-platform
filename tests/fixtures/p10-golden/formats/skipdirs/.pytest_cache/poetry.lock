@@ -1,0 +1,3 @@
+[[package]]
+name = "skipped-pytest-cache"
+version = "1.0.0"

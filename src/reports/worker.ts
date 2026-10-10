@@ -1,39 +1,121 @@
-import { pool } from '../lib/db';
+import type { Pool } from 'pg';
+import { errorCode } from '../db/advisoryLock';
+import { sanitizeErrorText } from '../lib/errorText';
+import { shortErrorForLog } from '../scanner/errorMessage';
 import { ReportService } from './reportService';
-import { exportWorkerConfig } from './worker.config';
+import { exportWorkerConfig, type ExportWorkerConfig } from './worker.config';
 
-const WORKER_ID = exportWorkerConfig.workerId;
+export type ExportWorkerLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 
+/** Dependencies of the report worker (REQ-003 P-12, ADR-004 Karar 1). */
+export interface ExportWorkerDeps {
+  /** Required: the runtime's single pool. */
+  db: Pool;
+  logger: ExportWorkerLogger;
+  /** Default: `new ReportService(db)`. */
+  reportService: ReportService;
+  /** Default: `exportWorkerConfig`. */
+  config: ExportWorkerConfig;
+}
+
+/**
+ * Report queue worker: `pending -> generating -> ready | failed`. Runs in the
+ * runtime process next to the API and the scan worker. Report generation
+ * (pdfkit/exceljs) cannot be cancelled; on shutdown the runtime waits for it
+ * a bounded time and returns the rest to `pending` (ADR-004 Karar 5).
+ */
 export class ExportWorker {
-  private activeExports = 0;
-  private isRunning = false;
+  private polling = false;
+  private paused = false;
+  private shuttingDown = false;
   private pollTimeout: NodeJS.Timeout | null = null;
-  private readonly reportService: ReportService;
+  private readonly active = new Set<Promise<void>>();
+  private readonly deps: ExportWorkerDeps;
 
-  constructor() {
-    this.reportService = new ReportService(pool);
-    console.log(`Export Worker initialized with Worker ID: ${WORKER_ID}`);
+  constructor(deps: Partial<ExportWorkerDeps> = {}) {
+    if (!deps.db) throw new Error('ExportWorker requires deps.db');
+    this.deps = {
+      db: deps.db,
+      logger: deps.logger ?? console,
+      reportService: deps.reportService ?? new ReportService(deps.db),
+      config: deps.config ?? exportWorkerConfig,
+    };
   }
 
+  private get db(): Pool {
+    return this.deps.db;
+  }
+
+  private get logger(): ExportWorkerLogger {
+    return this.deps.logger;
+  }
+
+  public get activeCount(): number {
+    return this.active.size;
+  }
+
+  /** Stand-alone start: start-up recovery, then polling. */
   public async start(): Promise<void> {
-    this.isRunning = true;
-    console.log('Export Worker starting...');
-    await this.cleanupOrphanedExports();
+    await this.recoverOrphanedReports();
+    this.startPolling();
+  }
+
+  public startPolling(): void {
+    if (this.polling) return;
+    this.polling = true;
+    this.logger.log("Rapor worker'ı başladı.");
     this.schedulePoll(0);
   }
 
   public stop(): void {
-    this.isRunning = false;
+    const wasPolling = this.polling;
+    this.polling = false;
     if (this.pollTimeout) {
       clearTimeout(this.pollTimeout);
+      this.pollTimeout = null;
     }
-    console.log('Export Worker stopped.');
+    if (wasPolling) this.logger.log("Rapor worker'ı yoklamayı bıraktı.");
   }
 
-  private async cleanupOrphanedExports(): Promise<void> {
+  /** Degraded mode (ADR-004 Karar 3): no new claims; running reports continue. */
+  public pause(): void {
+    this.paused = true;
+  }
+
+  public resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.schedulePoll(0);
+  }
+
+  /**
+   * Shutdown mode (ADR-004 Karar 5): polling stops and the worker's error
+   * path no longer writes `failed` (the runtime returns `generating` reports
+   * to `pending`).
+   */
+  public enterShutdown(): void {
+    this.shuttingDown = true;
+    this.stop();
+  }
+
+  /** Resolves true when every running report finished within `timeoutMs`. */
+  public async waitForIdle(timeoutMs: number): Promise<boolean> {
+    if (this.active.size === 0) return true;
+    let timer: NodeJS.Timeout | null = null;
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+    });
     try {
-      console.log('Cleaning up orphaned generating reports...');
-      const result = await pool.query(
+      return await Promise.race([Promise.all([...this.active]).then(() => true as const), timedOut]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /** Start-up recovery: `generating -> failed` (unchanged behaviour, AC-P12-11). */
+  public async recoverOrphanedReports(): Promise<number> {
+    try {
+      const result = await this.db.query(
         `
         UPDATE reports
         SET status = 'failed',
@@ -43,56 +125,64 @@ export class ExportWorker {
         RETURNING id
         `
       );
-      if (result.rowCount && result.rowCount > 0) {
-        console.log(`Recovered and failed ${result.rowCount} orphaned generating reports.`);
-      }
+      const count = result.rowCount ?? 0;
+      if (count > 0) this.logger.warn(`${count} yarım kalmış rapor failed yapıldı.`);
+      return count;
     } catch (error) {
-      console.error('Failed to cleanup orphaned reports:', error);
+      this.logger.error(`Yarım kalmış rapor kurtarma başarısız (${errorCode(error)}).`);
+      return 0;
     }
   }
 
   private schedulePoll(delayMs: number): void {
-    if (!this.isRunning) return;
+    if (!this.polling || this.paused) return;
     if (this.pollTimeout) clearTimeout(this.pollTimeout);
-    this.pollTimeout = setTimeout(() => this.poll(), delayMs);
+    this.pollTimeout = setTimeout(() => {
+      this.pollTimeout = null;
+      this.poll().catch((err) => {
+        this.logger.error(`Rapor yoklaması başarısız (${errorCode(err)}).`);
+        this.schedulePoll(this.deps.config.pollIntervalMs);
+      });
+    }, delayMs);
   }
 
   private async poll(): Promise<void> {
-    if (!this.isRunning) return;
+    if (!this.polling || this.paused) return;
 
-    const maxConcurrent = exportWorkerConfig.maxConcurrentExports;
-    if (this.activeExports >= maxConcurrent) {
-      this.schedulePoll(exportWorkerConfig.pollIntervalMs);
+    const maxConcurrent = this.deps.config.maxConcurrentExports;
+    if (this.active.size >= maxConcurrent) {
+      this.schedulePoll(this.deps.config.pollIntervalMs);
       return;
     }
 
     try {
       const reportId = await this.claimNextJob();
       if (reportId) {
-        this.activeExports++;
-        this.runExportJob(reportId).catch((err) => {
-          console.error(`Unhandled error in runExportJob for report ${reportId}:`, err);
+        const job = this.runExportJob(reportId);
+        this.active.add(job);
+        job.finally(() => {
+          this.active.delete(job);
+          this.schedulePoll(0);
         });
 
-        // If we still have capacity, check for another job immediately
-        if (this.activeExports < maxConcurrent) {
+        if (this.active.size < maxConcurrent) {
           this.schedulePoll(0);
           return;
         }
       }
     } catch (err) {
-      console.error('Error claiming report job from database:', err);
+      // Database outage (AC-P12-8): class only, retried on the next poll.
+      this.logger.error(`Rapor işi sahiplenilemedi (${errorCode(err)}).`);
     }
 
-    this.schedulePoll(exportWorkerConfig.pollIntervalMs);
+    this.schedulePoll(this.deps.config.pollIntervalMs);
   }
 
   private async claimNextJob(): Promise<string | null> {
-    const client = await pool.connect();
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
 
-      // Select next pending report using FOR UPDATE SKIP LOCKED
       const result = await client.query(
         `
         SELECT id
@@ -110,50 +200,46 @@ export class ExportWorker {
       }
 
       const reportId = result.rows[0].id;
-
-      // Update report record as generating
-      await client.query(
-        `
-        UPDATE reports
-        SET status = 'generating'
-        WHERE id = $1
-        `,
-        [reportId]
-      );
-
+      await client.query(`UPDATE reports SET status = 'generating' WHERE id = $1`, [reportId]);
       await client.query('COMMIT');
       return reportId;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
       client.release();
     }
   }
 
+  /** Never rejects (ADR-004 Karar 6). */
   private async runExportJob(reportId: string): Promise<void> {
-    console.log(`Starting generation of report ${reportId}...`);
+    this.logger.log(`Starting generation of report ${reportId}...`);
+    const timeoutMs = this.deps.config.timeoutMs;
 
+    // The time limit aborts `processReport` (security review L-5): after it
+    // fires the service writes no file and never sets `ready`. The race still
+    // frees this job slot at once, because a running pdfkit/exceljs render
+    // cannot be interrupted and only stops at the service's next checkpoint.
+    const controller = new AbortController();
     let timeoutId: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`Report generation timed out after ${exportWorkerConfig.timeoutMs}ms`));
-      }, exportWorkerConfig.timeoutMs);
+        const reason = new Error(`Report generation timed out after ${timeoutMs}ms`);
+        controller.abort(reason);
+        reject(reason);
+      }, timeoutMs);
     });
 
     try {
-      await Promise.race([
-        this.reportService.processReport(reportId),
-        timeoutPromise,
-      ]);
-      console.log(`Report ${reportId} successfully generated.`);
+      await Promise.race([this.deps.reportService.processReport(reportId, controller.signal), timeoutPromise]);
+      this.logger.log(`Report ${reportId} successfully generated.`);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.error(`Failed to generate report ${reportId}:`, errMsg);
-
-      // Transition report status to failed
+      // L-5 (ADR-002 Ek E3): the same sanitized text for the log and error_message.
+      const errMsg = sanitizeErrorText(err instanceof Error ? err.message : String(err));
+      this.logger.error(`Failed to generate report ${reportId}: ${shortErrorForLog(errMsg)}`);
+      if (this.shuttingDown) return;
       try {
-        await pool.query(
+        await this.db.query(
           `
           UPDATE reports
           SET status = 'failed',
@@ -164,34 +250,10 @@ export class ExportWorker {
           [reportId, errMsg]
         );
       } catch (dbErr) {
-        console.error(`Failed to update report ${reportId} status to failed:`, dbErr);
+        this.logger.error(`Report ${reportId} could not be marked failed (${errorCode(dbErr)}).`);
       }
     } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      this.activeExports--;
-      this.schedulePoll(0);
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
-}
-
-// Start worker process directly if called as main module
-if (require.main === module) {
-  const worker = new ExportWorker();
-
-  const shutdown = () => {
-    console.log('Received shutdown signal. Stopping Export Worker...');
-    worker.stop();
-    // Allow process to exit naturally
-    setTimeout(() => process.exit(0), 1000).unref();
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  worker.start().catch((err) => {
-    console.error('Fatal export worker startup error:', err);
-    process.exit(1);
-  });
 }

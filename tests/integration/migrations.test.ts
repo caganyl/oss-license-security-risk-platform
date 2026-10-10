@@ -4,7 +4,8 @@
  * Runs db/tests/f1_migrations_test.sql (written for psql) through
  * node-postgres: \ir lines are inlined, \set/\echo dropped
  * (tests/helpers/psqlScript.ts). The script runs 001-004 up, asserts,
- * 004-002 down, re-applies, and ROLLs BACK everything.
+ * 004-002 down, re-applies, and ROLLs BACK everything. The REQ-003 migration
+ * tool (src/db/migrate.ts, 005 included) is tested in migrateTool.test.ts.
  */
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -56,7 +57,7 @@ describe('F1 migrations (db/tests/f1_migrations_test.sql)', () => {
   });
 });
 
-describe('F1 migrations applied like db/migrate.sh (template used by all DB tests)', () => {
+describe('migrations applied by tests/helpers/migrations.ts (F1 migrate.sh bookkeeping; template used by all DB tests)', () => {
   const db = useTestDatabase({ scope: 'file' });
 
   it('AC-G-10: every db/migrations/*.up.sql is recorded in schema_migrations, in order', async () => {

@@ -1,0 +1,8 @@
+# yarn lockfile v1
+
+
+lodash@^4.17.21:
+  version "4.17.21"
+
+yarn-only-dep@^1.0.0:
+  version "1.0.0"

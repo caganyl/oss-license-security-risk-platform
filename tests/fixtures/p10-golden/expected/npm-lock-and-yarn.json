@@ -1,0 +1,91 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.3.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "WTFPL"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "left-pad",
+   "purl": "pkg:npm/left-pad@1.3.0",
+   "scope": "direct",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": "^3.0.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "is-odd",
+   "purl": "pkg:npm/is-odd@3.0.1",
+   "scope": "direct",
+   "version": "3.0.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "is-number",
+   "purl": "pkg:npm/is-number@6.0.0",
+   "scope": "transitive",
+   "version": "6.0.0"
+  },
+  {
+   "declared_range": "^3.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "is-odd",
+   "purl": "pkg:npm/is-odd@3.0.0",
+   "scope": "direct",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": "^6.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "kind-of",
+   "purl": "pkg:npm/kind-of@6.0.3",
+   "scope": "dev",
+   "version": "6.0.3"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-lock-and-yarn",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "c0bd776ef6360ae5124af02bce120c2388a0e0e6a357ff70e35a382fa9549c0b",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 209
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "81f6794302a84a135667417fed6f455cfd7592b149b4f1fca92c85345b668aac",
+   "file_path": "package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 475
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "b47942a5f47d49755ef83d679ae285e591a1cb420f9defde4bc5430d0d9c3f5c",
+   "file_path": "yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 227
+  }
+ ],
+ "total_deps": 5
+}

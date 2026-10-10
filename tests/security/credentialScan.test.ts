@@ -133,9 +133,19 @@ describe('P-09 env example file (AC-P09-2)', () => {
       .split(/\r?\n/)
       .map((l) => /^\s*([A-Z][A-Z0-9_]*)\s*=/.exec(l)?.[1])
       .filter(Boolean);
-    expect(keys).toEqual(
-      expect.arrayContaining(['DATABASE_URL', 'ENCRYPTION_KEY', 'HOST', 'PORT', 'SCAN_ROOTS', 'SCAN_CLONE_TIMEOUT_MS', 'PYTHON_BIN']),
-    );
+    expect(keys).toEqual(expect.arrayContaining(['DATABASE_URL', 'ENCRYPTION_KEY', 'HOST', 'PORT', 'SCAN_ROOTS', 'SCAN_CLONE_TIMEOUT_MS']));
+  });
+
+  // REQ-003 AC-P12-12 / D-31 / D-44: Python and the Docker Compose database are gone.
+  // Red until the main session updates the example file (agents do not edit it).
+  it('AC-P12-12 / AC-P10-16: the example file lists neither PYTHON_BIN nor any POSTGRES_* variable', () => {
+    expect(fs.existsSync(file), `${path.basename(file)} is missing`).toBe(true);
+    const keys = fs
+      .readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map((l) => /^\s*#?\s*([A-Z][A-Z0-9_]*)\s*=/.exec(l)?.[1])
+      .filter((k): k is string => Boolean(k));
+    expect(keys.filter((k) => k === 'PYTHON_BIN' || k.startsWith('POSTGRES_'))).toEqual([]);
   });
 
   it('AC-P09-2: credential-bearing variables in the example file hold no real value', () => {

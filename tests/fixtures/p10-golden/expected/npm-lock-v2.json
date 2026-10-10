@@ -1,0 +1,123 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "@scope/util",
+   "purl": "pkg:npm/@scope/util@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "0BSD"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tslib",
+   "purl": "pkg:npm/tslib@1.14.1",
+   "scope": "transitive",
+   "version": "1.14.1"
+  },
+  {
+   "declared_range": "^4.17.21",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "MIT"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "lodash",
+   "purl": "pkg:npm/lodash@4.17.21",
+   "scope": "direct",
+   "version": "4.17.21"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "BSD-3-Clause"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "source-map",
+   "purl": "pkg:npm/source-map@0.6.1",
+   "scope": "transitive",
+   "version": "0.6.1"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "licenses": [
+    "0BSD"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "tslib",
+   "purl": "pkg:npm/tslib@2.6.2",
+   "scope": "transitive",
+   "version": "2.6.2"
+  },
+  {
+   "declared_range": "^5.4.0",
+   "ecosystem": "nodejs",
+   "licenses": [
+    "Apache-2.0"
+   ],
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "typescript",
+   "purl": "pkg:npm/typescript@5.4.5",
+   "scope": "dev",
+   "version": "5.4.5"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "packages-only",
+   "purl": "pkg:npm/packages-only@2.2.2",
+   "scope": "transitive",
+   "version": "2.2.2"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "legacy-only",
+   "purl": "pkg:npm/legacy-only@3.3.3",
+   "scope": "transitive",
+   "version": "3.3.3"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-lock-v2",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "7f2a79d2c1836bf911642e589c3500cc472cd7c6fbb18486b416c1ae7373ae79",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 211
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "79fcbd1784b1c0b6e12c1ef700cae87a892f81638a9bcf929237dbf3dfb358ac",
+   "file_path": "package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 1780
+  }
+ ],
+ "total_deps": 8
+}

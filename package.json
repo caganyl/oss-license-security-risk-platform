@@ -2,24 +2,25 @@
   "name": "oss-license-security-risk-platform",
   "version": "1.0.0",
   "description": "OSS License & Security Risk Platform Backend",
-  "main": "dist/app.js",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/app.js",
-    "worker": "ts-node src/scanner/worker.ts",
-    "worker:prod": "node dist/scanner/worker.js",
-    "export-worker": "ts-node src/reports/worker.ts",
-    "export-worker:prod": "node dist/reports/worker.js",
+    "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.test.json",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "node dist/db/migrate.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "pdfkit": "^0.18.0",
-    "pg": "^8.11.5"
+    "pg": "^8.11.5",
+    "smol-toml": "1.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -38,6 +39,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.71.1",
-    "vitest": "^3.2.7"
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
   }
 }

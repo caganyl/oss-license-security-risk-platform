@@ -1,0 +1,95 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "alpha",
+   "purl": "pkg:npm/alpha@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "beta",
+   "purl": "pkg:npm/beta@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "gamma",
+   "purl": "pkg:npm/gamma@3.0.0",
+   "scope": "transitive",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "caf\ufffd",
+   "purl": "pkg:npm/caf%EF%BF%BD@4.0.0",
+   "scope": "transitive",
+   "version": "4.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "delta",
+   "purl": "pkg:npm/delta@5.0.0",
+   "scope": "transitive",
+   "version": "5.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "epsilon",
+   "purl": "pkg:npm/epsilon@6.0.0",
+   "scope": "transitive",
+   "version": "6.0.0"
+  },
+  {
+   "declared_range": "7.0.0\"\u200b",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": ".",
+   "name": "zeta",
+   "purl": "pkg:npm/zeta",
+   "scope": "transitive",
+   "version": null
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-yarn-separators",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "c209345ac46e98085a21324953712fbc199ecd5274e7a70020a3da8a5f682c07",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 154
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "11f8d970d7edc0fb02efe84491a73e8ba4ec1987778ea03bada204cee9f1ad7a",
+   "file_path": "yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 298
+  }
+ ],
+ "total_deps": 7
+}

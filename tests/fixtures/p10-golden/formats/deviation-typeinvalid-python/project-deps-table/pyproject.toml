@@ -1,0 +1,6 @@
+[project]
+name = "project-deps-table"
+
+[project.dependencies]
+requests = ">=2"
+click = "8.1.7"

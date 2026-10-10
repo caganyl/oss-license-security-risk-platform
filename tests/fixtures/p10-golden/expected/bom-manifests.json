@@ -1,0 +1,173 @@
+{
+ "dependencies": [
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "npm-yarn-lock",
+   "name": "\ufefflodash",
+   "purl": "pkg:npm/%EF%BB%BFlodash@4.17.21",
+   "scope": "transitive",
+   "version": "4.17.21"
+  },
+  {
+   "declared_range": "^1.3.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "npm-yarn-lock",
+   "name": "left-pad",
+   "purl": "pkg:npm/left-pad@1.3.0",
+   "scope": "direct",
+   "version": "1.3.0"
+  },
+  {
+   "declared_range": "^4.17.21",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "npm-yarn-lock-comment-first",
+   "name": "lodash",
+   "purl": "pkg:npm/lodash@4.17.21",
+   "scope": "direct",
+   "version": "4.17.21"
+  },
+  {
+   "declared_range": "==2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "py-requirements",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": "==8.1.1",
+   "ecosystem": "python",
+   "manifest_file": "requirements-dev.txt",
+   "manifest_path": "py-requirements-dev",
+   "name": "pytest",
+   "purl": "pkg:pypi/pytest@8.1.1",
+   "scope": "dev",
+   "version": "8.1.1"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [
+  {
+   "ecosystem": "nodejs",
+   "file": "npm-package-json/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "npm-package-lock/package.json"
+  },
+  {
+   "ecosystem": "python",
+   "file": "py-pyproject/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "py-pyproject-comment-first/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "py-poetry-lock/poetry.lock"
+  }
+ ],
+ "python": "3.14.7",
+ "root": "formats/bom-manifests",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "fb1c7893f20bcefa85e2ec31cd10961903bd0ea65f0b046eff7e63f671b6e5aa",
+   "file_path": "npm-package-json/package.json",
+   "filename": "package.json",
+   "size_bytes": 107
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "42f590694cfe9c819a3d52f37f66ee44729a5e1013607ef9f8243f99e7d98693",
+   "file_path": "npm-package-lock/package.json",
+   "filename": "package.json",
+   "size_bytes": 105
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "3e91d0e8c55dd30ee6c02cd493e3e88da465cbd567225fad096e1cb5db722d52",
+   "file_path": "npm-package-lock/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 165
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "ba1b6c386df12ab016a83195dcd38752b338ad8783de15427291d1f61e946fea",
+   "file_path": "npm-yarn-lock/package.json",
+   "filename": "package.json",
+   "size_bytes": 128
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "605c9309094a136a7bf960bc8d8197a2a3bb438006a0232527c9572df1f19730",
+   "file_path": "npm-yarn-lock/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 76
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "64f8860f7848da1dcf30f670e6452417d735a66c24d8fb5ecabd3826d9d96b26",
+   "file_path": "npm-yarn-lock-comment-first/package.json",
+   "filename": "package.json",
+   "size_bytes": 116
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "0785ca7267b03fdf2e1482314fc13cd02e343159667e4df7c07b309044071a7d",
+   "file_path": "npm-yarn-lock-comment-first/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 61
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "5c7d4555b4ec323a43d975a4e117875964ae1671ffc11c600a566194ef7072c2",
+   "file_path": "py-requirements/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 33
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "3988c367b489a09ef830ae213c97b9c68c402b522c03ff2a76ee8e68089a6699",
+   "file_path": "py-requirements-dev/requirements-dev.txt",
+   "filename": "requirements-dev.txt",
+   "size_bytes": 64
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "78723ecbc5641b0320d35230a0c03f3d820b7eaf32630f6766c530442fbdc537",
+   "file_path": "py-requirements-test/requirements-test.txt",
+   "filename": "requirements-test.txt",
+   "size_bytes": 19
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "b1b5d89ef3e045fada6fb9f6bbfa773c26d4e46df76b51adc806dd53e5d8eb9f",
+   "file_path": "py-pyproject/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 90
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "247f0dfff643064593e70e22c3dc73b3a184c02671ce451a32fe3062e7169614",
+   "file_path": "py-pyproject-comment-first/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 141
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "a194c44e4a29d9c94c77717fcf20a497a20ca0705ac06a473c93c0cc2243f125",
+   "file_path": "py-poetry-lock/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 58
+  }
+ ],
+ "total_deps": 5
+}

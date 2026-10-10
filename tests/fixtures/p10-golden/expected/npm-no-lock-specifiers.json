@@ -1,0 +1,428 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "^1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "caret",
+   "purl": "pkg:npm/caret",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "~1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "tilde",
+   "purl": "pkg:npm/tilde",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": ">=1.0.0 <2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "range",
+   "purl": "pkg:npm/range",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3 - 2.3.4",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "hyphen-range",
+   "purl": "pkg:npm/hyphen-range",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "^1.0.0 || ^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "or-range",
+   "purl": "pkg:npm/or-range",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "exact",
+   "purl": "pkg:npm/exact@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "=1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "exact-eq",
+   "purl": "pkg:npm/exact-eq",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "v1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "exact-v",
+   "purl": "pkg:npm/exact-v@v1.2.3",
+   "scope": "direct",
+   "version": "v1.2.3"
+  },
+  {
+   "declared_range": "1.2.x",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "x-range",
+   "purl": "pkg:npm/x-range",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "*",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "star",
+   "purl": "pkg:npm/star",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "empty",
+   "purl": "pkg:npm/empty",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "blank",
+   "purl": "pkg:npm/blank",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "padded-exact",
+   "purl": "pkg:npm/padded-exact@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "latest",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "tag-latest",
+   "purl": "pkg:npm/tag-latest",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "next",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "tag-next",
+   "purl": "pkg:npm/tag-next",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "https://example.invalid/pkg/-/pkg-1.0.0.tgz",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "tarball-url",
+   "purl": "pkg:npm/tarball-url",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "git+https://github.com/example/repo.git#v1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "git-url",
+   "purl": "pkg:npm/git-url",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "github:example/repo",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "github-short",
+   "purl": "pkg:npm/github-short",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "example/repo",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "bare-github",
+   "purl": "pkg:npm/bare-github",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "file:../local",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "file-path",
+   "purl": "pkg:npm/file-path",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "link:../linked",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "link-path",
+   "purl": "pkg:npm/link-path",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "workspace:*",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "workspace-star",
+   "purl": "pkg:npm/workspace-star",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "workspace:^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "workspace-caret",
+   "purl": "pkg:npm/workspace-caret",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "npm:real-pkg@^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "npm-alias",
+   "purl": "pkg:npm/npm-alias",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "npm:real-pkg@2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "npm-alias-exact",
+   "purl": "pkg:npm/npm-alias-exact",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3-beta.1",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "prerelease",
+   "purl": "pkg:npm/prerelease@1.2.3-beta.1",
+   "scope": "direct",
+   "version": "1.2.3-beta.1"
+  },
+  {
+   "declared_range": "1.2.3+build.1",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "build-meta",
+   "purl": "pkg:npm/build-meta@1.2.3%2Bbuild.1",
+   "scope": "direct",
+   "version": "1.2.3+build.1"
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "fs-padded",
+   "purl": "pkg:npm/fs-padded@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "us-padded",
+   "purl": "pkg:npm/us-padded@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "nel-padded",
+   "purl": "pkg:npm/nel-padded@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "ls-padded",
+   "purl": "pkg:npm/ls-padded@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "ideographic-padded",
+   "purl": "pkg:npm/ideographic-padded@1.2.3",
+   "scope": "direct",
+   "version": "1.2.3"
+  },
+  {
+   "declared_range": "\ufeff1.2.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "bom-prefixed",
+   "purl": "pkg:npm/bom-prefixed",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "1.2.3\u200b",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "zwsp-suffixed",
+   "purl": "pkg:npm/zwsp-suffixed",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "\u0661.\u0662.\u0663",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "arabic-indic-digits",
+   "purl": "pkg:npm/arabic-indic-digits@%D9%A1.%D9%A2.%D9%A3",
+   "scope": "direct",
+   "version": "\u0661.\u0662.\u0663"
+  },
+  {
+   "declared_range": "2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "dupkey",
+   "purl": "pkg:npm/dupkey@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "in-two-sections",
+   "purl": "pkg:npm/in-two-sections",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "Case-Dup",
+   "purl": "pkg:npm/Case-Dup",
+   "scope": "direct",
+   "version": null
+  },
+  {
+   "declared_range": "^29.7.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "jest",
+   "purl": "pkg:npm/jest",
+   "scope": "dev",
+   "version": null
+  },
+  {
+   "declared_range": "^18.2.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "react",
+   "purl": "pkg:npm/react",
+   "scope": "peer",
+   "version": null
+  },
+  {
+   "declared_range": "2.3.3",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": ".",
+   "name": "fsevents",
+   "purl": "pkg:npm/fsevents@2.3.3",
+   "scope": "optional",
+   "version": "2.3.3"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-no-lock-specifiers",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "b1db2380f3f194eb40639b26a0e6deaf98624d57fd439c7d2e7edb4d58fbfffa",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 1610
+  }
+ ],
+ "total_deps": 41
+}

@@ -1,0 +1,5 @@
+[tool.poetry.dependencies]
+requests = "2.31.0"
+
+[tool.poetry.group]
+dev = "not a table"

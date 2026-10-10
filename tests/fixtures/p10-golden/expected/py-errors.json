@@ -1,0 +1,212 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements.txt",
+   "manifest_path": "healthy",
+   "name": "healthy-pkg",
+   "purl": "pkg:pypi/healthy-pkg@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "2.31.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "group-is-string",
+   "name": "requests",
+   "purl": "pkg:pypi/requests@2.31.0",
+   "scope": "direct",
+   "version": "2.31.0"
+  },
+  {
+   "declared_range": "==2.0.0",
+   "ecosystem": "python",
+   "manifest_file": "pyproject.toml",
+   "manifest_path": "healthy",
+   "name": "healthy-pyproject-dep",
+   "purl": "pkg:pypi/healthy-pyproject-dep@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [
+  {
+   "ecosystem": "python",
+   "file": "broken-pyproject/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "duplicate-key/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "group-value-not-table/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "invalid-utf8-pyproject/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "poetry-deps-array/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "tool-poetry-not-table/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "unterminated-string/pyproject.toml"
+  },
+  {
+   "ecosystem": "python",
+   "file": "broken-poetry-lock/poetry.lock"
+  },
+  {
+   "ecosystem": "python",
+   "file": "invalid-utf8-poetry-lock/poetry.lock"
+  },
+  {
+   "ecosystem": "python",
+   "file": "poetry-lock-package-string/poetry.lock"
+  },
+  {
+   "ecosystem": "python",
+   "file": "poetry-lock-package-table/poetry.lock"
+  }
+ ],
+ "python": "3.14.7",
+ "root": "formats/py-errors",
+ "scan_files": [
+  {
+   "ecosystem": "python",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-requirements/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "c1240a85a28c5ae29400f10ec0441b1b407bccc2259f3bc608828a386d94190f",
+   "file_path": "healthy/requirements.txt",
+   "filename": "requirements.txt",
+   "size_bytes": 19
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "2b283de8d3fefa40cda9150b8f37434653684b4d564196ef3f996c620bb0c94b",
+   "file_path": "comments-only-requirements/requirements-dev.txt",
+   "filename": "requirements-dev.txt",
+   "size_bytes": 97
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "06c6111805f1ef73ff0db56dac71bd3373426f3f7b1918a91768301a4c67e46d",
+   "file_path": "broken-pyproject/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 71
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "9febf686a2b1443bb33956180a3bc446adbaa31041a63866b137fd18c11f24f4",
+   "file_path": "duplicate-key/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 98
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-pyproject/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "259bc01c7cacc3c91bd4721be9d62baee3490996b0f46d42d326943205d7a3b3",
+   "file_path": "group-is-string/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 109
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "4d325749fdd91efe4221baa57eccae846cf65a9da6aebe5ed5cb3ec1a6a3584d",
+   "file_path": "group-value-not-table/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 88
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "faa7960943e35220d8c74b8f64393a4ff80d20c0854e4a74035bec8d8e60ce1c",
+   "file_path": "healthy/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 93
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "e59056b0da11d3307c3b5909936f9bb350521629a0b2fdac94b1b0e4b1ab97bc",
+   "file_path": "invalid-utf8-pyproject/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 128
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "4030e2e4a13efa5e3d1ddc5d19c33a9df05587914663faae6b18e32de1fb58e9",
+   "file_path": "poetry-deps-array/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 69
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "f16f83905a3bc0796c4cc3e3394b1883a9c6e78e4b8f740fb39824b7b36735e8",
+   "file_path": "tool-poetry-not-table/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 108
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "ace0a903f4da1212f2f95c3bcc0310a5ccae6f08e07d9e63bcb713736d0e572a",
+   "file_path": "unterminated-string/pyproject.toml",
+   "filename": "pyproject.toml",
+   "size_bytes": 46
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "e8ead16a20897d223337a5cb64520cb6f4a45da7550922eaef9cc99a018870a0",
+   "file_path": "broken-poetry-lock/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 44
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-poetry-lock/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "4caa4e4ec8d3cc768fa65f6d7eb1b7ec0984dd79bb4345739994c37e781f42cb",
+   "file_path": "invalid-utf8-poetry-lock/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 107
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "d0cc3e9e2855375d1d3a994a9208550e80764d58894adf208b209f53fba083ac",
+   "file_path": "poetry-lock-package-string/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 35
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "65600106cb3a590466346d521f7267414de3782408a0dd5535d08fec4642c2cf",
+   "file_path": "poetry-lock-package-table/poetry.lock",
+   "filename": "poetry.lock",
+   "size_bytes": 60
+  }
+ ],
+ "total_deps": 3
+}

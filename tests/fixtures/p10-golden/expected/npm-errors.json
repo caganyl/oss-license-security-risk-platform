@@ -1,0 +1,287 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "3.0.1",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "healthy",
+   "name": "is-odd",
+   "purl": "pkg:npm/is-odd@3.0.1",
+   "scope": "direct",
+   "version": "3.0.1"
+  },
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": "lone-surrogate-version",
+   "name": "ok-dep",
+   "purl": "pkg:npm/ok-dep@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "1.0.0-\udc00",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": "lone-surrogate-version",
+   "name": "bad-version",
+   "purl": "pkg:npm/bad-version",
+   "scope": "transitive",
+   "version": null
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [
+  {
+   "ecosystem": "nodejs",
+   "file": "broken-json/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "broken-lock/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "empty-lock/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "empty-package-json/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "invalid-utf8/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "lock-array/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "lone-surrogate/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "lone-surrogate-lock-name/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "section-array/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "section-null/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "section-string/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "toplevel-array/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "toplevel-null/package.json"
+  },
+  {
+   "ecosystem": "nodejs",
+   "file": "toplevel-string/package.json"
+  }
+ ],
+ "python": "3.14.7",
+ "root": "formats/npm-errors",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "14277c095cb4ec9891f0be26621498ffb18600d7b5424d41f833da928836cdfa",
+   "file_path": "broken-json/package.json",
+   "filename": "package.json",
+   "size_bytes": 78
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "688d135063ee1eaefce1dbaf8b214e4ac44bf8f9274414fe434fea9f5155ce94",
+   "file_path": "broken-lock/package.json",
+   "filename": "package.json",
+   "size_bytes": 100
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "da1b05b08d201015adefc35b7c28502822e5720e34fdafead971f7c6265192cf",
+   "file_path": "broken-lock/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 129
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "b9dfc99b4492373236f52d02618a414ec00f5dcdf8e0fdaf82d0bd98ec6d0495",
+   "file_path": "empty-lock/package.json",
+   "filename": "package.json",
+   "size_bytes": 98
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-lock/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-package-json/package.json",
+   "filename": "package.json",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "65320773847d78101a87993e8e684173fe5ea2bcbff33ae0c7d95a2338157b7e",
+   "file_path": "empty-yarn/package.json",
+   "filename": "package.json",
+   "size_bytes": 99
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "file_path": "empty-yarn/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 0
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "0958785fab8baf6c06b92b588dd87e28d0ddb819f6a90e9321bbb67af47ff6b0",
+   "file_path": "healthy/package.json",
+   "filename": "package.json",
+   "size_bytes": 93
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "3b8e7975c3c64808d299deee19a500f7bd346f889a42d85c3aaeee2ee2406f2a",
+   "file_path": "invalid-utf8/package.json",
+   "filename": "package.json",
+   "size_bytes": 154
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "311345d8e9db43d028b4847bbeb363da13bcfb8683830967d94e834def7ee0e6",
+   "file_path": "lock-array/package.json",
+   "filename": "package.json",
+   "size_bytes": 98
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "a69ec9392193ae5282b5ba8529f4908839303beeb991f7dd51c1b51b187a3c31",
+   "file_path": "lock-array/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 59
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e326c78d58882a2e0d1721f6eac5a1b308079b62d0e8f3f363a494e31758dc20",
+   "file_path": "lock-sections-wrong-type/package.json",
+   "filename": "package.json",
+   "size_bytes": 112
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "38396b1ce79fd01ff8f76452db7405d5ec0fc0ed7469cfe197d84455f98da5b1",
+   "file_path": "lock-sections-wrong-type/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 201
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "7c47acd02e3beb7699575e05937703f3b5450435ee9a351825c48c989e37b36c",
+   "file_path": "lone-surrogate/package.json",
+   "filename": "package.json",
+   "size_bytes": 132
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "41f6c6c01759b4b23b7d373c4378558b97a37ffeb954d5e4875774fe4e8c157a",
+   "file_path": "lone-surrogate-lock-name/package.json",
+   "filename": "package.json",
+   "size_bytes": 110
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "de8d3f8afcd154d26a5c9cc2ca8d06b20626ada993f2a1daba473af21cb79b17",
+   "file_path": "lone-surrogate-lock-name/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 238
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "78ea7180a0684f2a028a2cfd4b82d8235053ea63b99e859dee059f7e0ccab77a",
+   "file_path": "lone-surrogate-version/package.json",
+   "filename": "package.json",
+   "size_bytes": 108
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "f9b4dfbce2894ed5ba52840a4eb0983e3d103d6788169e38cdff52ab86cf390c",
+   "file_path": "lone-surrogate-version/package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 239
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "0e3e55692d78d51ff3e16ec05236786de72673f2d3c0095ed26a5074658967c3",
+   "file_path": "section-array/package.json",
+   "filename": "package.json",
+   "size_bytes": 72
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "caa71acbf1d0965b5aaaf1e24d4137593de3f5a3447a99a53d9ee308ee5044bf",
+   "file_path": "section-null/package.json",
+   "filename": "package.json",
+   "size_bytes": 53
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "e0a6f08ff2344d87cd7d2e5e7d07488128212b6db221a6e65b23f874e2038cf3",
+   "file_path": "section-string/package.json",
+   "filename": "package.json",
+   "size_bytes": 60
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "6bdddeaee19595f4bdff2fba57f2e57db3fc948106439499c54a21c043b2f626",
+   "file_path": "toplevel-array/package.json",
+   "filename": "package.json",
+   "size_bytes": 24
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+   "file_path": "toplevel-null/package.json",
+   "filename": "package.json",
+   "size_bytes": 5
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "6acf4bff71c446b6b3995198f60cdf9abcd5046dba53af94fe2e468783a0b4cd",
+   "file_path": "toplevel-string/package.json",
+   "filename": "package.json",
+   "size_bytes": 16
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "70055370163a773fb69b0a905494a629587c5bdaa7db3ea02fa36a59455b1af7",
+   "file_path": "yarn-garbage/package.json",
+   "filename": "package.json",
+   "size_bytes": 101
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "44ee80e3903debf04b8054916a48c99e47e1619631a8dcdd58335399fba5a948",
+   "file_path": "yarn-garbage/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 77
+  }
+ ],
+ "total_deps": 3
+}

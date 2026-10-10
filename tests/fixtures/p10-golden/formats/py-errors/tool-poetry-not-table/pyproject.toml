@@ -1,0 +1,6 @@
+[project]
+name = "tool-poetry-not-table"
+dependencies = ["requests==2.31.0"]
+
+[tool]
+poetry = "not a table"

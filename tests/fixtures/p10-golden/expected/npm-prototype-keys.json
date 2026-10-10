@@ -1,0 +1,166 @@
+{
+ "dependencies": [
+  {
+   "declared_range": "1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "no-lock",
+   "name": "constructor",
+   "purl": "pkg:npm/constructor@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "no-lock",
+   "name": "__proto__",
+   "purl": "pkg:npm/__proto__@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": "^3.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "no-lock",
+   "name": "hasOwnProperty",
+   "purl": "pkg:npm/hasOwnProperty",
+   "scope": "dev",
+   "version": null
+  },
+  {
+   "declared_range": "4.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package.json",
+   "manifest_path": "no-lock",
+   "name": "isPrototypeOf",
+   "purl": "pkg:npm/isPrototypeOf@4.0.0",
+   "scope": "dev",
+   "version": "4.0.0"
+  },
+  {
+   "declared_range": "^1.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "__proto__",
+   "purl": "pkg:npm/__proto__@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "toString",
+   "purl": "pkg:npm/toString@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "constructor",
+   "purl": "pkg:npm/constructor@3.0.0",
+   "scope": "transitive",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "hasOwnProperty",
+   "purl": "pkg:npm/hasOwnProperty@4.0.0",
+   "scope": "transitive",
+   "version": "4.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "package-lock.json",
+   "manifest_path": ".",
+   "name": "valueOf",
+   "purl": "pkg:npm/valueOf@5.0.0",
+   "scope": "dev",
+   "version": "5.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "yarn",
+   "name": "constructor",
+   "purl": "pkg:npm/constructor@3.0.0",
+   "scope": "transitive",
+   "version": "3.0.0"
+  },
+  {
+   "declared_range": "^2.0.0",
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "yarn",
+   "name": "toString",
+   "purl": "pkg:npm/toString@2.0.0",
+   "scope": "direct",
+   "version": "2.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "nodejs",
+   "manifest_file": "yarn.lock",
+   "manifest_path": "yarn",
+   "name": "__proto__",
+   "purl": "pkg:npm/__proto__@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
+  }
+ ],
+ "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
+ "parse_errors": [],
+ "python": "3.14.7",
+ "root": "formats/npm-prototype-keys",
+ "scan_files": [
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "b5d616d3ae4dbbab4ae1264de15d76f96f77c9816815ed95ec60c7c1e2e863b2",
+   "file_path": "no-lock/package.json",
+   "filename": "package.json",
+   "size_bytes": 259
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "1f578f3af22cacd95b543a75c3d985898fb3d244ba9272500a9495c3b62d84ab",
+   "file_path": "package.json",
+   "filename": "package.json",
+   "size_bytes": 161
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "77013f27f3343c7e6ca8cec6342e576f48d4e7570995c1eb68f452532670f43a",
+   "file_path": "package-lock.json",
+   "filename": "package-lock.json",
+   "size_bytes": 558
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "ef74c7ec24ece0f94c17748713c47f9397b505545e09bafb41c204e15a24163f",
+   "file_path": "yarn/package.json",
+   "filename": "package.json",
+   "size_bytes": 139
+  },
+  {
+   "ecosystem": "nodejs",
+   "file_hash": "546b0e2e5a18aeb4fd96a411af19b29a1175e7797c7708e7b299356b18023209",
+   "file_path": "yarn/yarn.lock",
+   "filename": "yarn.lock",
+   "size_bytes": 132
+  }
+ ],
+ "total_deps": 12
+}

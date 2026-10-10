@@ -1,0 +1,6 @@
+{
+  "name": "broken-json",
+  "dependencies": {
+    "left-pad": "1.3.0",
+  }
+}

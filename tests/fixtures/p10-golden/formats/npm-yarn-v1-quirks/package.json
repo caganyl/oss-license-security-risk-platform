@@ -1,0 +1,14 @@
+{
+  "name": "fixture-npm-yarn-v1-quirks",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "strip-ansi-cjs": "npm:strip-ansi@^6.0.1",
+    "gitpkg": "git+https://github.com/example/gitpkg.git#v1.0.0",
+    "a-comma": ">=1.0.0 <2.0.0",
+    "dep-named-version": "^1.0.0"
+  },
+  "devDependencies": {
+    "@scope/pkg": "~1.0.0"
+  }
+}

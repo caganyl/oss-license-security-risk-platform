@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "requires": {
+      "python_version": "3.11"
+    }
+  },
+  "default": {
+    "ignored-pipfile-lock": {
+      "version": "==1.0.0"
+    }
+  },
+  "develop": {}
+}

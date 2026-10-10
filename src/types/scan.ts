@@ -48,7 +48,7 @@ export function isRuntimeScope(scope: DependencyScope | null | undefined): boole
   return scope !== 'dev';
 }
 
-/** Raw dependency record produced by the sandbox scanner entrypoint. */
+/** Raw dependency record produced by the dependency parsers. */
 export interface ScannedDependency {
   ecosystem: TechEcosystem;
   name: string;
@@ -65,7 +65,7 @@ export interface ScannedDependency {
   manifest_path: string;
 }
 
-/** Scan file record produced by the sandbox scanner. */
+/** Scan file record produced by the dependency parsers. */
 export interface ScannedFile {
   ecosystem: TechEcosystem;
   filename: string;
@@ -74,7 +74,10 @@ export interface ScannedFile {
   size_bytes: number;
 }
 
-/** Top-level result JSON printed to stdout by entrypoint.sh. */
+/**
+ * Result of one dependency parse: returned by `parseManifests`
+ * (src/scanner/parsers, run in a worker thread; REQ-003 P-10, ADR-005).
+ */
 export interface SandboxScanResult {
   scan_id: string;
   status: 'completed' | 'failed';
@@ -83,3 +86,14 @@ export interface SandboxScanResult {
   scan_files: ScannedFile[];
   parse_errors: Array<{ ecosystem: string; file: string; error: string }>;
 }
+
+/**
+ * Parser injection point of the scan worker. `signal` (optional, ADR-004
+ * Karar 7) aborts the parse; three-argument implementations stay valid.
+ */
+export type RunParserFn = (
+  workDir: string,
+  ecosystems: string[],
+  scanId: string,
+  signal?: AbortSignal,
+) => Promise<SandboxScanResult>;

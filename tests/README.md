@@ -61,6 +61,14 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `integration/migrateTool.test.ts` | P-11: `runMigrateCli` (süreç içi) ve `typescript` ile geçici klasöre derlenmiş `migrate.js` (gerçek `node` süreci); tek örnek kilidi ve kilit kaybı yapı taşları |
 | `integration/runtime.test.ts` | P-12: `createRuntime` ile süreç içi başlatma; sahte `exit`, sabit boş port, sahte clone/ayrıştırıcı/rapor servisi; kapanış, bozulmuş kip, `pg_terminate_backend` |
 | `integration/scanRetry.test.ts` | P-13: `ScanWorker.runOnce` ile geri çekilme, kalıcı/geçici hatalar, süre sınırı, yoklamada sahipsiz kurtarma, `worker_id` çiti, AC-G-8 |
+| `unit/gitIsolation.test.ts` | N-1 (AC-T-1, AC-T-2): saf `buildGitCloneArgs`/`buildGitBaseEnv`/`buildGitEnv` (izin listesi, iki harf biçimli vekil, `win32`'de harf duyarsız ad, schannel yalnız `win32`, token yalnız env'de); sahte `spawn` ile `cloneRepo` ortamı ve yalıtım dosyaları; AC-T-4 clone hata kuyruğu (1024) |
+| `integration/gitIsolationReal.test.ts` | N-1 gerçek kanıt (ağsız): "kötü" global/XDG/`GIT_CONFIG_*` yapılandırması negatif kontrolde etkili, `buildGitEnv` ile `git config` çıktısında görünmez; git < 2.32 ya da yoksa atlanır |
+| `unit/errorText.test.ts` | L-5 (AC-T-4): `sanitizeErrorText` — 2000 kod noktası, yollar (iki ayırıcı, harf duyarsız, sınır kuralı), sırlar, kontrol karakterleri |
+| `unit/gitVersion.test.ts` | AC-T-3: `parseGitVersion` tablosu, gereksinim mesajı, `GitUnavailableError`, `defaultCheckGit` (yalnız log), gerçek `git --version` |
+| `unit/mainEntry.test.ts` | D-52 / REQ-002 AC-P09-3: `main()` `DATABASE_URL` yokken tek hata satırı + `exit(1)` (`dotenv/config` taklit edilir, `.env` okunmaz) |
+| `integration/errorTextPersistence.test.ts` | L-5 uçtan uca: tarama (clone, ayrıştırıcı, `parse_errors`) ve rapor (`ReportService` dosya hatası, atılan hata) `error_message` yazımları |
+| `integration/excelExport.test.ts` | AC-T-5: `uuid` 11.1.1 ile Excel raporu üretilir, `.xlsx` ExcelJS ile geri okunur (sayfa, başlık, satır) |
+| `security/followUpItems.test.ts` | AC-T-5 statik (`overrides.uuid`, lock, çalışma anı çözümü), AC-T-6 (`db/README.md` kurtarma bölümü) |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |
 
 ## Test veritabanı
@@ -86,7 +94,9 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 - `createRuntime` her zaman `exit: vi.fn()` ile kurulur: 15 sn'lik zorla
   çıkış zamanlayıcısı gerçek `process.exit`'e ulaşmamalıdır.
 - `port: 0` verilmez: Host izin listesi `options.port`'tan kurulur, 0 ile her
-  istek `403 host_rejected` olur. Testler boş bir sabit port alır.
+  istek `403 host_rejected` olur. Testler boş bir sabit port alır. Bu davranış
+  ürün hatası olarak raporlandı; "Observation (product bug): Host allow-list
+  with an ephemeral port" testi düzeltmeye kadar kırmızıdır.
 - `checkGit` enjekte edilir (`git --version` alt süreci açılmaz).
 - `runtime.test.ts`, `WORKER_POLL_INTERVAL_MS=200`'ü `vi.hoisted` ile modüller
   yüklenmeden önce ayarlar ve `afterAll`'da geri alır.
@@ -336,6 +346,18 @@ kabul edilir; harici köken, `https:`, `*`, `'unsafe-eval'` yoktur.
 | REQ-003 AC-P12-11 (yoklamada kurtarma), ADR-004 Karar 4 (çit) | `integration/scanRetry.test.ts` |
 | REQ-003 AC-P13-1 | `unit/retryPolicy.test.ts` |
 | REQ-003 AC-P13-2…8, AC-G-8 | `integration/scanRetry.test.ts`, `unit/retryPolicy.test.ts` |
+| REQ-003 AC-T-1 (N-1) | `unit/gitIsolation.test.ts`, `integration/gitIsolationReal.test.ts` |
+| REQ-003 AC-T-2 (D-18 korunur) | `unit/cloneRepoConfig.test.ts`, `unit/gitIsolation.test.ts`, `integration/gitIsolationReal.test.ts` |
+| REQ-003 AC-T-3 (git sürümü) | `unit/gitVersion.test.ts`, `integration/runtime.test.ts`, `integration/scanRetry.test.ts` |
+| REQ-003 AC-T-4 (L-5), AC-P13-8 (log) | `unit/errorText.test.ts`, `unit/gitIsolation.test.ts`, `integration/errorTextPersistence.test.ts` |
+| REQ-003 AC-T-5 (D-24) | `security/followUpItems.test.ts`, `integration/excelExport.test.ts` (`npm audit --omit=dev` ağ ister; handoff'ta) |
+| REQ-003 AC-T-6 (L-2) | `security/followUpItems.test.ts` |
+| REQ-003 AC-P12-6 / D-52 (REQ-002 AC-P09-3) | `integration/runtime.test.ts`, `unit/mainEntry.test.ts` |
+
+Bilinen kırmızılar (ürün düzeltmesi bekleniyor): `security/credentialScan.test.ts`
+AC-P12-12 (`.env.example`, ana oturum), `unit/errorText.test.ts` "secrets glued
+to ANSI colour sequences" (L-5 boşluğu) ve `integration/runtime.test.ts`
+"Host allow-list with an ephemeral port" (`port: 0`).
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

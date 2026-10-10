@@ -38,7 +38,9 @@ import {
   type RuntimeHandle,
   type RuntimeOptions,
 } from '../../src/runtime';
+import { gitRequirementMessage, type GitVersionInfo } from '../../src/scanner/gitVersion';
 import { ORPHAN_RECOVERY_MESSAGE } from '../../src/scanner/retryPolicy';
+import type { CloneRepoFn } from '../../src/scanner/workspace';
 import type { RunParserFn, SandboxScanResult } from '../../src/types/scan';
 import { useScratchDatabases, useTestDatabase, type ScratchDatabase } from '../helpers/db';
 import { applyMigrations } from '../helpers/migrations';
@@ -443,6 +445,99 @@ describe('AC-P12-6: early failures close what was opened and change no row', () 
     expect(await canListen(port)).toBe(true);
     expect(await seed.snapshot()).toEqual(seed.before);
     expect(await holders(db)).toEqual([]);
+  });
+});
+
+describe('D-52 / REQ-002 AC-P09-3 (as defined by REQ-003 AC-P12-6): no DATABASE_URL -> explicit refusal, no fallback', () => {
+  it('missing or blank DATABASE_URL: RuntimeStartupError exit 1 naming the variable (no value echoed), state failed, nothing listens, no worker, no lock, no row changed', async () => {
+    const db = await newDb();
+    const projectId = await insertProject(db, null);
+    const queued = await insertScan(db, projectId, { status: 'queued' });
+    const orphan = await insertScan(db, projectId, { status: 'running', worker_id: 'previous-run' });
+    const report = await insertReport(db, 'generating');
+    const before = await db.query('SELECT id, status::text, retry_count, worker_id, error_message, updated_at FROM scans ORDER BY id');
+    const factory = vi.fn((config: ClientConfig) => new Client(config) as unknown as LockClient);
+    const createPoolSpy = vi.fn();
+    for (const env of [{}, { DATABASE_URL: '' }, { DATABASE_URL: '   ' }, { SCAN_ROOTS: tmpBase }]) {
+      const { runtime, port, exit } = await harness(db, { env, lockClientFactory: factory, createPool: createPoolSpy as unknown as RuntimeOptions['createPool'] });
+      const err = await runtime.start().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RuntimeStartupError);
+      expect(err).toMatchObject({ exitCode: 1 });
+      expect((err as Error).message).toMatch(/Missing required environment variable\(s\): DATABASE_URL\b/);
+      expect((err as Error).message).not.toContain(db.url);
+      expect(runtime.state).toBe('failed');
+      expect(runtime.server).toBeNull();
+      expect(runtime.pool).toBeNull();
+      expect(runtime.scanWorker).toBeNull();
+      expect(runtime.exportWorker).toBeNull();
+      expect(runtime.lock).toBeNull();
+      expect(await canListen(port)).toBe(true);
+      expect(exit).not.toHaveBeenCalled();
+    }
+    expect(factory).not.toHaveBeenCalled();
+    expect(createPoolSpy).not.toHaveBeenCalled();
+    expect(await db.query('SELECT id, status::text, retry_count, worker_id, error_message, updated_at FROM scans ORDER BY id')).toEqual(before);
+    expect((await scan(db, queued)).status).toBe('queued');
+    expect((await scan(db, orphan)).status).toBe('running');
+    expect(await reportStatus(db, report)).toBe('generating');
+    expect(await holders(db)).toEqual([]);
+  });
+});
+
+describe('AC-T-3 / AC-P12-6 step 5: git missing or older than 2.32 never stops the start-up', () => {
+  const NOT_FOUND: GitVersionInfo = { found: false, version: null, major: null, minor: null, supported: false };
+  const OLD: GitVersionInfo = { found: true, version: '2.31.9', major: 2, minor: 31, supported: false };
+
+  it.each([
+    ['missing', async () => NOT_FOUND, /^git bulunamadı/, 'yok'],
+    ['2.31.9', async () => OLD, /^git 2\.31\.9 eski/, '2.31.9'],
+    [
+      'probe failing',
+      async (): Promise<GitVersionInfo> => {
+        throw new Error('spawn git ENOENT');
+      },
+      /^git sürüm kontrolü yapılamadı/,
+      'yok',
+    ],
+  ] as const)(
+    'git %s: the runtime starts with a warning (default checkGit); a remote scan fails permanently with the requirement message, no clone, no temp folder; a local scan completes',
+    async (_label, gitVersion, warning, found) => {
+      const db = await newDb();
+      const tmpRoot = fs.mkdtempSync(path.join(tmpBase, 'git-tmp-'));
+      const clone = vi.fn<CloneRepoFn>();
+      const remoteScan = await insertScan(db, await insertProject(db, 'https://github.com/org/repo.git'), { status: 'queued' });
+      const { runtime, logs, port, root } = await harness(db, { checkGit: undefined, gitVersion, tmpRoot, scanWorker: { cloneRepo: clone } });
+
+      await runtime.start();
+      expect(runtime.state).toBe('running');
+      expect(await health(port)).toBe(200);
+      expect(logs.some((l) => warning.test(l))).toBe(true);
+
+      const localScan = await insertScan(db, await insertProject(db, root), { status: 'queued' });
+      await vi.waitFor(async () => expect((await scan(db, remoteScan)).status).toBe('failed'), { timeout: 15_000, interval: 100 });
+      await vi.waitFor(async () => expect((await scan(db, localScan)).status).toBe('completed'), { timeout: 15_000, interval: 100 });
+      const remote = await scan(db, remoteScan);
+      expect(remote).toMatchObject({ retry_count: 0, next_attempt_at: null });
+      expect(remote.error_message).toBe(gitRequirementMessage(found === 'yok' ? NOT_FOUND : OLD));
+      expect(remote.error_message).toContain(`(bulunan: ${found})`);
+      expect(clone).not.toHaveBeenCalled();
+      expect(fs.readdirSync(tmpRoot).filter((n) => n.startsWith('ossrisk-scan-'))).toEqual([]);
+    },
+  );
+});
+
+describe('Observation (product bug): Host allow-list with an ephemeral port', () => {
+  // createRuntime({ port: 0 }) builds the Host/Origin allow-list from port 0
+  // (src/runtime.ts listenApp call -> src/app.ts buildAllowedOrigins), so every
+  // request to the actually bound port is rejected with 403. Expected: the
+  // allow-list follows the bound port. Red until the backend fix.
+  it('createRuntime({ port: 0 }) binds a free port and GET /health with Host 127.0.0.1:<bound port> answers 200', async () => {
+    const db = await newDb();
+    const { runtime } = await harness(db, { port: 0 });
+    await runtime.start();
+    const bound = runtime.address?.port ?? 0;
+    expect(bound).toBeGreaterThan(0);
+    expect(await health(bound)).toBe(200);
   });
 });
 

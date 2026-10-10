@@ -119,9 +119,8 @@ describe('M-1: recheck write-phase time cap', () => {
 describe('L-3: pause aborts the in-flight expiry evaluation', () => {
   it.each([
     ['L-3: pause() aborts a running P-19 evaluation; no expiry tick runs while paused; resume() allows it again', false],
-    // KNOWN RED (product bug, scheduler.ts expiryTick): a second tick queued behind the mutex
-    // overwrites `expiryController`, so pause() aborts only the queued tick and the in-flight
-    // evaluation keeps writing without the lock.
+    // Regression guard (fixed in 3cda79a): a second tick queued behind the mutex must not replace
+    // the running evaluation's controller; pause() aborts every tracked expiry controller.
     ['L-3: pause() aborts the running P-19 evaluation even when another expiry tick is queued behind it', true],
   ])('%s', async (_name, queueSecondTick) => {
     let queued: Promise<void> = Promise.resolve();

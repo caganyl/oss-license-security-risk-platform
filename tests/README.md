@@ -66,6 +66,7 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `unit/errorText.test.ts` | L-5 (AC-T-4): `sanitizeErrorText` — 2000 kod noktası, yollar (iki ayırıcı, harf duyarsız, sınır kuralı), sırlar, kontrol karakterleri |
 | `unit/gitVersion.test.ts` | AC-T-3: `parseGitVersion` tablosu, gereksinim mesajı, `GitUnavailableError`, `defaultCheckGit` (yalnız log), gerçek `git --version` |
 | `unit/mainEntry.test.ts` | D-52 / REQ-002 AC-P09-3: `main()` `DATABASE_URL` yokken tek hata satırı + `exit(1)` (`dotenv/config` taklit edilir, `.env` okunmaz) |
+| `integration/lockIntegrityE2E.test.ts` | REQ-005 L-5 uçtan uca (AC-L5-2, AC-L5-4): `ScanWorker.runOnce` + gerçek ayrıştırıcı iş parçacığı + sahte kayıt defteri; çıktılar `ReportService`/`NoticeService`/`SbomService` ile veritabanından |
 | `integration/errorTextPersistence.test.ts` | L-5 uçtan uca: tarama (clone, ayrıştırıcı, `parse_errors`) ve rapor (`ReportService` dosya hatası, atılan hata) `error_message` yazımları |
 | `integration/excelExport.test.ts` | AC-T-5: `uuid` 11.1.1 ile Excel raporu üretilir, `.xlsx` ExcelJS ile geri okunur (sayfa, başlık, satır) |
 | `unit/parserLinear.test.ts` | Güvenlik incelemesi M-1: `pyStrip`/`pyRstrip`/`isPyWhitespace` ↔ Python `str.strip` boşluk tablosu (tüm BMP), eski regex'le farksızlık; `matchRequirementLine` ↔ eski `REQUIREMENT_RE` (deterministik tohumlu rastgele girdiler); 1–2 MB boşluklu `requirements.txt`/`yarn.lock`/`package.json`/`pyproject.toml` < 1 sn (assert < 2 sn) |
@@ -448,8 +449,8 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | AC-P17-1…14 (motor, güvenli istemci, NVD, bütçe, iptal) | `unit/vulnLookup.test.ts` (batch A, `helpers/fakeOsv.ts`) |
 | AC-P17-5 / 11 / 12, AC-G-8 (worker DB yazımı, `[registry]`→`[osv]` sırası, asgari kayıt, çevrimdışı, motor yok = F3) | `integration/vulnStatusWorker.test.ts` "AC-P17-* / AC-G-8: scan worker …" |
 | AC-L5-1, AC-L5-3, AC-N1-* | `unit/lockIntegrityN1.test.ts` (batch A) |
-| AC-L5-2 / AC-L5-4 (uçtan uca: NOASSERTION bulgusu, arşiv isteği yok, Excel/NOTICE/SBOM) | **eksik** — yalnız birim düzeyi (batch A); uçtan uca test yazılmadı |
-| AC-P17-8 runtime uyarısı (`OSV_API_URL` → tek uyarı, değer yok) | `unit/vulnLookup.test.ts` `warnRemovedVulnerabilitySettings` (batch A); runtime başlangıç testi **eksik** |
+| AC-L5-2 / AC-L5-4 (uçtan uca: NOASSERTION bulgusu, arşiv isteği yok, Excel/NOTICE/SBOM) | `integration/lockIntegrityE2E.test.ts` — gerçek proje klasörü (package.json + package-lock v3), varsayılan kilit farkında ayrıştırıcı iş parçacığı, sahte kayıt defteri: uyuşmazlık → `lock_integrity='mismatch'`, `license_source='none'`, `notice_status='not_attempted'`/`'not_runtime'`, tarball isteği yok, NOASSERTION bulgusu, Excel `none (lockfile integrity mismatch)`, NOTICE satır 15 `Reason:`, SPDX/CycloneDX NOASSERTION, `[registry]` üçüncü şablon (X=2); eşleşen kontrol paketi F3 gibi; önbellekteki arşiv yeniden taramada kullanılmaz; çoklu SRI eşleşmesi / yalnız `sha1` → `match` / `not_comparable`, satır yok |
+| AC-P17-8 runtime uyarısı (`OSV_API_URL` → tek uyarı, değer yok) | `unit/vulnLookup.test.ts` `warnRemovedVulnerabilitySettings` (batch A); `integration/runtime.test.ts` "REQ-005 AC-P17-8 …" (`createRuntime` başlangıcı: değişken başına tek `warn`, adım 1'de; değer hiçbir logda/konsolda yok; istemci `endpoints` = üretim kökenleri) |
 | F4 statik denetimler (AC-G-*) | `security/f4Static.test.ts` (batch A) |
 | AC-P18-1, AC-P18-2 (zamanlayıcı, vade, telafi, bozulmuş kip, 60 s / 10 dk / saatlik) | `integration/vulnRecheck.test.ts` "computeNextDue", "scheduler timers", "scheduler with the database" |
 | AC-P18-3…9, AC-P18-12 (kapsam, rapor kriteri uçtan uca, parmak izi, karar taşıma, çit, durum geçiş tablosu, çevrimdışı, `error_summary`, denetim şekli) | `integration/vulnRecheck.test.ts` |
@@ -468,18 +469,15 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | M-1 (OSV kimlik/ayrıntı sınırları, yazım süre sınırı, §3.5.1) | `unit/vulnLookupPostReview.test.ts` "M-1 …" (201 kimlik/paket ve sayfalar arası 101+100 → `id_limit`; 5001 ayrı kimlik → `total_id_limit`; 2002 ayrıntı → 2000 istek + `detail_limit`, D=2); `integration/f4PostReview.test.ts` "M-1 …" (proje transaction'ı içinde süre dolar → proje geri alınır, `partial` + `osv:time_limit`) |
 | L-1 (katı RFC 3339, 0–10 puan, §3.5.2) | `unit/f4PostReview.test.ts` "L-1 …" (takvim/saat/ofset/yıl sınırları, geçersiz → alan NULL, kayıt korunur; OSV ve NVD aralık dışı/NaN puan); `unit/vulnLookupPostReview.test.ts` "L-1 …" (geçersiz querybatch `modified` → yeniden çekme) |
 | L-2 (tek anahtar ayrıştırıcı, §7.1) | `unit/f4PostReview.test.ts` "L-2 …" (tüm yazımlar, boş → açık, geçersiz → kapalı + yalnız değişken adını içeren tek uyarı; dört anahtar dahil `REGISTRY_ENRICHMENT`). "Geçersiz → açık" bekleyen eski F3 testi yoktu |
-| L-3 (kilit kaybında süre değerlendirmesi iptali) | `integration/f4PostReview.test.ts` "L-3 …" — **bilinen kırmızı:** kuyruğa ikinci tick girince in-flight değerlendirme iptal edilmiyor (ürün hatası, aşağıda) |
+| L-3 (kilit kaybında süre değerlendirmesi iptali) | `integration/f4PostReview.test.ts` "L-3 …" (kuyrukta ikinci tick varken de çalışan değerlendirme iptal edilir — `3cda79a` ile düzeltildi, regresyon koruması) |
 | L-4 (deneme başına devre kesici, 5xx/429) | `unit/vulnLookupPostReview.test.ts` "L-4 …", `unit/vulnLookup.test.ts` "AC-P17-10: circuit breaker" (6 → 5 deneme) |
 | L-6 (çakışmaya dayanıklı katalog upsert) | `integration/f4PostReview.test.ts` "L-6 …" (iki eşzamanlı transaction aynı açığı ekler, ikisi de commit eder, tek satır) |
 | L-7 (sayfalı kapsam) | `integration/f4PostReview.test.ts` "L-7 …" (10 001 paket → 10 000 kontrol + `osv:package_limit`; sorgu casusu: kapsam sorguları sayfa başına ≤ 5000 satır) |
 | I-2 (`NVD_API_KEY` testte yok) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 security I-2 …" |
 
-Bilinen kırmızı: `integration/f4PostReview.test.ts` "L-3: pause() aborts the running P-19 evaluation even when another
-expiry tick is queued behind it" — `scheduler.ts` `expiryTick()` her çağrıda `expiryController`'ı ezer; kuyruktaki tick
-çalışan değerlendirmenin denetleyicisini değiştirdiği için `pause()` yalnız kuyruktakini iptal eder.
-
-Hâlâ eksik (bu turda yazılmadı): AC-L5-2/AC-L5-4 uçtan uca worker testi ve `OSV_API_URL`/`NVD_API_URL` runtime
-başlangıç uyarısı testi (yukarıdaki tabloda "eksik" satırları).
+Bilinen kırmızılar: yok. (`integration/f4PostReview.test.ts` "L-3: pause() aborts the running P-19 evaluation even
+when another expiry tick is queued behind it" — kuyruktaki tick `expiryController`'ı eziyordu — `3cda79a` ile düzeltildi:
+her süre denetleyicisi izlenir, `pause()`/`stop()` hepsini iptal eder; test artık yeşil.)
 
 Yardımcılar: `helpers/f4Seed.ts` (paket upsert'li tarama/bulgu/inceleme tohumlama, sahte OSV'ye karşı gerçek
 sorgu motoru). Testler `VULNERABILITY_RECHECK=off` test varsayılanıyla çalışır; durum uç noktasındaki

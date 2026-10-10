@@ -42,6 +42,8 @@ import { gitRequirementMessage, type GitVersionInfo } from '../../src/scanner/gi
 import { ORPHAN_RECOVERY_MESSAGE } from '../../src/scanner/retryPolicy';
 import type { CloneRepoFn } from '../../src/scanner/workspace';
 import type { RunParserFn, SandboxScanResult } from '../../src/types/scan';
+import type { VulnerabilityClient } from '../../src/vulnerability/client';
+import { PRODUCTION_VULNERABILITY_ENDPOINTS } from '../../src/vulnerability/endpoints';
 import { useScratchDatabases, useTestDatabase, type ScratchDatabase } from '../helpers/db';
 import { applyMigrations, migrationVersions } from '../helpers/migrations';
 import { FIXTURES_DIR } from '../helpers/paths';
@@ -878,5 +880,61 @@ describe('AC-P12-15: losing the lock connection -> degraded mode', () => {
     expect(runtime.state).toBe('stopped');
     expect(await holders(db)).toEqual([otherPid]);
     expect(await reportStatus(db, foreignReport)).toBe('generating');
+  });
+});
+
+describe('REQ-005 AC-P17-8 / D-88: removed OSV_API_URL / NVD_API_URL settings at runtime start-up', () => {
+  it('AC-P17-8: both variables set -> exactly one warning per variable naming it (never the value) at step 1; the vulnerability client keeps the production origins', async () => {
+    const db = await newDb();
+    // Test-only values (loopback, distinctive markers); they must never be read into the client or logged.
+    const OSV_VALUE = 'http://127.0.0.1:9/qa-osv-override-7c1e';
+    const NVD_VALUE = 'http://127.0.0.1:9/qa-nvd-override-4b2d';
+    const entries: Array<{ level: 'log' | 'warn' | 'error'; text: string }> = [];
+    const capture = (level: 'log' | 'warn' | 'error') => (...a: unknown[]) => entries.push({ level, text: a.map(String).join(' ') });
+    const logger = { log: capture('log'), warn: capture('warn'), error: capture('error') };
+    // Also in process.env: a module that read the process environment instead of the injected env would be caught too.
+    process.env.OSV_API_URL = OSV_VALUE;
+    process.env.NVD_API_URL = NVD_VALUE;
+    try {
+      const { runtime, logs, port } = await harness(db, {
+        env: { DATABASE_URL: db.url, OSV_API_URL: OSV_VALUE, NVD_API_URL: NVD_VALUE },
+        logger,
+        // The recheck/expiry scheduler is not under test (same reason as the AC-T-3 test above).
+        vulnerabilityScheduler: null,
+      });
+      await runtime.start();
+      expect(runtime.state).toBe('running');
+      expect(await health(port)).toBe(200);
+
+      for (const name of ['OSV_API_URL', 'NVD_API_URL']) {
+        const naming = entries.filter((e) => e.text.includes(name));
+        expect(naming, name).toHaveLength(1);
+        expect(naming[0].level, name).toBe('warn');
+      }
+      // Step 1 (environment), before anything listens.
+      const warnAt = entries.findIndex((e) => e.text.includes('OSV_API_URL'));
+      const listenAt = entries.findIndex((e) => /^API dinliyor/.test(e.text));
+      expect(warnAt).toBeGreaterThanOrEqual(0);
+      expect(listenAt).toBeGreaterThan(warnAt);
+
+      // The value never appears anywhere: runtime logger, scan worker logger, console.
+      const consoleText = [console.log, console.warn, console.error]
+        .flatMap((fn) => vi.mocked(fn).mock.calls)
+        .map((call) => call.map(String).join(' '));
+      for (const text of [...entries.map((e) => e.text), ...logs, ...consoleText]) {
+        for (const marker of ['qa-osv-override', 'qa-nvd-override', '127.0.0.1:9/']) expect(text).not.toContain(marker);
+      }
+
+      // The runtime-created client targets the production origins (private field, read for the test only).
+      const client = (runtime as unknown as { vulnerabilityClient: VulnerabilityClient | null }).vulnerabilityClient;
+      expect(client).not.toBeNull();
+      expect(client?.endpoints).toEqual({ osv: 'https://api.osv.dev', nvd: 'https://services.nvd.nist.gov' });
+      expect(client?.endpoints).toEqual({ ...PRODUCTION_VULNERABILITY_ENDPOINTS });
+      // No outbound request: VULNERABILITY_LOOKUP=off test default, and the network guard fails the test on any attempt.
+      expect(await runtime.shutdown('manual')).toBe(0);
+    } finally {
+      delete process.env.OSV_API_URL;
+      delete process.env.NVD_API_URL;
+    }
   });
 });

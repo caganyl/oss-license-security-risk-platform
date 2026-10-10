@@ -436,7 +436,7 @@ dolaylı olarak "parti başına bir metin sorgusu / kesimden sonra sorgu yok" il
 `ReportService` iç metotları (`loadReportData`, `renderContent`) L-2 testinde tip dönüşümüyle
 çağrılır; metot adları değişirse test güncellenmelidir.
 
-### REQ-005 (F4) AC → test (hazırlık; devam ediyor)
+### REQ-005 (F4) AC → test
 
 `setup/networkGuard.ts` ayrıca `VULNERABILITY_LOOKUP=off`, `VULNERABILITY_RECHECK=off`
 atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi").
@@ -445,6 +445,24 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | --- | --- |
 | D-91 (test varsayılanları) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 D-91 …" |
 | AC-G-7 (göç `007`) | `integration/migrateTool.test.ts` "REQ-005 AC-G-7: migration 007_vulnerability_recheck" (up → down → up şema eşitliği, `006` şemasına birebir dönüş, enum değişmez, CHECK kümeleri, tek `running` satırı → 23505, `findings.recheck_run_id` ON DELETE SET NULL, down bulgu silmez) ve "AC-P11-15 …" (007 SHA-256 donduruldu) |
+| AC-P17-1…14 (motor, güvenli istemci, NVD, bütçe, iptal) | `unit/vulnLookup.test.ts` (batch A, `helpers/fakeOsv.ts`) |
+| AC-P17-5 / 11 / 12, AC-G-8 (worker DB yazımı, `[registry]`→`[osv]` sırası, asgari kayıt, çevrimdışı, motor yok = F3) | `integration/vulnStatusWorker.test.ts` "AC-P17-* / AC-G-8: scan worker …" |
+| AC-L5-1, AC-L5-3, AC-N1-* | `unit/lockIntegrityN1.test.ts` (batch A) |
+| AC-L5-2 / AC-L5-4 (uçtan uca: NOASSERTION bulgusu, arşiv isteği yok, Excel/NOTICE/SBOM) | **eksik** — yalnız birim düzeyi (batch A); uçtan uca test yazılmadı |
+| AC-P17-8 runtime uyarısı (`OSV_API_URL` → tek uyarı, değer yok) | `unit/vulnLookup.test.ts` `warnRemovedVulnerabilitySettings` (batch A); runtime başlangıç testi **eksik** |
+| F4 statik denetimler (AC-G-*) | `security/f4Static.test.ts` (batch A) |
+| AC-P18-1, AC-P18-2 (zamanlayıcı, vade, telafi, bozulmuş kip, 60 s / 10 dk / saatlik) | `integration/vulnRecheck.test.ts` "computeNextDue", "scheduler timers", "scheduler with the database" |
+| AC-P18-3…9, AC-P18-12 (kapsam, rapor kriteri uçtan uca, parmak izi, karar taşıma, çit, durum geçiş tablosu, çevrimdışı, `error_summary`, denetim şekli) | `integration/vulnRecheck.test.ts` |
+| AC-P18-13 (`RECHECK=off`, `LOOKUP=off` → `disabled`) | `integration/vulnRecheck.test.ts` "AC-P18-13 …" |
+| AC-P18-10 (durum uç noktası: 401/403/200, şema, `no-store`, salt okuma, 500 kesimi, sayımlar) | `integration/vulnStatusWorker.test.ts` "AC-P18-10 …" |
+| AC-P18-11 / AC-P19-7 (Dashboard paneli, jsdom) | `security/vulnPanel.test.ts` |
+| AC-P18-14 | insan doğrulaması (gerçek ağ; handoff) |
+| AC-P19-1…5, AC-P19-8 (sınır günü, NULL/incelemesiz, denetim şekli, idempotent, 500'lük parti + SKIP LOCKED, hata) | `integration/vulnRecheck.test.ts` "risk acceptance expiry" |
+| AC-P19-2 / AC-P19-6 / AC-P19-7 (API üzerinden `open`, yeniden kabul, 7 gün sayımı) | `integration/vulnStatusWorker.test.ts` "AC-P19-2 / AC-P19-6 / AC-P19-7 …" |
+
+Yardımcılar: `helpers/f4Seed.ts` (paket upsert'li tarama/bulgu/inceleme tohumlama, sahte OSV'ye karşı gerçek
+sorgu motoru). Testler `VULNERABILITY_RECHECK=off` test varsayılanıyla çalışır; durum uç noktasındaki
+`next_check_earliest_at` beklentisi etkin `recheck_enabled` değerine göre kurulur.
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

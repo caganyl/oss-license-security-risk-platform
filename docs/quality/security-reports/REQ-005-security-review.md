@@ -166,3 +166,111 @@ Merge öncesi koşullar:
 ## Handoff notu
 
 Bu inceleme non-trivial. `docs/handoffs/REQ-005.md` dosyasının bu raporun bulgularıyla (M-1, L-1…L-7, kabul edilen riskler ve insan onayı gerektiren L-5) güncellenmesi gerekiyor. Security Red Team handoff'u kendisi güncellemez; Delivery Lead / Integration-Release bilgilendirilmeli. Düzeltmelerden sonra Security Red Team yeniden inceleme yapacak.
+
+---
+
+## Yeniden doğrulama (2026-10-11)
+
+- İnceleme aralığı: `git diff 1045dc5..HEAD`. Kapsam: contract 1.1.0 (`6d9bac3`), kod `3fdb538` ve `3cda79a` (L-3 sıradaki tetik takibi), testler `d67b327` ve `ff1609b`. 25 dosya, +2 295 / −151.
+- Okunan kod: `src/vulnerability/{cvss3,validate,normalize,osvClient,lookup,findingWriter,recheck,scheduler}.ts`, `src/lib/http/safeHttpClient.ts`, `src/scanner/sandbox/runner.config.ts`, `tests/setup/networkGuard.ts`.
+- Okunan dokümanlar: README F3/F4 bölümleri, `docs/contracts/REQ-005-vulnerability-data.md` §7.2, `docs/contracts/REQ-004-notice-and-outputs.md` 1.3.0 (C-24).
+- Test adları yalnız statik olarak okundu: `tests/unit/f4PostReview.test.ts`, `tests/unit/vulnLookupPostReview.test.ts`, `tests/integration/f4PostReview.test.ts`.
+- **Yöntem kısıtı:** Bu oturumda test çalıştırılmadı. "1033 geçti / 2 atlandı / 0 kırmızı" sonucu QA'nın beyanıdır. Ana oturumun gerçek ağ ölçümleri de **beyan** olarak alındı, doğrulanmadı.
+
+### Bulgu durumu
+
+| ID | Durum | Kanıt / not |
+| --- | --- | --- |
+| **M-1** | **Kapandı** | Paket başına tüm sayfalar dahil ≤ 200 benzersiz kimlik (`id_limit`), lookup başına ≤ 5 000 benzersiz kimlik (`total_id_limit`, referans sayımlı; düşürülen paket kendi getirdiği kimlikleri serbest bırakıyor) (`osvClient.ts`, `runner.config.ts` `osvMaxIdsPerPackage/osvMaxDistinctIds`). Ağ ayrıntı isteği ≤ 2 000 (`detail_limit`, `lookup.ts`). Recheck yazma fazı 30 dk çalıştırma sınırına bağlı: her proje transaction'ından ve her bağımlılıktan önce `deadlineMs` denetleniyor, dolunca o anki proje `ROLLBACK` ediliyor ve sonuç `partial` + `osv:time_limit` oluyor (`recheck.ts` `WriteTimeLimit`). `WriteTimeLimit` bağlantıyı bozuk saymıyor; yalnız o proje geri alınıyor, daha önce commit edilen projeler kalıyor. Bellek ve yazma hacmi artık sınırlı. Testler: `vulnLookupPostReview` (201/200, sayfalar arası 101+100, 5001, 2001), `f4PostReview` entegrasyon (yazma sınırı geri alma). Kalan: Y-1. |
+| **L-1** | **Kapandı** | `validate.ts`: katı RFC 3339 deseni, takvim ve saat denetimi, yıl 0001–9999, `toISOString()` ile normalleştirme. Geçersiz alan yok sayılıyor, kayıt korunuyor. `published`/`modified` (`osvClient.ts`, `normalize.ts`) ve querybatch `modified` için geçerli; geçersiz `modified` yalnız yeniden çekmeyi tetikliyor ve ayrıntı sınırına tabi. Sayısal puan yalnız sonlu ve `0 ≤ x ≤ 10` aralığında kabul ediliyor (`validCvssScore`); `BS:` yolu da aynı denetimden geçiyor. Kalan: `withdrawn` hâlâ esnek `isIsoDate` ile okunuyor (I-12). |
+| **L-2** | **Kapandı** | Tek ayrıştırıcı `parseSwitch`: `on/true/1/yes` → açık, `off/false/0/no` → kapalı, boş → açık, diğer değer → **kapalı** + yalnız değişken adını içeren tek uyarı. `VULNERABILITY_LOOKUP`, `VULNERABILITY_RECHECK`, `NVD_ENABLED` ve `REGISTRY_ENRICHMENT` bunu kullanıyor. README ve REQ-004 contract 1.3.0 C-24 güncellendi. Bkz. I-10. |
+| **L-3** | **Kapandı** | `pause()` ve `stop()`, canlı her P-19 değerlendirmesinin denetleyicisini iptal ediyor; mutex arkasında bekleyen tetik tek slotu ezemiyor (`expiryControllers` kümesi, `3cda79a`). `canTrigger()` sıradaki tetiği de durduruyor. Bir batch commit sırasında iptal edilirse o batch geri alınıyor (`expiry.ts:154-158`). |
+| **L-4** | **Kapandı** | Devre kesici her denemede güncelleniyor ve her denemeden önce denetleniyor. `429`/`5xx` başarısız deneme sayılıyor (`fail`); diğer HTTP yanıtları sayacı sıfırlıyor (`safeHttpClient.ts` `AttemptBreaker`). Sürekli 503 dönen uç artık 5 denemede kapanıyor. Paylaşılan istekte izi yalnız başka oturumların bekleyenleri yeniden oynatıyor; çift sayım yok. Testler: kalıcı 503, uzun `Retry-After`'lı 429, 404 sıfırlaması. Yan etki: NVD 429'ları artık devreye sayılıyor (Y-2). |
+| **L-5** | **Belgelendi; insan onayı bekliyor** | README'de ön kontrol SQL'i var (salt okunur transaction, `expiry.ts` ile aynı seçim kuralı, `<BUGUN>` = sunucunun yerel tarihi). Contract §7.2(b)'de insan onaylı geri alma prosedürü var: önce durdur, yedek al, nedeni düzelt, salt okunur sayım yap, tek transaction'da sayı uyuşmazsa `ROLLBACK`. Sonradan kullanıcı veya sistem işlemi görmüş bulgular hariç tutuluyor; yalnız `status = 'open'` olanlar geri dönüyor; telafi audit satırı (`risk_acceptance_expiry_reverted`) yazılıyor; orijinal audit satırları silinmiyor. Kapatma anahtarı bilinçli olarak eklenmedi (V-19, ürün kararı). Prosedürün iki zayıf noktası I-13'te. **İnsan kabul metni (önerilen, handoff'a):** "F4'ün ilk açılışında P-19, ön kontrol sorgusunun `would_reopen` sayısı kadar kabul edilmiş bulguyu (süresi geçmiş, süresiz ve incelemesiz olanlar dahil) kullanıcı eylemi olmadan `open` yapacaktır. Bu sayıyı `<tarih>` tarihinde `<N>` olarak gördüm ve kabul ediyorum. Değerlendirmenin kapatma anahtarı yoktur; yanlış değerlendirmede yalnız contract §7.2(b) prosedürü, ayrı insan onayıyla uygulanacaktır." |
+| **L-6** | **Kısmen kapandı** | Unique yarışı kapandı: katalog eklemesi `ON CONFLICT DO NOTHING` kullanıyor; satır eklenmezse bir kez yeniden okunup güncelleme yoluna gidiliyor, ikinci başarısızlık sentetik `23505` üretiyor (`findingWriter.ts`). Entegrasyon testi iki eşzamanlı transaction'ın tek katalog satırıyla commit ettiğini gösteriyor. **Açık kalan:** ters sırada `UPDATE vulnerabilities` kaynaklı `40P01` (deadlock) riski. Sıralama veya yeniden deneme eklenmedi ve test yok (Y-3). Hedefsiz `ON CONFLICT` değerlendirmesi I-11'de. |
+| **L-7** | **Kapandı** | Kapsam, SQL'de benzersiz koordinatlar üzerinden keyset ile sayfalanıyor (sayfa 5 000, `COLLATE "C"`). Proje başına anahtarlar yazma transaction'ında yeniden hesaplanıyor. Bellekte en fazla 10 000 temsilci ve bir sayfa tutuluyor. Test: 10 001 paket, hiçbir sorgu 5 000'den fazla satır döndürmüyor. Küçük sapmalar I-14'te. |
+| I-1 | Kabul edildi | Anahtar biçimi hâlâ doğrulanmıyor; sızıntı yok (Node yalnız başlık adını bildiriyor, loglanmıyor). Düşük öncelikli iyileştirme. |
+| I-2 | **Kapandı** | `tests/setup/networkGuard.ts` artık `NVD_API_KEY`'i siliyor; `tests/unit/networkGuard.test.ts` güncellendi. |
+| I-3 | Kabul edildi | Tek kullanıcılı modelde `/api/projects` ile tutarlı. Çok kullanıcılı moda geçilirse yeniden açılmalı. |
+| I-4 | Kabul edildi (takip) | `(scan_id, fingerprint)` unique kısıtı yok. Uygulama düzeyindeki koruma yeterli; derinlemesine savunma için takip işi. |
+| I-5 | **Kapandı (belgelendi)** | README L-5 maddesine "Bilinen sınır" eklendi (`integrity` silinirse `not_comparable` ve F3 davranışı). REQ/ADR'deki "yalnız daha muhafazakâr sonuç" cümlesinin düzeltilmesi product-analyst'te. |
+| I-6 | **Kapandı (belgelendi)** | README'de OSV/NVD'ye ne gidip ne gitmediği listelendi; zamanlanmış trafik ve kapatma ayarları yazıldı. Kurumsal TLS denetimli vekilin içeriği ve `apiKey`'i görebileceği açıkça yazılmamış; eklenmesi önerilir. |
+| I-7 | **Kapandı** | L-4 düzeltmesiyle başlatan oturum izi yeniden oynatmıyor; çift sayım kalktı. |
+| I-8 | Kabul edildi | M-1 sınırlarıyla kimlik haritaları da sınırlı. `OSV_CONCURRENCY=32` bellek uyarısı README'de yok; düşük öncelik. |
+| I-9 | Kapandı | Değişiklik yok. Yeni CVSS hesaplayıcı için bkz. P-1 değerlendirmesi. |
+
+### Düzeltmelerin getirdiği değişikliklerin değerlendirmesi
+
+**P-1 — Yerel CVSS v3 hesaplayıcı (`src/vulnerability/cvss3.ts`): sorun bulunmadı**
+- Girdi doğrulama: önek tam olarak `CVSS:3.0/` veya `CVSS:3.1/` olmalı, uzunluk ≤ 256. `split('/')` ile ayrıştırılıyor. Boş bileşen, sondaki `/`, `:` eksikliği, tekrarlanan metrik, bilinmeyen metrik ve geçersiz değer `null` döndürüyor. 8 taban metriğin hepsi zorunlu. Metrik adı `hasOwnProperty` ile aranıyor; `__proto__`/`constructor` adları reddediliyor. Regex yok, ReDoS yüzeyi yok. Döngü en fazla ~128 bileşen.
+- Sayısal uç durumlar: ağırlıklar sabit tablodan geliyor. `impact ≤ 0` → 0; kapsam değiştiğinde ISS=0 için negatif etki 0'a düşüyor. `min(…, 10)` sonra `roundUp` uygulanıyor; sonuç her zaman 0.0–10.0 aralığında ve bir ondalıklı, yani `NUMERIC(4,1)` ile uyumlu. `roundUp` v3.1 Ek A'nın tamsayı yöntemi. v3.0 vektörlerinde NVD'nin v3.0 yuvarlamasından nadir kayan nokta sınır durumlarında 0.1 fark olabilir; güvenlik etkisi yok (sınıf eşiği yalnız tam sınırda değişebilir).
+- Sıra: önce geçerli sayısal puan (0–10), sonra yalnız `type === 'CVSS_V3'` olan ilk geçerli vektör, sonra NVD. `CVSS_V4`/`CVSS_V2` vektörleri yerelde puanlanmıyor. Kaynak yalnız `advisory_data.cvss.source` içinde tanılama olarak tutuluyor.
+- Testler: kayıtlı NVD vektör/puan çiftleri, sıra bağımsızlığı, geçersiz vektörler ve `roundUp`.
+- Güven notu: Puanın kaynağı artık NVD değil, OSV'deki vektör. Kötü niyetli bir OSV kaydı (A4) zaten sayısal puanla aynı etkiyi yaratabiliyordu. Yeni bir güven genişlemesi yok.
+
+**L-2 — `REGISTRY_ENRICHMENT` için de fail-closed: kabul edilebilir (I-10)**
+- Davranış F3'ten farklı: geçersiz değer artık zenginleştirmeyi kapatıyor. Lisanslar lock ipucundan (doğrulanmamış) geliyor ve uyarılarda `[registry] License enrichment disabled` satırı çıkıyor. Lisans doğruluğu sessizce düşmüyor; görünür. Gizlilik açısından doğru yön. REQ-004 contract 1.3.0 C-24 ile onaylı. ADR-006 Karar 14 ve REQ-004 AC-P14-16 metinlerinin güncellenmesi açık (solution-architect / product-analyst).
+
+**L-4 — Deneme başına devre kesici: doğru; NVD'de yan etkisi var (Y-2)**
+
+**L-6 — Hedefsiz `ON CONFLICT DO NOTHING`: kabul edilebilir (I-11)**
+- Hedefsiz ifade, `cve_id`/`ghsa_id`/`osv_id` unique kısıtlarının ve PK'nın hepsinde çakışmayı yutuyor. Bir kez yeniden okuma ve ardından sentetik `23505` ile sonsuz döngü ve sessiz veri kaybı engelleniyor: çakışan satır ikinci okumada bulunursa güncelleme yolu çalışıyor. İleride eklenecek başka bir unique kısıt da sessizce bu yola girer; kısıt adlarını açıkça yazmak (`ON CONFLICT ON CONSTRAINT …`) mümkün değil, çünkü birden çok hedef var. Bu yüzden mevcut biçim makul. Güncelleme yolundaki `COALESCE` ile başka bir satırın kimliğine çakışma F3'ten kalan bir davranış ve kapsam dışı.
+
+**L-7 — Sayfalı kapsam SQL'i: doğru (I-14)**
+- Parametreli; keyset karşılaştırmasında açık `COLLATE "C"` örtük collation'a baskın geliyor, ORDER BY ile tutarlı. Sayfalama SQL değerleri üzerinde tutarlı olduğu için satır atlanmıyor veya döngüye girilmiyor.
+
+**M-1 — Yazma fazı sınırı ve geri alma: doğru (Y-1)**
+
+### Yeni bulgular
+
+#### Y-1 — Recheck yazma fazı, lookup'ın bütçesini tamamen tükettiği durumda hiç süre alamıyor (Low)
+- **Kanıt:** `recheck.ts`: lookup `budgetMs: runTimeoutMs` (30 dk) ile, lookup başlangıcından itibaren çalışıyor. Yazma son tarihi ise `startMs + runTimeoutMs`; P-19 ve kapsam okuma süresi de buna dahil. Lookup bütçesini doldurursa (ör. anahtarsız NVD ile yüzlerce CVE: 5 istek / 30 sn) yazma döngüsü ilk projede `clock.now() >= deadlineMs` görüyor ve hiçbir şey yazmıyor. Başarılı OSV sonuçlarından gelen yeni bulgular atılıyor (`partial`, `osv:time_limit`).
+- **Etki:** Büyük envanterde ilk günlerde yeni açık bulguları gecikir. OSV ayrıntı ve NVD önbelleği lookup'tan bağımsız yazıldığı için sonraki çalıştırmalar hızlanır ve sorun kendiliğinden düzelir. Güvenlik etkisi gecikme ile sınırlı.
+- **Düzeltme:** Tarama tarafındaki formüle benzer şekilde yazma fazı için süre ayrılmalı, ör. `lookupBudget = min(runTimeoutMs × 3/4, deadline − now − 5 dk)`. Ya da NVD adımı bütçenin bir payıyla sınırlanmalı. Test: lookup bütçeyi doldurduğunda en az bir proje yazılmalı.
+- **Merge kararı:** Merge'ü engellemez; takip işi.
+
+#### Y-2 — NVD hız sınırlayıcısında güvenlik payı yok; 429'lar artık devre kesiciye sayılıyor (Low)
+- **Kanıt ve analiz:** Sınırlayıcı, deneme **başlangıçlarını** yerel saatle tam 30 000 ms pencerede sayıyor ve slotu `starts[0] + windowMs` anında serbest bırakıyor (`rateLimiter.ts`). NVD ise isteklerin **varış** zamanını kendi kayan penceresinde sayıyor. Bağlantı, TLS el sıkışması veya vekil gecikmesi isteğe göre değişir. k. istek 0,8 sn'de, k+5. istek 30,1 sn'de varırsa NVD 29,3 sn'de 6 istek görür ve 429 döner. Ayrıca NVD'nin anahtarsız kullanımda istekler arasında yaklaşık 6 sn beklenmesini önerdiği ve gerçek eşiği değişken uyguladığı biliniyor (REQ-005 Riskler: "doğrulanmalıdır"). Beyan edilen 3–4 adet 429 bu açıklamayla tutarlı. L-4 sonrasında her 429 bir `fail` adımı: arada başarılı yanıt olmadan art arda 5 başarısızlık, oturum boyunca NVD hostunu kapatır ve kalan CVE'ler "CVSS unavailable" olur. Her 429 yeniden denemesi de bir sınırlayıcı slotu tüketiyor.
+- **Etki:** Erişilebilirlik ve doğruluk. CVSS alınamayan açık `medium` varsayılanıyla yazılır; kritik bir açığın SLA'sı 90 gün olur. NVD'ye zarar veren bir yük yok.
+- **Düzeltme:** Pencereye güvenlik payı eklenmeli (ör. 30 sn yerine 33–35 sn) veya anahtarsız kullanımda en az 6 sn aralık zorunlu olmalı. NVD 429'unda `Retry-After` yoksa en az bir pencere beklenmeli. NVD için 429'u devre kesicide ayrı tutmak (yalnız ağ hatası ve 5xx saymak) değerlendirilmeli (solution-architect). `NVD_API_KEY` önerisi README'de daha görünür olmalı.
+- **Merge kararı:** Merge'ü engellemez; takip işi.
+
+#### Y-3 — L-6'nın deadlock kısmı açık (Low, doğrulanmadı)
+- **Kanıt:** Katalog güncellemeleri belirlenimci bir sırada yapılmıyor. Tarama veya recheck tarafında `40P01` için yeniden deneme yok (`src/vulnerability`, `scanner/worker.ts`: `40P01` geçmiyor).
+- **Etki:** Tarama ile recheck'in aynı anda, ortak iki açığı ters sırayla güncellemesi gerekiyor; olasılık düşük. Recheck projesi `db:40` ile geri alınır ve bir sonraki çalıştırmada telafi edilir. Tarama sonuç transaction'ı düşerse tarama başarısız olur veya yeniden denenir.
+- **Düzeltme:** Bir projenin veya taramanın açıkları upsert'ten önce birincil kimliğe göre sıralanmalı. Ya da `40P01` geçici hata sayılıp transaction bir kez yeniden denenmeli. Test eklenmeli.
+- **Merge kararı:** Merge'ü engellemez; takip işi.
+
+#### Info (yeni)
+- **I-10:** `REGISTRY_ENRICHMENT` fail-closed davranış değişikliği (yukarıda). Kabul edildi; ADR-006/REQ-004 metin güncellemesi açık.
+- **I-11:** Hedefsiz `ON CONFLICT DO NOTHING` (yukarıda). Kabul edildi.
+- **I-12:** `withdrawn` hâlâ esnek `isIsoDate` ile okunuyor (`osvClient.ts` `trimOsvRecord`). Değer DB sütununa yazılmadığı için `22007` riski yok. Ancak `"x 2020"` gibi bir değer kaydı geri çekilmiş sayar ve bulguyu gizler. A4 kaydı zaten geri çekebildiği için yeni bir yüzey yok. Tutarlılık için `normalizeRfc3339` kullanılması önerilir.
+- **I-13:** Geri alma prosedüründe (contract §7.2(b)) iki zayıf nokta var:
+  - Eşit `occurred_at` durumunda sıra `audit_logs.id` ile ayrılıyor. `id` rastgele UUID ise bu sıra anlamsızdır (pratikte eşit zaman damgası çok düşük olasılık).
+  - Senaryo "ileri atlamış sistem saati" ise P-19 audit satırlarının `occurred_at` değeri gelecekte olur. Sonraki kullanıcı işlemleri "önce" görünür ve "sonradan dokunulmuş" denetimi onları hariç tutmaz. `f.status = 'open'` koşulu kullanıcı kararlarının (accepted/false_positive/in_review) ezilmesini zaten engelliyor; kalan risk, kullanıcının bilerek `open` bıraktığı bir bulgunun eski kabul durumuna dönmesi. Prosedüre "saat atlaması senaryosunda karşılaştırmayı `occurred_at` yerine DB `NOW()` tabanlı bir sütunla veya elle gözden geçirerek yap" notu eklenmeli.
+- **I-14:** Sayfalı kapsamda PyPI adı SQL'de `lower(regexp_replace(...))` ile kuruluyor. Veritabanı `LC_CTYPE` Türkçe ise `lower('I')` ≠ JS `toLowerCase`. Koordinat denetimi ASCII adlara izin verdiği için yalnız `I` harfi etkilenir. Etkisi: aynı JS anahtarı iki SQL grubunda görünebilir; `representative.has` tekilleştiriyor, ama sınır aşıldıktan sonra `overLimit` aynı anahtarı iki kez sayabilir (yalnız `packages_unchecked` sayacı). Satır atlanmıyor. Veritabanı C/en yereliyle kuruluysa (`db/README.md` önerisi) etkisiz.
+- **I-15 — Gerçek ağ kanıtı (beyan, doğrulanmadı):**
+  - İlk tarama 649 sn'den 326 sn'ye indi; NVD isteği 96'dan 43'e düştü; 3–4 adet 429 alındı.
+  - Tarama başına 1 OSV querybatch; ikinci taramada 0 ayrıntı isteği (önbellek çalışıyor).
+  - Yeniden başlatmadan 61 sn sonra telafi recheck'i 2,6 sn'de tamamlandı (758 paket, 0 yeni bulgu).
+  - Durum uç noktası 200 ve `no-store` döndü, anahtardan söz etmedi; loglarda secret yok.
+  - Bu değerler kod okumasıyla tutarlı: ilk kontrol gecikmesi 60 sn, `no-store` her iki yolda var, anahtar yalnız closure'da.
+- **I-16 — Kalan ilk tarama gecikmesi ve "NVD'yi arka plana taşıma" takibi:** 43 NVD isteği anahtarsız sınırla (5 / 30 sn) en az ~258 sn sürer. Yani 326 sn'nin büyük kısmı hız sınırından kaynaklanıyor; `NVD_API_KEY` ile ~26 sn'ye iner. NVD CVSS'in arka plan recheck'ine taşınması güvenlik açısından şu koşullarla kabul edilebilir:
+  1. CVSS gelene kadar bulgu "CVSS bekleniyor" olarak görünür işaretlenmeli; `medium` varsayılanı kesin bir değer gibi sunulmamalı.
+  2. CVSS geldiğinde açık bulguların `security_findings.severity/cvss_score` ve **SLA son tarihi** yeniden hesaplanmalı ve audit'e yazılmalı. Aksi hâlde kritik bir açık 7 yerine 90 günlük SLA ile kalır.
+  3. Arka plan işi aynı sınırlayıcıyı ve devre kesiciyi paylaşmalı (Y-2).
+  4. Contract ve ADR revizyonu gerekir (contract-broker / solution-architect).
+
+### Tedarik zinciri
+- `package.json`/`package-lock.json` bu düzeltmelerde değişmedi; yeni bağımlılık yok. İlk incelemedeki `npm audit` sonuçları (0/0) geçerli. Bu turda yeniden çalıştırılmadı.
+
+### Nihai karar: **Go**
+
+- İlk incelemenin merge öncesi koşulları (M-1, L-1) kapandı. Önerilen L-3 kapandı. Critical, High veya Medium bulgu kalmadı.
+- Kalan bulgular Low veya Info ve takip işi olarak açılmalı: Y-1, Y-2, Y-3, I-6 eki, I-12, I-13 notu.
+- **Merge öncesi kalan zorunlu iş: yok** (kod tarafında).
+- **İnsan onayı kapıları (açık):**
+  1. L-5: ilk dağıtımdan önce ön kontrol sorgusunun çalıştırılması ve `would_reopen` sonucunun yukarıdaki kabul metniyle handoff'ta onaylanması.
+  2. `main` merge onayı.
+  3. Gerçek ağ doğrulamasının (I-15) handoff'a kullanıcı beyanı olarak işlenmesi.
+- Handoff: `docs/handoffs/REQ-005.md` bu bölümle güncellenmeli (Delivery Lead / Integration-Release). Takip işleri (Y-1…Y-3, I-16 tasarım koşulları) backlog'a alınmalı.

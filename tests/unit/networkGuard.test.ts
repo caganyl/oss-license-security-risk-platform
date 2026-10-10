@@ -116,7 +116,7 @@ describe('network guard: loopback and local IPC keep working', () => {
   });
 
   it('127.0.0.1, localhost and a plain port reach a local TCP server', async () => {
-    const server = net.createServer((s) => s.end());
+    const server = net.createServer((s) => s.on('error', () => undefined).end()) /* client destroys at once: Windows RST -> ECONNRESET on the server side */;
     const port = await listen(server, '127.0.0.1');
     try {
       expect(await outcome(net.connect(port, '127.0.0.1'))).toBe('connected');
@@ -124,7 +124,7 @@ describe('network guard: loopback and local IPC keep working', () => {
     } finally {
       await closeServer(server);
     }
-    const any = net.createServer((s) => s.end());
+    const any = net.createServer((s) => s.on('error', () => undefined).end()) /* client destroys at once: Windows RST -> ECONNRESET on the server side */;
     const anyPort = await listen(any);
     try {
       expect(await outcome(net.connect({ host: 'localhost', port: anyPort }))).toBe('connected');
@@ -135,7 +135,7 @@ describe('network guard: loopback and local IPC keep working', () => {
   });
 
   it('::1 works when the host has IPv6 loopback', async () => {
-    const server = net.createServer((s) => s.end());
+    const server = net.createServer((s) => s.on('error', () => undefined).end()) /* client destroys at once: Windows RST -> ECONNRESET on the server side */;
     let port: number;
     try {
       port = await listen(server, '::1');
@@ -176,7 +176,7 @@ describe('network guard: loopback and local IPC keep working', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ossr-netguard-'));
     const pipe =
       process.platform === 'win32' ? `\\\\.\\pipe\\ossr-netguard-${process.pid}-${Date.now()}` : path.join(tmp, 's.sock');
-    const server = net.createServer((s) => s.end());
+    const server = net.createServer((s) => s.on('error', () => undefined).end()) /* client destroys at once: Windows RST -> ECONNRESET on the server side */;
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(pipe, () => resolve());

@@ -88,7 +88,8 @@ describe('AC-T-5 / D-49: Excel export works with uuid 11.1.1', () => {
     expect(metrics.get('Total Dependencies')).toBe('3');
 
     const depSheet = wb.getWorksheet('Dependencies')!;
-    expect(rowValues(depSheet, 1)).toEqual(['Name', 'Version', 'Ecosystem', 'Scope', 'Manifest', 'Depth', 'PURL']);
+    // REQ-004 D-63 / AC-P14-18: `License` and `License Source` appended; existing columns unchanged.
+    expect(rowValues(depSheet, 1)).toEqual(['Name', 'Version', 'Ecosystem', 'Scope', 'Manifest', 'Depth', 'PURL', 'License', 'License Source']);
     expect(depSheet.rowCount).toBe(1 + deps.length);
     expect([2, 3, 4].map((i) => rowValues(depSheet, i)[0])).toEqual(['left-pad', 'mid-lib', 'zz-gpl-lib']); // ORDER BY name
     expect(rowValues(depSheet, 2)[6]).toBe('pkg:npm/left-pad@1.3.0');

@@ -120,6 +120,39 @@ describe('network guard: non-loopback attempts are rejected and recorded', () =>
     await expect(dns.promises.lookup('pypi.org')).rejects.toMatchObject({ code: NETWORK_BLOCKED_CODE });
     expect(takeNetworkViolations()).toEqual(['dns.lookup registry.npmjs.org', 'dns.promises.lookup pypi.org']);
   });
+
+  it('REQ-005 AC-G-2: api.osv.dev and services.nvd.nist.gov are blocked (net.connect, tls.connect, https.request, dns.lookup)', async () => {
+    for (const host of ['api.osv.dev', 'services.nvd.nist.gov']) {
+      const a = await outcome(net.connect(443, host));
+      expect(a, `net.connect ${host}`).not.toBe('connected');
+      expect((a as NodeJS.ErrnoException).code).toBe(NETWORK_BLOCKED_CODE);
+
+      const b = await outcome(tls.connect({ host, port: 443, servername: host }), 'secureConnect');
+      expect(b, `tls.connect ${host}`).not.toBe('connected');
+      expect((b as NodeJS.ErrnoException).code).toBe(NETWORK_BLOCKED_CODE);
+
+      const c = await new Promise<NodeJS.ErrnoException | 'response'>((resolve) => {
+        const req = https.request({ host, port: 443, method: 'POST', path: '/', agent: false }, (res) => {
+          res.resume();
+          resolve('response');
+        });
+        req.once('error', (e: NodeJS.ErrnoException) => resolve(e));
+        req.end('{}');
+      });
+      expect(c, `https.request ${host}`).not.toBe('response');
+      expect((c as NodeJS.ErrnoException).code).toBe(NETWORK_BLOCKED_CODE);
+
+      const d = await new Promise<NodeJS.ErrnoException | null>((resolve) => dns.lookup(host, (e) => resolve(e)));
+      expect(d?.code, `dns.lookup ${host}`).toBe(NETWORK_BLOCKED_CODE);
+
+      expect(takeNetworkViolations()).toEqual([
+        `connect to ${host}:443`,
+        `connect to ${host}:443`,
+        `connect to ${host}:443`,
+        `dns.lookup ${host}`,
+      ]);
+    }
+  });
 });
 
 describe('network guard: loopback and local IPC keep working', () => {

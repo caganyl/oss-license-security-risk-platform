@@ -389,7 +389,7 @@ Golden NOTICE: `fixtures/notice/golden-f3.txt` — contract bölüm 3'ten **elle
 | AC | Dosya |
 | --- | --- |
 | AC-G-1, AC-G-3 | `npx tsc -p tsconfig.test.json`, `npx eslint tests` (komut; handoff) |
-| AC-G-2 | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` |
+| AC-G-2 | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` (kayıt defteri hostları; REQ-005 için `api.osv.dev` / `services.nvd.nist.gov` ayrıca "REQ-005 AC-G-2 …": `net.connect`, `tls.connect`, `https.request`, `dns.lookup` reddedilir ve kaydedilir) |
 | AC-G-4 | mevcut `helpers/contracts.ts` kullanan testler değişmeden yeşil |
 | AC-G-5 | `security/f3Static.test.ts` (runtime bağımlılık kümesi, engines), `security/staticCode.test.ts` |
 | AC-G-6 | `unit/parsersGolden.test.ts` (P-10 golden, değişmeden) |
@@ -446,6 +446,7 @@ atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi")
 | AC | Dosya |
 | --- | --- |
 | D-91 (test varsayılanları) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 D-91 …" |
+| AC-G-2 (OSV/NVD hostları engelli) | `unit/networkGuard.test.ts` "REQ-005 AC-G-2 …" (`api.osv.dev`, `services.nvd.nist.gov`: `net.connect` / `tls.connect` / `https.request` / `dns.lookup` → `NETWORK_BLOCKED_CODE`, kayıtlar test içinde tüketilir) |
 | AC-G-7 (göç `007`) | `integration/migrateTool.test.ts` "REQ-005 AC-G-7: migration 007_vulnerability_recheck" (up → down → up şema eşitliği, `006` şemasına birebir dönüş, enum değişmez, CHECK kümeleri, tek `running` satırı → 23505, `findings.recheck_run_id` ON DELETE SET NULL, down bulgu silmez) ve "AC-P11-15 …" (007 SHA-256 donduruldu) |
 | AC-P17-1…14 (motor, güvenli istemci, NVD, bütçe, iptal) | `unit/vulnLookup.test.ts` (batch A, `helpers/fakeOsv.ts`) |
 | AC-P17-5 / 11 / 12, AC-G-8 (worker DB yazımı, `[registry]`→`[osv]` sırası, asgari kayıt, çevrimdışı, motor yok = F3) | `integration/vulnStatusWorker.test.ts` "AC-P17-* / AC-G-8: scan worker …" |

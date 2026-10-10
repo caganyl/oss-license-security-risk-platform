@@ -2,7 +2,7 @@
 
 - **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10
 - **status:** approved
-- **Sürüm:** 1.2.0 (revizyon: bkz. bölüm 13)
+- **Sürüm:** 1.3.0 (revizyon: bkz. bölüm 13)
 - **Tarih:** 2026-10-10
 - **Makine okunur contract:** `docs/contracts/REQ-004-notice-api.openapi.yaml` (OpenAPI 3.0.3;
   `info.version` 1.0.0 kalır — 1.1.0 ve 1.2.0 revizyonları uç nokta yüzeyini değiştirmez)
@@ -540,6 +540,16 @@ Bu değer bugün hiçbir çıktıda **ham olarak** gösterilmez; NOTICE `Reason:
 metnine (bölüm 4.3) ve `[registry]` sayımına (bölüm 8) dönüşür. Excel'e durum
 sütunu eklenmez (D-63).
 
+**`REGISTRY_ENRICHMENT` ayrıştırması (1.3.0; C-24).** F4 açma/kapama anahtarlarıyla
+aynı ayrıştırıcı kullanılır (REQ-005 contract 1.1.0 bölüm 7.1): büyük/küçük harf duyarsız,
+baştaki ve sondaki boşluk kırpılır. `on|true|1|yes` → açık; `off|false|0|no` → kapalı
+(`disabled`); boş veya tanımsız → varsayılan (açık); **başka her değer → kapalı**. Kapalıya
+düşüldüğünde tek uyarı yazılır ve uyarı yalnız değişken adını içerir (değer loglanmaz).
+**F3'ten davranış farkı:** F3'te (1.0.0–1.2.0, ADR-006 Karar 14) geçersiz değer varsayılana,
+yani **açık**a düşüyordu; artık gizlilik gereği kapalıya düşer (fail-closed). `off`, boş ve
+tanımsız değerlerin anlamı değişmez. Etkin değer kapalıysa çıktılar mevcut `disabled`
+satırının kurallarıyla üretilir; çıktı biçimi değişmez.
+
 ### 4.3 `notice_status` ve NOTICE `Reason:` metni
 
 `Reason:` yalnız metinsiz girdide yazılır. Seçim sırası: önce satır 14, sonra
@@ -1041,3 +1051,4 @@ ADR-006 ve repo kodu (`src/controllers/sbomController.ts`,
 | 1.0.0 | 2026-10-10 | İlk sürüm. | REQ-004, ADR-006 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.1.0 | 2026-10-10 | **L-1:** SPDX tag-value tek satırlık değerlerde `<text>`/`</text>` (harf duyarsız) → `&lt;text&gt;`/`&lt;/text&gt;`, blok içi kuralla aynı; hiçbir tek satırlık değer ham `<text>` ile başlayamaz (6.1, 9 adım 4; C-14). **L-2:** Excel formül kalkanı tüm sayfalardaki tüm metin hücrelerine genişletildi (`Summary`, `Dependencies`, `Licenses`, `Vulnerabilities`); sayı hücreleri tipini korur; mevcut içerik kalkan öneki dışında değişmez (1, 5.1, 5.1a; C-15). **I-3:** adım 3'te U+0085/U+2028/U+2029 → boşluk; NOTICE ayraç kalkanı bu karakterlerden sonra da uygulanır (3.5, 3.6, 9; C-16). **M-1:** NOTICE metinleri parti parti okunur ve kesimden sonra okunmaz; çıktı biçimi değişmez (3.7; C-18). `NOTICE format: 1` kalır (11; C-17). Test yükümlülükleri eklendi (10). | `docs/quality/security-reports/REQ-004-security-review.md` (M-1, L-1, L-2, I-3) | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.2.0 | 2026-10-10 | **L-5:** `scan_dependencies.lock_integrity` değerleri ve `mismatch` fail-safe saklama kuralı (4.4); Excel `License Source` `none (lockfile integrity mismatch)` (4.1, 5.1; C-19); NOTICE `Reason:` satır 15 `lockfile integrity does not match registry; license not verified` ve önceliği (4.3; C-23); `[registry]` uyuşmazlık sayısı `X` (8; C-21); SBOM `NOASSERTION`, yeni yorum satırı yok (6; C-22); `NOTICE format: 1` kalır (11; C-20); test yükümlülükleri (10). `match`/`not_comparable`/`NULL` çıktıları 1.1.0 ile aynı. | `docs/product/REQ-005.md` L-5 (AC-L5-1…4, D-103), ADR-007 Karar 12, 14 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
+| 1.3.0 | 2026-10-10 | **L-2 (REQ-005 güvenlik incelemesi):** `REGISTRY_ENRICHMENT` F4 anahtarlarıyla aynı ayrıştırmaya bağlandı: `on/off/true/false/1/0/yes/no` (harf duyarsız), boş/tanımsız → açık, **diğer değer → kapalı** + yalnız ad içeren tek uyarı (4.2 notu; C-24). F3'teki "geçersiz → açık" davranışı değişti. Çıktı biçimleri, OpenAPI ve `NOTICE format: 1` değişmez. ADR-006 Karar 14 ve REQ-004 AC-P14-16 metinlerinin bu karara göre güncellenmesi solution-architect / product-analyst işidir. | `docs/quality/security-reports/REQ-005-security-review.md` (L-2); REQ-005 contract 1.1.0 bölüm 7.1 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |

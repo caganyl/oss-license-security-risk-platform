@@ -1049,6 +1049,90 @@ Yok. Kullanıcının daimi talimatı gereği tüm seçimler önerilen seçenekle
 bağlanmıştır. "Doğrulanması gerekiyor" işaretli dış bilgilerin her biri için
 tanımlı yedek veya uygulama sırasında teyit adımı vardır (Karar 3, 5, 13).
 
+## REQ-004 güvenlik düzeltmesi (2026-10-10)
+
+> **REQ-004 güvenlik düzeltmesi (2026-10-10).** Güvenlik incelemesi
+> (`docs/quality/security-reports/REQ-004-security-review.md`) ve contract
+> `docs/contracts/REQ-004-notice-and-outputs.md` 1.1.0 (C-14…C-18) sonrası
+> Karar 6–7, 12, 13 ve normalleştirici aşağıdaki kurallarla sıkılaştırılır
+> (commit `613295b` contract, `e526d6d` düzeltmeler, `a8b2614` testler;
+> yeniden doğrulama `bb3c758`: Go). Bu bir gevşetme değil sertleştirmedir;
+> çeliştiği yerde yukarıdaki metnin yerine geçer.
+>
+> - **Karar 13, SPDX tag-value (L-1; C-14, contract §6.1):** `<text>`/`</text>`
+>   kaçışı yalnız çok satırlı bloklarda değil **tek satırlık değerlerde de**
+>   uygulanır: değerin her yerindeki `<text>`/`</text>` (harf duyarsız), blok
+>   içi kuralla aynı biçimde `&lt;text&gt;`/`&lt;/text&gt;` olur. Kaçış tek
+>   satır katlamasından (contract §9 adım 1–3) **sonra** yapılır; böylece biçim
+>   karakteri silinerek kurulan diziler de yakalanır.
+> - **Karar 13, Excel (L-2; C-15, contract §5.1a):** formül kalkanı (`=`, `+`,
+>   `-`, `@`, `\t`, `\r` ile başlayan değere `'` öneki) yalnız yeni `License`/
+>   `License Source` hücrelerine değil, **her sayfanın** (`Summary`,
+>   `Dependencies`, `Licenses`, `Vulnerabilities`) **her metin hücresine**
+>   uygulanır. Sayı hücreleri tipini korur; `{ formula }` hiçbir sayfada
+>   kullanılmaz. Tablodaki "Mevcut sütunlar değişmez" ifadesi (ve D-63
+>   "`Licenses` sayfası değişmez") artık şu anlamdadır: yapı (sütun adı, sırası,
+>   sayısı, satır kümesi) ve içerik anlamı değişmez; tek fark tetikleyici
+>   karakterle başlayan değerlere eklenen `'` önekidir. Mevcut sütunlara §9
+>   adım 1–3 eklenmez. Sonuç olarak npm scoped adları `'@kapsam/ad` olarak
+>   görünür (N-2). Bu, kullanıcının daimi talimatı gereği önerilen seçenek (a)
+>   olarak **kabul edilmiştir**; `quotePrefix` stili ve dar `@kapsam/`
+>   muafiyeti seçilmedi.
+> - **Karar 12, NOTICE belleği (M-1; C-18, contract §3.7):** üretim tek bir
+>   `REPEATABLE READ READ ONLY` transaction içinde, yani tek anlık görüntü
+>   üzerinden yapılır. Yapı sorguları metin döndürmez. Lisans dosyası ve PyPI
+>   meta veri metinleri girdi sırasıyla **50 kayıtlık partiler** hâlinde okunur;
+>   64 MiB kesimi gerçekleştikten sonra hiç metin okunmaz. Bellek artık girdi
+>   sayısıyla büyümez (üst sınır: yazılmış gövde + bir parti). Çıktı baytları
+>   değişmez (golden NOTICE aynı; `NOTICE format: 1` kalır, C-17).
+> - **Karar 12–13, Unicode satır ayırıcıları (I-3; C-16, contract §3.6, §9):**
+>   tek satırlık alan katlaması `\n` ve `\t`'ye ek olarak U+0085, U+2028 ve
+>   U+2029'u da boşluğa çevirir (U+0085 kontrol temizliğinde C1 olarak zaten
+>   silinir; listede savunma derinliği için yer alır). Çok satırlı NOTICE
+>   metninde bu karakterler korunur, ancak ayraç kalkanı açısından satır sonu
+>   sayılır: arkalarından gelen ayraç dizisinin başına da tek boşluk eklenir.
+> - **Karar 6–7, arşiv indirme belleği (L-4):** süreç genelinde tek bir
+>   **uçuştaki bayt bütçesi (256 MiB)** vardır. Arşiv indirmesi başlamadan önce
+>   bilinen boyut kadar rezervasyon yapılır; boyut bilinmiyorsa arşiv başına
+>   64 MiB sınırı rezerve edilir. Rezervasyon arşiv iş parçacığı bitene kadar
+>   tutulur ve her yolda `finally` ile serbest bırakılır. Bekleyenler FIFO
+>   sırasıyla ilerler; bekleme iş ve bütçe sinyaliyle iptal edilebilir. Tek bir
+>   istek bütçeyi aşamadığı için tek başına her zaman ilerler (kilitlenme yok).
+>   Tarama başına 2 GiB kotası (Karar 6) değişmez ve bütçe alındıktan sonra
+>   ayrılır.
+> - **Normalleştirici (B-2, L-3; `src/analysis/licenseNormalizer.ts`):**
+>   operatör tespiti yalnız boşlukla ayrılmış `AND`/`OR`/`WITH`'i tanır (bölme
+>   kuralıyla aynı). Bölünemeyen girdi özyinelemeye geri dönmez, özyinelemesiz
+>   atomik normalleştirmeye düşer. Tablo aramaları (risk ve takma ad tabloları,
+>   trove tablosu (I-6), CycloneDX kapsam ve NOTICE neden tabloları) yalnız
+>   nesnenin kendi anahtarlarına bakar (`Object.hasOwn`); `constructor`,
+>   `__proto__` gibi değerler `unknown` olur. B-2, **gerçek ağ duman testinde**
+>   bulundu: `GPL-3.0-or-later` gibi `-or-` içeren kimliklerde sonsuz
+>   özyineleme oluyor (`RangeError: Maximum call stack size exceeded`), tarama
+>   `failed` oluyordu. Hata F1'den beri vardı; F3'teki kayıt defteri lisanslarıyla
+>   dışarıdan tetiklenebilir hâle gelmişti. Karar 1'deki "Mevcut eşlemeler
+>   değişmez" kuralı geçerlidir: eşleme sonuçları değişmez, yalnız sonlanma ve
+>   anahtar araması düzeltilir.
+> - **F3 dışında kalan takipler (bu ADR'yi değiştirmez):**
+>   - **N-1:** Normalleştiricide F1'den kalma karesel regex (`_normalizeAtomic`
+>     sondaki parantez temizliği) ve uzunluğu sınırlanmayan lock lisans
+>     girdisi. Çözüm doğrusal tarama veya girdi kesimidir.
+>   - **N-3:** NOTICE partisi kayıt sayısı yerine bayt bütçesiyle
+>     tanımlanmalıdır. Havuz bağlantısı istek süresince tutulmaktadır; hata
+>     yolunda `release(err)` kullanılmalıdır.
+>   - **L-5:** Lock `integrity` ile kayıt defteri `dist.integrity` arasındaki
+>     uyuşmazlık işaretlenmelidir (F4). İnsan risk kabulü metni handoff'a
+>     yazılır.
+>
+>   N-4 (FIFO baş-hattı bekleme, `grow` aşımı) için değişiklik gerekmez.
+> - **Etki:** yeni bağımlılık, göç, yetki veya dış uç nokta değişikliği
+>   yoktur; Karar 15 ve 16 değişmez. Excel'deki `'` öneki görünür bir çıktı
+>   değişikliğidir; README'de ve handoff'ta belirtilmelidir.
+>   `docs/handoffs/REQ-004.md` bu nota, N-2 kararına ve L-5 kabulüne atıfla
+>   güncellenmelidir. Karar veren: kullanıcının daimi talimatı (önerilen
+>   seçenek), contract 1.1.0 ile aynı dayanak. ADR durumu `Accepted` kalır;
+>   kayıt kullanıcının commit'iyle kesinleşir.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

@@ -37,6 +37,8 @@ import { canonicalizeScanRoots, parseScanRoots } from './lib/scanSource';
 import { ExportWorker, type ExportWorkerDeps } from './reports/worker';
 import { describeGitVersion, getGitVersion, type GitVersionProvider } from './scanner/gitVersion';
 import { ScanWorker, type ScanWorkerDeps } from './scanner/worker';
+import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
+import { createDependencyEnricher, type DependencyEnricher } from './enrichment';
 
 export type RuntimeLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 export type ExitFn = (code: number) => void;
@@ -140,6 +142,8 @@ class Runtime implements RuntimeHandle {
   scanWorker: ScanWorker | null = null;
   exportWorker: ExportWorker | null = null;
   lock: InstanceLock<LockClient> | null = null;
+  /** Registry enricher created by the runtime (ADR-006 Karar 14); null when injected or not started. */
+  private enricher: DependencyEnricher | null = null;
 
   private readonly env: NodeJS.ProcessEnv;
   private readonly logger: RuntimeLogger;
@@ -260,8 +264,16 @@ class Runtime implements RuntimeHandle {
 
       // 7. Workers: (a) orphaned scans, (b) orphaned reports, (c) stale
       // workspaces, (d) polling. Recovery errors are logged; workers start anyway.
+      // Registry enrichment (ADR-006 Karar 14): never with injected endpoints;
+      // with REGISTRY_ENRICHMENT=off it creates no network client at all. An
+      // enricher injected through `scanWorker.enricher` (tests) is used as is
+      // and is not closed by the runtime.
+      if (this.options.scanWorker?.enricher === undefined) {
+        this.enricher = createDependencyEnricher({ config: sandboxRunnerConfig.enrichment, db: pool, logger: this.logger });
+      }
       this.scanWorker = new ScanWorker({
         ...this.options.scanWorker,
+        ...(this.enricher ? { enricher: this.enricher } : {}),
         logger: this.options.scanWorker?.logger ?? this.logger,
         tmpRoot: this.options.scanWorker?.tmpRoot ?? this.options.tmpRoot,
         ...(this.options.gitVersion && this.options.scanWorker?.gitVersion === undefined
@@ -292,9 +304,21 @@ class Runtime implements RuntimeHandle {
     }
   }
 
+  /** Destroys the enricher's pooled sockets (after the scans are aborted). */
+  private closeEnricher(): void {
+    if (!this.enricher) return;
+    try {
+      this.enricher.close();
+    } catch (err) {
+      this.logger.warn(`Kayıt defteri istemcisi kapatılamadı (${errorCode(err)}).`);
+    }
+    this.enricher = null;
+  }
+
   private async closeAfterFailedStart(): Promise<void> {
     this.scanWorker?.stop();
     this.exportWorker?.stop();
+    this.closeEnricher();
     if (this.server) {
       const server = this.server;
       await new Promise<void>((resolve) => {
@@ -454,6 +478,7 @@ class Runtime implements RuntimeHandle {
 
       // 4. Running scans: abort with reason 'shutdown'; each returns its row to `queued`.
       await this.scanWorker?.abortActiveJobs('shutdown');
+      this.closeEnricher();
 
       // 5. Running reports cannot be cancelled: wait within the remaining budget.
       const remaining = budgetMs - (Date.now() - startedAt) - 2_000;

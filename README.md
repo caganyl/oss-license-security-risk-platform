@@ -45,7 +45,7 @@ Uygulama tek yerel kullanıcı modeliyle, tek bir Node süreci olarak çalışı
 
 *Ön koşullar*
 
-- **Node.js 22 LTS veya üstü** (`node --version`).
+- **Node.js `^22.21.0` veya `>=24.5.0`** (`node --version`). Kayıt defteri istemcisinin vekil desteği (`proxyEnv`) bu sürümlerde gelir; daha eski 22.x sürümleri desteklenmez.
 - **Git for Windows 2.32 veya üstü** (`git --version`). Yalnız uzak (`https`) repo taraması için gerekir; git yoksa veya daha eskiyse uygulama yine başlar ve uyarı yazar, yerel klasör taramaları çalışır, uzak taramalar ise yeniden denenmeden `Uzak tarama için git 2.32 veya üstü gerekli (bulunan: …).` mesajıyla `failed` olur. Git sonradan kurulursa uygulamayı yeniden başlatın.
 - **PostgreSQL 15 veya üstü**, Windows kurulum paketiyle (EDB installer).
 - **Gerekmeyenler:** Python, Docker, Git Bash ve `PATH` üzerinde `psql`.
@@ -135,6 +135,23 @@ Tarama worker'ı `npm start` ile aynı süreçte çalışır ve Docker kullanmaz
 - **Geliştirme kapsamı:** `devDependencies`, `requirements-dev.txt`/`requirements-test.txt` ve Poetry grupları `dev` kapsamıyla envantere girer ama lisans ihlali sayılmaz. `direct`, `transitive`, `peer` ve `optional` çalışma zamanı (runtime) kapsamıdır.
 - **Lisansı bilinmeyen paket:** Lisansı bulunamayan runtime paket için `unknown` riskli lisans bulgusu (`NOASSERTION`) açılır; `dev` paket için açılmaz.
 - **Kararların taşınması:** Her bulgunun proje, paket ve bulgu türünden türetilen bir parmak izi vardır (lisansta sürümsüz, güvenlik açığında sürümlü). Sonraki taramada aynı parmak izli bulgu, önceki karar false positive ya da süresi geçmemiş risk kabulü ise o durumla açılır. Süresi geçmiş kabul ve `wont_fix` taşınmaz; bulgu `open` açılır. Güvenlik kararları paket sürümü değişince yeniden değerlendirilir, lisans kararları sürüm yükseltmesinde korunur.
+
+**Lisans zenginleştirme ve NOTICE (REQ-004 F3)**
+
+Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını herkese açık kayıt defterlerinden (npm, PyPI) doğrular ve paket arşivlerindeki LICENSE/NOTICE dosyalarını ve telif satırlarını toplar. Sonuçlar veritabanında kalıcı önbelleğe yazılır; aynı paket sürümü sonraki taramalarda yeniden indirilmez.
+
+- **Gizlilik — dışarı ne gönderilir:** Yalnız paket adı ve sürümü, şu hostlara HTTPS ile: `registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org` (paket arşivi indirme). Proje adı, repo adresi, dosya yolları, kaynak kod, token veya API anahtarı gönderilmez. İzin listesi dışındaki hosta (yönlendirmeler dahil) bağlanılmaz. Bu dış erişimi istemiyorsanız `REGISTRY_ENRICHMENT=off` kullanın.
+- **Ayarlar** (`.env` veya ortam değişkeni):
+  - `REGISTRY_ENRICHMENT` — `on` (varsayılan) / `off`. `off` iken hiçbir ağ isteği yapılmaz, önbellek okunmaz; lisans F2'deki gibi lock dosyasından alınır ve taramanın uyarılarına tek bir `[registry] License enrichment disabled: …` satırı yazılır. Geçersiz değer varsayılana döner.
+  - `REGISTRY_TIMEOUT_MS` — istek başına zaman aşımı, varsayılan `15000` (1 ms – 24 sa).
+  - `REGISTRY_CONCURRENCY` — eşzamanlı kayıt defteri isteği, varsayılan `4` (1–32).
+- **Vekil sunucu:** Kayıt defteri istemcisi yalnız `HTTPS_PROXY`/`https_proxy` ve `NO_PROXY`/`no_proxy` okur (`HTTP_PROXY`/`ALL_PROXY` okunmaz; tüm uç noktalar HTTPS'tir). `NO_PROXY` girdileri virgül ve/veya boşlukla ayrılır, büyük/küçük harf duyarsızdır: `*` (hiç vekil kullanma), `host`, `.alan`, `*.alan` veya `alan` (`example.com`, `a.example.com`'u kapsar, `badexample.com`'u kapsamaz); isteğe bağlı `:port` hedefin portuyla eşleşmelidir. IP adresleri birebir eşleşir; **CIDR (`10.0.0.0/8`) desteklenmez.** `HTTPS_PROXY` geçerli bir `http(s)://` adresi değilse hiçbir kayıt defteri bağlantısı açılmaz ve paketler `unreachable` sayılır. Vekil adresi kimlik bilgisi içerebilir; loglara ve hata metinlerine yazılmaz.
+- **Lock lisansı yalnız ipucudur (L-6):** Kayıt defterinin lisansı her zaman önceliklidir. Kayıt defterine ulaşılamazsa lock dosyasındaki lisans `lockfile (unverified)` kaynağıyla kullanılır ve taramanın uyarılarına `[registry] Registry lookup incomplete for …` satırı eklenir.
+- **Davranış değişikliği (D-81):** Zenginleştirme açıkken sürümü kesin olmayan lock girdilerinin (`file:`, git, etiket — durum "sürüm bilinmiyor" veya "geçersiz ad/sürüm") lock lisansı artık kullanılmaz. Bu paketler runtime ise F2'de olmayan yeni `NOASSERTION` lisans bulguları açılabilir; gerekirse false positive kararıyla kapatın.
+- **NOTICE indirme:** Tamamlanmış her taramanın satırında "NOTICE" bağlantısı vardır; API'de `GET /api/scans/{scanId}/notice` (`reports:read` izni, oturum çerezi veya `Authorization: Bearer <api-anahtari>`). Yanıt `NOTICE-<scanId>.txt` adlı UTF-8 düz metindir (`X-Checksum-SHA256` başlığıyla); yalnız runtime paketleri, lisans dosyası metinleri, telif satırları ve lisans dosyası olmayan paketler için neden satırı içerir. Tamamlanmamış veya olmayan tarama `404` döner. Metin 64 MiB'yi aşarsa kalan lisans metinleri `[text omitted: NOTICE size limit]` ile kısaltılır. F3 öncesi taramalarda NOTICE eksik olabilir (üst bilgide not yazar); tam NOTICE için projeyi yeniden tarayın. NOTICE otomatik üretilir, hukuki görüş değildir; dağıtmadan önce gözden geçirin.
+- **Rapor sütunları:** Excel raporunun `Dependencies` sayfasına sonda iki sütun eklendi: `License` (etkin lisans) ve `License Source` (`registry:npm`, `registry:pypi`, `lockfile (unverified)`, `none`; lock ipucu kayıt defterinden farklıysa `registry:npm (lockfile differs: …)`, kayıt defterinde lisans yoksa `none (lockfile hint ignored: …)`). F3 öncesi taramalarda bu hücreler boştur. PDF'in "Dependency Inventory" tablosuna (`project_report`, `audit_evidence`) `License` sütunu eklendi (boşsa `n/a`). Diğer sayfalar değişmedi.
+- **SBOM:** Yeni üretilen SPDX 2.3 dokümanlarında `licenseDeclared` etkin lisansın geçerli SPDX ifadesidir (değilse `NOASSERTION` ve `licenseComments`), `licenseConcluded` her zaman `NOASSERTION`, `copyrightText` arşivden çıkarılan telif satırlarıdır. CycloneDX 1.5'te her bileşende tek bir `licenses` girdisi ve `copyright` alanı bulunur. Daha önce üretilmiş SBOM dosyaları yeniden üretilmez.
+- **Önbelleği temizleme:** Kayıt defteri ve arşiv önbelleğini silme SQL'i `db/README.md`'dedir. Temizlikten sonra eski taramaların NOTICE'ında "license file data no longer cached; rescan required" nedeni görünür.
 
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 

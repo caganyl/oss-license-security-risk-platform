@@ -19,6 +19,7 @@ import { securityHeaders } from './middleware/securityHeaders';
 import { createAuthRouter, createPublicAuthRouter } from './routes/authRoutes';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
+import createNoticeRouter from './routes/noticeRoutes';
 import createReportRouter from './routes/reportRoutes';
 import createWorkflowRouter from './routes/workflowRoutes';
 import createProjectRouter from './routes/projectRoutes';
@@ -91,6 +92,7 @@ export function createApp(deps: AppDeps): express.Express {
   api.use('/auth', createAuthRouter(authController));
   api.use('/users', createUserRouter(db));
   api.use(createSbomRouter(db));
+  api.use(createNoticeRouter(db));
   api.use(createReportRouter(db));
   api.use('/findings', createWorkflowRouter(db));
   api.use(createProjectRouter(db, scanRoots));

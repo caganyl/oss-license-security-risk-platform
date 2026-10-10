@@ -117,12 +117,16 @@ export interface SummaryEntry {
   status: EnrichmentStatus;
   /** The package fell back to its lock hint (effective source `lockfile (unverified)`). */
   usedHint: boolean;
+  /** L-5: the key's `lock_integrity` is `mismatch` (REQ-004 contract 1.2.0 §8). */
+  integrityMismatch?: boolean;
 }
 
 /**
  * The single `[registry]` line for unique registry keys, or null when none
- * is due (enrichment on and no `unreachable`/`error`/`budget_exceeded` key).
- * The caller passes it through `sanitizeErrorText` with the parse errors.
+ * is due (enrichment on, no `unreachable`/`error`/`budget_exceeded` key and
+ * no L-5 integrity mismatch). The caller passes it through
+ * `sanitizeErrorText` with the parse errors. With `X = 0` mismatches the
+ * line is byte for byte the 1.1.0 one (contract 1.2.0 §8, C-21).
  */
 export function registrySummaryLine(entries: Iterable<SummaryEntry>, enabled: boolean): string | null {
   let total = 0;
@@ -131,8 +135,10 @@ export function registrySummaryLine(entries: Iterable<SummaryEntry>, enabled: bo
   let error = 0;
   let budget = 0;
   let affectedHinted = 0;
+  let mismatches = 0;
   for (const entry of entries) {
     total++;
+    if (entry.integrityMismatch) mismatches++;
     if (entry.usedHint) hinted++;
     if (entry.status === 'unreachable') unreachable++;
     else if (entry.status === 'error') error++;
@@ -144,9 +150,15 @@ export function registrySummaryLine(entries: Iterable<SummaryEntry>, enabled: bo
     return `[registry] License enrichment disabled: ${hinted} package(s) use the lockfile license (unverified), ${total - hinted} have no license.`;
   }
   const affected = unreachable + error + budget;
-  if (affected === 0) return null;
-  return (
+  if (affected === 0) {
+    return mismatches === 0
+      ? null
+      : `[registry] Lockfile integrity mismatch for ${mismatches} package(s); registry license and lockfile hint not used.`;
+  }
+  const incomplete =
     `[registry] Registry lookup incomplete for ${affected} package(s) (unreachable: ${unreachable}, error: ${error}, ` +
-    `time budget exceeded: ${budget}); license from lockfile (unverified): ${affectedHinted}, no license: ${affected - affectedHinted}.`
-  );
+    `time budget exceeded: ${budget}); license from lockfile (unverified): ${affectedHinted}, no license: ${affected - affectedHinted}.`;
+  return mismatches === 0
+    ? incomplete
+    : `${incomplete} Lockfile integrity mismatch: ${mismatches} package(s) (registry license and lockfile hint not used).`;
 }

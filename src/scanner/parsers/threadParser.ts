@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { threadEntry } from '../../lib/threadBootstrap';
-import type { RunParserFn, SandboxScanResult } from '../../types/scan';
+import type { ParserLockIntegrityRecord, ParserRunOutput, RunParserFn, SandboxScanResult } from '../../types/scan';
 import type { ParserThreadInput, ParserThreadResponse } from './thread';
 
 export interface ParserResourceLimits {
@@ -89,11 +89,35 @@ function isValidResult(value: unknown, scanId: string): value is SandboxScanResu
   );
 }
 
-function mapOutcome(outcome: Outcome, scanId: string, options: ThreadParserOptions): SandboxScanResult {
+const MAX_SIDE_CHANNEL_CHARS = 1024;
+
+/**
+ * Re-validates the thread's L-5 side channel on the main thread (the thread
+ * already bounds it): records of text fields only, value ≤ 1024 characters,
+ * at most one record per dependency. Anything malformed is dropped, so the
+ * affected keys simply stay `not_comparable`.
+ */
+function sideChannelOf(message: Partial<ParserThreadResponse> & { sideChannel?: unknown }, result: SandboxScanResult): ParserLockIntegrityRecord[] {
+  const channel = message.sideChannel as { npmIntegrity?: unknown } | undefined;
+  if (!channel || typeof channel !== 'object' || !Array.isArray(channel.npmIntegrity)) return [];
+  const records: ParserLockIntegrityRecord[] = [];
+  for (const raw of channel.npmIntegrity.slice(0, result.dependencies.length) as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const { manifestPath, name, version, integrity } = raw as Record<string, unknown>;
+    if (typeof manifestPath !== 'string' || typeof name !== 'string' || typeof version !== 'string' || typeof integrity !== 'string') continue;
+    if (integrity.length === 0 || integrity.length > MAX_SIDE_CHANNEL_CHARS) continue;
+    records.push({ manifestPath, name, version, integrity });
+  }
+  return records;
+}
+
+function mapOutcome(outcome: Outcome, scanId: string, options: ThreadParserOptions): ParserRunOutput {
   switch (outcome.kind) {
     case 'message': {
       const message = outcome.message as Partial<ParserThreadResponse> | null;
-      if (message && message.ok === true && isValidResult(message.result, scanId)) return message.result;
+      if (message && message.ok === true && isValidResult(message.result, scanId)) {
+        return { result: message.result, lockIntegrity: sideChannelOf(message, message.result) };
+      }
       if (message && message.ok === false) {
         throw new ParserFailedError(`Ayrıştırıcı beklenmeyen bir hatayla durdu (${String(message.error ?? '')}).`);
       }
@@ -115,7 +139,7 @@ function mapOutcome(outcome: Outcome, scanId: string, options: ThreadParserOptio
   }
 }
 
-/** Runs `parseManifests` for one scan in a fresh thread. */
+/** Runs `parseManifests` for one scan in a fresh thread; returns the bare result (no side channel). */
 export async function runParserInThread(
   rootDir: string,
   ecosystems: string[],
@@ -123,6 +147,21 @@ export async function runParserInThread(
   signal: AbortSignal | undefined,
   options: ThreadParserOptions,
 ): Promise<SandboxScanResult> {
+  return (await runParserInThreadWithSideChannel(rootDir, ecosystems, scanId, signal, options)).result;
+}
+
+/**
+ * Runs `parseManifests` for one scan in a fresh thread and returns
+ * `{ result, lockIntegrity }` (REQ-005 L-5, ADR-007 Karar 12). `result` is
+ * exactly what `runParserInThread` returns.
+ */
+export async function runParserInThreadWithSideChannel(
+  rootDir: string,
+  ecosystems: string[],
+  scanId: string,
+  signal: AbortSignal | undefined,
+  options: ThreadParserOptions,
+): Promise<ParserRunOutput> {
   if (signal?.aborted) throw abortReason(signal);
 
   const workerData: ParserThreadInput = { rootDir, ecosystems: [...ecosystems], scanId };
@@ -168,7 +207,12 @@ export async function runParserInThread(
   return mapOutcome(outcome, scanId, options);
 }
 
-/** `RunParserFn` that parses each scan in its own `worker_threads` thread. */
-export function createThreadParser(options: ThreadParserOptions): RunParserFn {
+/** Parser function that parses each scan in its own `worker_threads` thread (bare result). */
+export function createThreadParser(options: ThreadParserOptions): (...args: Parameters<RunParserFn>) => Promise<SandboxScanResult> {
   return (workDir, ecosystems, scanId, signal) => runParserInThread(workDir, ecosystems, scanId, signal, options);
+}
+
+/** `RunParserFn` of the scan worker: thread parse plus the L-5 side channel. */
+export function createLockAwareThreadParser(options: ThreadParserOptions): RunParserFn {
+  return (workDir, ecosystems, scanId, signal) => runParserInThreadWithSideChannel(workDir, ecosystems, scanId, signal, options);
 }

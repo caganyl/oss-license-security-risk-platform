@@ -9,13 +9,19 @@
  */
 import type { SandboxScanResult } from '../../types/scan';
 import { emptyResult, extendResult, pyStrip, walkTree, type ParseResult, type TreeWalk } from './common';
+import type { IntegrityCollector } from './lockIntegrityValue';
 import { parse as parseNodejs } from './nodejs';
 import { parse as parsePython } from './python';
 
-const PARSERS: Readonly<Record<string, (walk: TreeWalk) => ParseResult>> = {
+const PARSERS: Readonly<Record<string, (walk: TreeWalk, collector?: IntegrityCollector) => ParseResult>> = {
   nodejs: parseNodejs,
-  python: parsePython,
+  python: (walk) => parsePython(walk),
 };
+
+export interface ParseManifestsOptions {
+  /** L-5 side channel of the npm lock parsers (REQ-005, ADR-007 Karar 12); not part of the result. */
+  integrityCollector?: IntegrityCollector;
+}
 
 /** Python `scan._ecosystems`: comma-separated names, stripped, empties dropped, order kept. */
 function normalizeEcosystems(ecosystems: readonly string[]): string[] {
@@ -33,7 +39,12 @@ function normalizeEcosystems(ecosystems: readonly string[]): string[] {
  * shared by the ecosystems; links are never followed (ADR-005 Karar 6).
  * `status` is always `completed`; `total_deps = dependencies.length`.
  */
-export function parseManifests(rootDir: string, ecosystems: readonly string[], scanId: string): SandboxScanResult {
+export function parseManifests(
+  rootDir: string,
+  ecosystems: readonly string[],
+  scanId: string,
+  options: ParseManifestsOptions = {},
+): SandboxScanResult {
   const result = emptyResult();
   let walk: TreeWalk | null = null;
 
@@ -47,7 +58,7 @@ export function parseManifests(rootDir: string, ecosystems: readonly string[], s
       walk = walkTree(rootDir);
       result.parse_errors.push(...walk.errors);
     }
-    extendResult(result, parser(walk));
+    extendResult(result, parser(walk, options.integrityCollector));
   }
 
   return {

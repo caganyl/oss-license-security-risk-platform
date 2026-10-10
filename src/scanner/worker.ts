@@ -6,7 +6,7 @@ import { errorCode } from '../db/advisoryLock';
 import { createRunId } from '../lib/runId';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
-import { ParserFailedError, createThreadParser } from './parsers/threadParser';
+import { ParserFailedError, createLockAwareThreadParser } from './parsers/threadParser';
 import { type ErrorTextContext, scanErrorMessage, scanErrorText, shortErrorForLog } from './errorMessage';
 import { type GitVersionProvider, assertGitForRemoteScan, getGitVersion } from './gitVersion';
 import {
@@ -30,7 +30,7 @@ import {
   sweepStaleWorkspaces,
   withTempWorkspace,
 } from './workspace';
-import { isRuntimeScope, type RunParserFn, type SandboxScanResult } from '../types/scan';
+import { isRuntimeScope, toParserRunOutput, type ParserRunOutput, type RunParserFn, type SandboxScanResult } from '../types/scan';
 import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import { type DependencyEnricher, type EnrichmentResult, disabledEnrichment, enrichmentKeyOf } from '../enrichment';
@@ -216,7 +216,7 @@ export class ScanWorker {
       db: deps.db,
       cloneRepo: deps.cloneRepo ?? defaultCloneRepo,
       // TypeScript parsers in a worker_threads thread (REQ-003 P-10, ADR-005 Karar 5).
-      runParser: deps.runParser ?? createThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
+      runParser: deps.runParser ?? createLockAwareThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
       scanRoots: deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS),
       tmpRoot: deps.tmpRoot ?? os.tmpdir(),
       logger: deps.logger ?? console,
@@ -610,10 +610,10 @@ export class ScanWorker {
       }
 
       const ecosystems = await this.loadEcosystems(scanRow.project_id);
-      let result: SandboxScanResult;
+      let parsed: ParserRunOutput;
       signal.throwIfAborted();
       if (source.kind === 'local') {
-        result = await this.deps.runParser(source.path, ecosystems, scanId, signal);
+        parsed = toParserRunOutput(await this.deps.runParser(source.path, ecosystems, scanId, signal));
       } else {
         const ref = scanRow.ref || scanRow.default_branch || null;
         if (ref !== null && !isValidRef(ref)) {
@@ -624,7 +624,7 @@ export class ScanWorker {
         // Git missing/older than 2.32: permanent, before any temp folder (AC-T-3).
         if (this.deps.gitVersion) await assertGitForRemoteScan(this.deps.gitVersion);
         signal.throwIfAborted();
-        result = await withTempWorkspace(
+        parsed = await withTempWorkspace(
           async (workspace) => {
             job.workspaceDirs.push(workspace);
             const repoDir = path.join(workspace, 'repo');
@@ -632,18 +632,19 @@ export class ScanWorker {
             // abort) before withTempWorkspace removes the folder.
             await this.deps.cloneRepo(remoteUrl, ref, repoDir, token, signal);
             signal.throwIfAborted();
-            return this.deps.runParser(repoDir, ecosystems, scanId, signal);
+            return toParserRunOutput(await this.deps.runParser(repoDir, ecosystems, scanId, signal));
           },
           { tmpRoot: this.deps.tmpRoot, logger: this.logger },
         );
       }
+      const result: SandboxScanResult = parsed.result;
 
       if (result.status === 'failed') {
         // Permanent (D-41): the same input fails the same way.
         throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
       // Registry enrichment: after parsing, before OSV and the result transaction (ADR-006 Karar 2).
-      const enrichment = await this.enrichDependencies(job, result);
+      const enrichment = await this.enrichDependencies(job, result, parsed.lockIntegrity);
       // Vulnerability lookup: after enrichment, outside the result transaction (ADR-007 Karar 5).
       const vulnerability = await this.lookupVulnerabilities(job, result);
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
@@ -673,14 +674,18 @@ export class ScanWorker {
    * and the scan continues with `error` outcomes — enrichment never reaches
    * `handleScanFailure` and never causes a retry (AC-P14-13).
    */
-  private async enrichDependencies(job: ClaimedJob, result: SandboxScanResult): Promise<EnrichmentResult | undefined> {
+  private async enrichDependencies(
+    job: ClaimedJob,
+    result: SandboxScanResult,
+    lockIntegrity: ParserRunOutput['lockIntegrity'],
+  ): Promise<EnrichmentResult | undefined> {
     const enricher = this.deps.enricher;
     if (!enricher) return undefined;
     const signal = job.controller.signal;
     const timeoutMs = job.settings.timeoutMinutes * 60_000;
     const budgetMs = computeBudgetMs(timeoutMs, job.deadlineMs - performance.now());
     try {
-      return await enricher.enrich(result.dependencies, { signal, budgetMs });
+      return await enricher.enrich(result.dependencies, { signal, budgetMs, lockIntegrity });
     } catch (err) {
       if (signal.aborted) throw signal.reason ?? err;
       this.logger.warn(`Scan ${job.scanRow.id}: registry enrichment failed (${errorCode(err)}); continuing without it.`);
@@ -805,7 +810,7 @@ export class ScanWorker {
         // D-73); a `disabled` key with a lock hint gives exactly `dep.licenses` (F2).
         const enrichKey = enrichmentKeyOf(dep);
         const enriched = enrichKey === null ? undefined : enrichment.outcomes.get(enrichKey);
-        const effective = enriched
+        const resolved = enriched
           ? resolveEffectiveLicense({
               status: enriched.status,
               ecosystem: enriched.registry,
@@ -815,6 +820,14 @@ export class ScanWorker {
               sanitize: sanitizeText,
             })
           : null;
+        // L-5 fail-safe (ADR-007 Karar 12): on a lock integrity mismatch neither
+        // the registry license nor the lock hint enters the policy; the hint is
+        // kept stored but never shown. A runtime package then gets the
+        // NOASSERTION ("unknown") finding below.
+        const effective =
+          resolved && enriched?.lockIntegrity === 'mismatch'
+            ? { ...resolved, licenseExpression: null, licenseSource: 'none' as const, hintDiffers: false, policyInput: [] as string[] }
+            : resolved;
         const policyInput: string[] = effective ? effective.policyInput : [...(dep.licenses ?? [])];
 
         // Insert package (deduplicated). purl is a deterministic function of
@@ -837,8 +850,8 @@ export class ScanWorker {
           `
           INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range,
                                          license_expression, license_source, license_lock_hint, license_hint_differs,
-                                         license_enrichment_status, notice_status, notice_archive_id)
-          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13)
+                                         license_enrichment_status, notice_status, notice_archive_id, lock_integrity)
+          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           ON CONFLICT (scan_id, package_id, manifest_path, scope) DO NOTHING
           RETURNING id
           `,
@@ -856,6 +869,7 @@ export class ScanWorker {
             enriched?.status ?? null,
             enriched?.noticeStatus ?? null,
             enriched?.noticeArchiveId ?? null,
+            enriched?.lockIntegrity ?? null,
           ]
         );
 

@@ -70,6 +70,8 @@ interface ReportDependency {
   licenseLockHint: string | null;
   licenseHintDiffers: boolean | null;
   licenseEnrichmentStatus: string | null;
+  /** `scan_dependencies.lock_integrity` (REQ-004 contract 1.2.0 §4.4); internal, never in a JSON response. */
+  lockIntegrity: string | null;
   licenses: ReportLicenseFinding[];
   vulnerabilities: ReportSecurityFinding[];
 }
@@ -342,11 +344,12 @@ export class ReportService {
       license_lock_hint: string | null;
       license_hint_differs: boolean | null;
       license_enrichment_status: string | null;
+      lock_integrity: string | null;
     }>(
       `SELECT sd.id AS scan_dependency_id, p.ecosystem::text, p.name, p.version, p.purl,
               sd.scope::text, sd.manifest_file, sd.manifest_path, sd.depth,
               sd.license_expression, sd.license_source, sd.license_lock_hint,
-              sd.license_hint_differs, sd.license_enrichment_status
+              sd.license_hint_differs, sd.license_enrichment_status, sd.lock_integrity
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
        WHERE sd.scan_id = $1
@@ -464,6 +467,7 @@ export class ReportService {
         licenseLockHint: row.license_lock_hint,
         licenseHintDiffers: row.license_hint_differs,
         licenseEnrichmentStatus: row.license_enrichment_status,
+        lockIntegrity: row.lock_integrity,
         licenses: licensesByDependency.get(row.scan_dependency_id) ?? [],
         vulnerabilities: vulnerabilitiesByDependency.get(row.scan_dependency_id) ?? [],
       })),
@@ -652,12 +656,15 @@ const LOCK_HINT_MAX_CODE_POINTS = 200;
  * Excel `License Source` cell (contract section 4.1 "Excel" column): the
  * stored source, with the lock hint when it differs from the registry
  * (AC-L6-4) or was ignored because the registry has no license (C-8). Pre-F3
- * scans (source `NULL`) give an empty cell (AC-P14-18).
+ * scans (source `NULL`) give an empty cell (AC-P14-18). An L-5 lock integrity
+ * mismatch gives exactly `none (lockfile integrity mismatch)`, before every
+ * other rule and without the hint (contract 1.2.0 §4.1, C-19).
  */
 function licenseSourceCell(dep: Pick<ReportDependency,
-  'licenseSource' | 'licenseLockHint' | 'licenseHintDiffers' | 'licenseEnrichmentStatus'>): string {
+  'licenseSource' | 'licenseLockHint' | 'licenseHintDiffers' | 'licenseEnrichmentStatus'> & { lockIntegrity?: string | null }): string {
   const source = dep.licenseSource;
   if (source === null || source === undefined || source === '') return '';
+  if (dep.lockIntegrity === 'mismatch') return 'none (lockfile integrity mismatch)';
   const hint = [...singleLine(dep.licenseLockHint)].slice(0, LOCK_HINT_MAX_CODE_POINTS).join('');
   if ((source === 'registry:npm' || source === 'registry:pypi') && dep.licenseHintDiffers === true && hint !== '') {
     return `${source} (lockfile differs: ${hint})`;

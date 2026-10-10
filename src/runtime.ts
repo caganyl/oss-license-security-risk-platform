@@ -270,7 +270,10 @@ class Runtime implements RuntimeHandle {
       this.pool = pool;
       const host = resolveHost(this.options.host, this.env);
       try {
-        this.server = await listenApp({ db: pool, port: this.options.port, host, scanRoots }, this.env);
+        this.server = await listenApp(
+          { db: pool, port: this.options.port, host, scanRoots, vulnerabilityScheduler: () => this.vulnerabilityScheduler },
+          this.env,
+        );
       } catch (err) {
         throw new RuntimeStartupError(`HTTP sunucusu ${host} üzerinde dinleyemedi (${errorCode(err)}).`);
       }

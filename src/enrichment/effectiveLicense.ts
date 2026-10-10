@@ -79,6 +79,20 @@ function comparisonForm(items: readonly string[], normalize: (raw: string) => st
     .join(' AND ');
 }
 
+/** `license_source` of a registry-declared license (exhaustive, ADR-008 Karar 1). */
+function registryLicenseSourceOf(ecosystem: RegistryEcosystem): LicenseSource {
+  switch (ecosystem) {
+    case 'npm':
+      return 'registry:npm';
+    case 'pypi':
+      return 'registry:pypi';
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
 export function resolveEffectiveLicense(input: EffectiveLicenseInput): EffectiveLicense {
   const lockItems = input.lockLicenses.filter((l): l is string => typeof l === 'string' && l.trim().length > 0);
   const lockHint = lockHintOf(lockItems, input.sanitize);
@@ -88,7 +102,7 @@ export function resolveEffectiveLicense(input: EffectiveLicenseInput): Effective
     const hintDiffers = lockHint === null ? null : comparisonForm([declared], input.normalize) !== comparisonForm(lockItems, input.normalize);
     return {
       licenseExpression: input.normalize(declared),
-      licenseSource: input.ecosystem === 'npm' ? 'registry:npm' : 'registry:pypi',
+      licenseSource: registryLicenseSourceOf(input.ecosystem),
       lockHint,
       hintDiffers,
       policyInput: [declared],

@@ -64,7 +64,30 @@ export function archiveCacheKey(ecosystem: RegistryEcosystem, requestName: strin
 
 /** Candidates tried for a package (npm: 1, PyPI: up to 3). */
 export function triedCandidates(ecosystem: RegistryEcosystem, candidates: readonly ArchiveCandidate[]): ArchiveCandidate[] {
-  return candidates.slice(0, ecosystem === 'npm' ? 1 : ENRICHMENT_LIMITS.archive.maxCandidatesTried);
+  switch (ecosystem) {
+    case 'npm':
+      return candidates.slice(0, 1);
+    case 'pypi':
+      return candidates.slice(0, ENRICHMENT_LIMITS.archive.maxCandidatesTried);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+/** Archive request purpose of a registry (exhaustive, ADR-008 Karar 1). */
+function archivePurposeOf(ecosystem: RegistryEcosystem): 'archive-npm' | 'archive-pypi' {
+  switch (ecosystem) {
+    case 'npm':
+      return 'archive-npm';
+    case 'pypi':
+      return 'archive-pypi';
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
 }
 
 function abortError(signal: AbortSignal): unknown {
@@ -85,7 +108,7 @@ function hostOf(url: string): string | null {
 export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext): Promise<ArchiveStageResult> {
   const candidates = triedCandidates(task.ecosystem, task.candidates);
   if (candidates.length === 0) return { noticeStatus: 'no_candidate', archiveId: null };
-  const purpose = task.ecosystem === 'npm' ? 'archive-npm' : 'archive-pypi';
+  const purpose = archivePurposeOf(task.ecosystem);
   let last: NoticeStatus = 'download_failed';
 
   for (const candidate of candidates) {

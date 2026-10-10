@@ -723,15 +723,14 @@ export class ScanWorker {
         'SELECT ecosystem FROM project_tech_stacks WHERE project_id = $1',
         [projectId]
       );
-      ecosystems = stackResult.rows
-        .map((r) => r.ecosystem)
-        .filter((e) => e === 'nodejs' || e === 'python');
+      const supported: readonly string[] = sandboxRunnerConfig.scan.supportedEcosystems;
+      ecosystems = stackResult.rows.map((r) => r.ecosystem).filter((e) => supported.includes(e));
     } catch (err) {
       // Class/code only, never the raw error object (ADR-004 Karar 6; security review I-6).
       this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId} (${errorCode(err)}).`);
     }
-    // Fallback to all supported MVP ecosystems
-    return ecosystems.length > 0 ? ecosystems : ['nodejs', 'python'];
+    // Empty stack: every supported ecosystem, in order (`nodejs`, `python`, `dotnet`; REQ-006 AC-P20-17).
+    return ecosystems.length > 0 ? ecosystems : [...sandboxRunnerConfig.scan.supportedEcosystems];
   }
 
   /**

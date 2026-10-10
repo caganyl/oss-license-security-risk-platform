@@ -376,8 +376,8 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
     }),
     shallowDepth: 1,
     maxRepoSizeMb: 512,
-    // MVP: Node.js and Python only
-    supportedEcosystems: ['nodejs', 'python'],
+    // Node.js, Python and .NET (NuGet; REQ-006 AC-P20-17, ADR-008 Karar 15). Order is the default stack order.
+    supportedEcosystems: ['nodejs', 'python', 'dotnet'],
   },
 
   retry: {

@@ -168,7 +168,32 @@ function buildResult(infos: Iterable<KeyInfo>, outcomes: Map<string, DependencyE
  * `not_comparable` (no registry `found` side); off/not injected or PyPI -> null.
  */
 function defaultLockIntegrity(info: KeyInfo, enabled: boolean): LockIntegrity | null {
-  return enabled && info.registry === 'npm' ? 'not_comparable' : null;
+  if (!enabled) return null;
+  // Exhaustive (ADR-008 Karar 1): a new registry never silently takes the PyPI branch.
+  switch (info.registry) {
+    case 'npm':
+      return 'not_comparable';
+    case 'pypi':
+      return null;
+    default: {
+      const unreachable: never = info.registry;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+/** Metadata fetcher of a registry (exhaustive, ADR-008 Karar 1). */
+function fetchMetadataOf(ecosystem: RegistryEcosystem): typeof fetchNpmMetadata {
+  switch (ecosystem) {
+    case 'npm':
+      return fetchNpmMetadata;
+    case 'pypi':
+      return fetchPypiMetadata;
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
 }
 
 function noRequestOutcome(info: KeyInfo, status: EnrichmentStatus, enabled = status !== 'disabled'): DependencyEnrichment {
@@ -351,10 +376,7 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       }
       let outcome: MetadataOutcome;
       try {
-        outcome =
-          c.ecosystem === 'npm'
-            ? await fetchNpmMetadata(session, c.requestName, c.version, signal)
-            : await fetchPypiMetadata(session, c.requestName, c.version, signal);
+        outcome = await fetchMetadataOf(c.ecosystem)(session, c.requestName, c.version, signal);
       } catch (err) {
         setMetadataOutcome(info, classify(err) === 'budget' ? { kind: 'budget_exceeded' } : { kind: 'error', code: 'UNEXPECTED' });
         return;

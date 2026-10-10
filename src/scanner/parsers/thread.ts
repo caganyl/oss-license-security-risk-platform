@@ -25,6 +25,8 @@ export interface ParserThreadInput {
 
 export interface ParserSideChannel {
   npmIntegrity: LockIntegrityRecord[];
+  /** NuGet `contentHash`/`sha512` records as `sha512-<base64>` (REQ-006 AC-P20-16); present only when non-empty. */
+  nugetIntegrity?: LockIntegrityRecord[];
 }
 
 export type ParserThreadResponse =
@@ -38,7 +40,11 @@ function run(): void {
   try {
     const integrityCollector = new IntegrityCollector();
     const result = parseManifests(input.rootDir, input.ecosystems, input.scanId, { integrityCollector });
-    response = { ok: true, result, sideChannel: { npmIntegrity: integrityCollector.records.slice(0, result.dependencies.length) } };
+    const sideChannel: ParserSideChannel = { npmIntegrity: integrityCollector.records.slice(0, result.dependencies.length) };
+    // Added only when non-empty, so the response of a scan without NuGet keeps its F4 shape (ADR-008 Karar 6).
+    const nugetIntegrity = integrityCollector.nugetRecords.slice(0, result.dependencies.length);
+    if (nugetIntegrity.length > 0) sideChannel.nugetIntegrity = nugetIntegrity;
+    response = { ok: true, result, sideChannel };
   } catch (err) {
     const name = err instanceof Error ? err.name : 'Error';
     const message = err instanceof Error ? scrubRoot(err.message, input.rootDir) : '';

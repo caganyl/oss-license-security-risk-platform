@@ -438,6 +438,48 @@ export interface TreeWalk {
   fileLinks: FileLink[];
   /** `filesystem` records: skipped links without a manifest name (folder or file) and unreadable directories. */
   errors: ParseErrorRecord[];
+  /**
+   * .NET files by directory, then by file name (only with `{ dotnet: true }`,
+   * ADR-008 Karar 2). Kept apart from `byDir`, so the npm/Python parsers never
+   * see them.
+   */
+  dotnetByDir?: Map<string, Map<string, WalkedFile>>;
+  /** Links (or reparse points resolving outside the root) with a .NET name (only with `{ dotnet: true }`). */
+  dotnetLinks?: FileLink[];
+}
+
+export interface WalkOptions {
+  /** Also recognise .NET files (ADR-008 Karar 2). Absent or false: the walk is byte-identical to F4. */
+  dotnet?: boolean;
+}
+
+const DOTNET_FIXED_NAMES: ReadonlySet<string> = new Set(['packages.lock.json', 'Directory.Packages.props', 'packages.config']);
+const DOTNET_PROJECT_EXTENSIONS: readonly string[] = ['.csproj', '.fsproj', '.vbproj'];
+
+function asciiLowerName(value: string): string {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    out += c >= 0x41 && c <= 0x5a ? String.fromCharCode(c + 0x20) : value[i];
+  }
+  return out;
+}
+
+/** MSBuild project file name: ends with `.csproj`, `.fsproj` or `.vbproj` (extension ASCII case-insensitive). */
+export function isDotnetProjectFileName(name: string): boolean {
+  const lower = asciiLowerName(name);
+  return DOTNET_PROJECT_EXTENSIONS.some((ext) => lower.length > ext.length && lower.endsWith(ext));
+}
+
+/**
+ * .NET file name rule of ADR-008 Karar 2 (names case-sensitive; project
+ * extensions case-insensitive). `project.assets.json` counts only when its
+ * direct parent folder is exactly `obj`.
+ */
+function isDotnetName(name: string, relDir: string): boolean {
+  if (DOTNET_FIXED_NAMES.has(name)) return true;
+  if (name === 'project.assets.json') return relDir === 'obj' || relDir.endsWith('/obj');
+  return isDotnetProjectFileName(name);
 }
 
 function errnoCode(err: unknown): string {
@@ -474,9 +516,16 @@ function realOrResolved(p: string): string {
  * file is re-checked with `realpath` against the root (second defence for
  * reparse points that are not reported as links).
  */
-export function walkTree(rootDir: string): TreeWalk {
+export function walkTree(rootDir: string, options: WalkOptions = {}): TreeWalk {
   const rootReal = realOrResolved(rootDir);
   const walk: TreeWalk = { rootDir, byDir: new Map(), fileLinks: [], errors: [] };
+  const dotnet = options.dotnet === true;
+  const dotnetByDir = new Map<string, Map<string, WalkedFile>>();
+  const dotnetLinks: FileLink[] = [];
+  if (dotnet) {
+    walk.dotnetByDir = dotnetByDir;
+    walk.dotnetLinks = dotnetLinks;
+  }
   const stack: Array<{ abs: string; rel: string }> = [{ abs: rootDir, rel: '' }];
 
   while (stack.length > 0) {
@@ -520,6 +569,8 @@ export function walkTree(rootDir: string): TreeWalk {
         //   target (reported deviation, see the REQ-003 handoff).
         if (ALL_MANIFEST_NAMES.has(name)) {
           walk.fileLinks.push({ relPath: rel, name });
+        } else if (dotnet && isDotnetName(name, dir.rel)) {
+          dotnetLinks.push({ relPath: rel, name });
         } else if (!SKIP_DIRS.has(name)) {
           walk.errors.push({ ecosystem: 'filesystem', file: rel, error: LINK_NOT_FOLLOWED_MESSAGE });
         }
@@ -528,6 +579,21 @@ export function walkTree(rootDir: string): TreeWalk {
 
       if (stat.isDirectory()) {
         if (!SKIP_DIRS.has(name)) stack.push({ abs, rel });
+        continue;
+      }
+
+      if (stat.isFile() && dotnet && !ALL_MANIFEST_NAMES.has(name) && isDotnetName(name, dir.rel)) {
+        // Same second defence as below; a .NET file outside the root counts as a .NET link.
+        if (!isInside(realOrResolved(abs), rootReal)) {
+          dotnetLinks.push({ relPath: rel, name });
+          continue;
+        }
+        let dotnetFiles = dotnetByDir.get(dir.rel);
+        if (!dotnetFiles) {
+          dotnetFiles = new Map();
+          dotnetByDir.set(dir.rel, dotnetFiles);
+        }
+        dotnetFiles.set(name, { absPath: abs, relPath: rel, relDir: dir.rel, name, size: stat.size });
         continue;
       }
 
@@ -597,7 +663,7 @@ export interface ReadManifest {
  * Reads a manifest once: the same buffer gives the hash/size record and the
  * text (no TOCTOU between them). Over 32 MiB the file is not read.
  */
-export function readManifest(file: WalkedFile, ecosystem: 'nodejs' | 'python'): ReadManifest {
+export function readManifest(file: WalkedFile, ecosystem: 'nodejs' | 'python' | 'dotnet'): ReadManifest {
   if (file.size > MAX_MANIFEST_BYTES) {
     throw new ManifestReadError(`${file.relPath}: ${FILE_TOO_LARGE_MESSAGE}`);
   }
@@ -682,4 +748,99 @@ export function parseError(ecosystem: string, relPath: string, err: unknown, roo
   message = scrubRoot(message, rootDir);
   if (pyStrip(message) === '') message = err instanceof Error && err.name ? `Ayrıştırma hatası (${err.name}).` : 'Ayrıştırma hatası.';
   return { ecosystem, file: relPath, error: message };
+}
+
+// ---------------------------------------------------------------------------
+// NuGet (.NET) shared pieces (REQ-006 P-20, ADR-008 Karar 5, 7)
+// ---------------------------------------------------------------------------
+
+/** Fixed `parse_errors` texts of the .NET parser (ADR-008 Karar 7; frozen by the NuGet goldens). */
+export const NUGET_MESSAGES = Object.freeze({
+  json: 'JSON ayrıştırılamadı.',
+  lockVersion: 'Desteklenmeyen packages.lock.json sürümü.',
+  assetsVersion: 'Desteklenmeyen project.assets.json sürümü.',
+  structure: 'Beklenmeyen dosya yapısı.',
+  xmlMalformed: 'XML ayrıştırılamadı.',
+  xmlDoctype: 'XML belge türü bildirimi (DOCTYPE) desteklenmiyor.',
+  xmlLimit: 'XML boyut, derinlik veya öğe sınırı aşıldı.',
+  xmlEncoding: 'Desteklenmeyen XML kodlaması.',
+  invalidId: 'Geçersiz paket kimliği içeren girdiler atlandı.',
+  unknownType: 'Bilinmeyen bağımlılık türü içeren girdiler atlandı.',
+  invalidEntry: 'Geçersiz paket girdileri atlandı.',
+  limit: 'Proje klasörü bağımlılık sınırını aşıyor (20 000).',
+});
+
+/** Dependency limit per project folder (ADR-008 Karar 7). */
+export const NUGET_MAX_DEPENDENCIES_PER_FOLDER = 20_000;
+
+/** Maximum `declared_range` length in code points (ADR-008 Karar 5.2, 5.4). */
+export const NUGET_DECLARED_RANGE_MAX = 200;
+
+/** A .NET file-level error: the source is skipped and the next one is tried. `message` is one of `NUGET_MESSAGES`. */
+export class NugetFileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NugetFileError';
+  }
+}
+
+/** Entry-level problem kinds (one record per file and kind; ADR-008 Karar 5.1). */
+export type NugetIssue = 'invalidId' | 'unknownType' | 'invalidEntry';
+
+/** One package record of a .NET source before it becomes a `ScannedDependency`. */
+export interface NugetEntry {
+  name: string;
+  version: string | null;
+  scope: 'direct' | 'transitive';
+  declaredRange: string | null;
+  manifestFile: string;
+}
+
+/** Side-channel value of one entry (base64 SHA-512 as found in the file; validated by the collector). */
+export interface NugetHashRecord {
+  name: string;
+  version: string;
+  hash: unknown;
+}
+
+/** Successful read of one lock/assets source. */
+export interface NugetSourceResult {
+  entries: NugetEntry[];
+  issues: NugetIssue[];
+  hashes: NugetHashRecord[];
+}
+
+/**
+ * Stored-text cleanup of a declared range (equivalent of `sanitizeText`,
+ * which the parser thread cannot import): `\r\n`/`\r` -> `\n`, C0 controls
+ * other than TAB/LF, DEL and C1 dropped, lone surrogates -> U+FFFD; then cut
+ * to 200 code points.
+ */
+export function sanitizeDeclaredRange(value: string): string {
+  let out = '';
+  let points = 0;
+  const text = value.replace(/\r\n?/g, '\n');
+  for (let i = 0; i < text.length && points < NUGET_DECLARED_RANGE_MAX; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text.slice(i, i + 2);
+        i++;
+      } else {
+        out += '�';
+      }
+      points++;
+      continue;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) {
+      out += '�';
+      points++;
+      continue;
+    }
+    if ((c < 0x20 && c !== 0x09 && c !== 0x0a) || c === 0x7f || (c >= 0x80 && c <= 0x9f)) continue;
+    out += text[i];
+    points++;
+  }
+  return out;
 }

@@ -67,7 +67,30 @@ export function pep503Name(name: string): string {
 
 /** Request name: npm as-is (scoped names keep `@scope/name`; the path segment is built by `npmPathSegment`), PyPI PEP 503. */
 export function requestName(ecosystem: RegistryEcosystem, name: string): string {
-  return ecosystem === 'pypi' ? pep503Name(name) : name;
+  // Exhaustive (ADR-008 Karar 1): a new registry is a compile error here, never a silent default.
+  switch (ecosystem) {
+    case 'npm':
+      return name;
+    case 'pypi':
+      return pep503Name(name);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+function isValidRegistryName(ecosystem: RegistryEcosystem, name: string): boolean {
+  switch (ecosystem) {
+    case 'npm':
+      return isValidNpmName(name);
+    case 'pypi':
+      return isValidPypiName(name);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
 }
 
 /** npm request path segment: `@scope%2Fname` for scoped names, the name itself otherwise (AC-P14-5). */
@@ -86,7 +109,7 @@ export function checkCoordinates(ecosystem: string, name: string, version: strin
   const registry = registryEcosystemOf(ecosystem);
   if (registry === null) return { kind: 'unsupported' };
   if (version === null || version === undefined) return { kind: 'version_unknown' };
-  const validName = registry === 'npm' ? isValidNpmName(name) : isValidPypiName(name);
+  const validName = isValidRegistryName(registry, name);
   if (!validName || !isValidVersion(version)) return { kind: 'invalid_coordinates' };
   return { kind: 'ok', ecosystem: registry, requestName: requestName(registry, name), version };
 }

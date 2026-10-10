@@ -17,6 +17,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 - [Tam sıfırlama](#tam-sıfırlama)
 - [Göç testleri](#göç-testleri)
 - [Kayıt defteri önbelleği (`006`)](#kayıt-defteri-önbelleği-006)
+- [Güvenlik açığı önbellekleri ve yeniden kontrol kaydı (`007`)](#güvenlik-açığı-önbellekleri-ve-yeniden-kontrol-kaydı-007)
 - [Parola kurtarma (SQL adımı)](#parola-kurtarma-sql-adımı)
 - [Kurallar](#kurallar)
 
@@ -25,7 +26,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | Yol | Amaç |
 | --- | --- |
 | `migrations/NNN_ad.up.sql` / `.down.sql` | İleri / geri göç. Araç her dosyayı, `schema_migrations` kaydıyla (`up`'ta `INSERT`, `down`'da `DELETE`) birlikte **tek transaction** içinde çalıştırır: ya ikisi birden işlenir ya hiçbiri. Dosyalarda `BEGIN/COMMIT` yoktur. |
-| `schema.sql` | `001`–`006` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
+| `schema.sql` | `001`–`007` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
 | `tests/f1_migrations_test.sql` | `002`–`004` için up → assert → down → up senaryosu. `psql` gerektirmez: `npm test` bunu `tests/integration/migrations.test.ts` içinde gömülü PostgreSQL'e karşı çalıştırır (`\ir` satırları satır içine alınır). Bulgu parmak izi referans değerleri de buradadır. |
 | `../src/db/migrate.ts` | CLI (`npm run db:migrate` = `node dist/db/migrate.js`). |
 | `../src/db/migrator.ts` | Göç kütüphanesi: klasör doğrulama, durum okuma, `up`, `down`, `status`, `npm start` için bekleyen göç kontrolü. |
@@ -41,6 +42,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | `004_finding_fingerprint` | `findings.fingerprint` (backfill + NOT NULL), `carried_from_finding_id`, indeksler | ADR-003 (c), D-1 | Parmak izi (yeniden hesaplanabilir) ve karar taşıma bağlantısı (kalıcı) |
 | `005_scan_next_attempt` | `scans.next_attempt_at TIMESTAMPTZ NULL` (yeniden deneme bekleme zamanı); indeks ve CHECK yok | ADR-004 Karar 11, D-40 | Yalnız kuyruktaki taramaların yeniden deneme zamanlaması (bekleyenler hemen sahiplenilebilir olur) |
 | `006_registry_enrichment` | `registry_package_cache` (kayıt defteri lisans meta veri önbelleği), `registry_archive_cache` (arşivden çıkarılan lisans dosyaları ve telif satırları); `scan_dependencies`'e 7 kolon: `license_expression`, `license_source`, `license_lock_hint`, `license_hint_differs`, `license_enrichment_status`, `notice_status`, `notice_archive_id` (FK, `ON DELETE SET NULL`); `idx_scan_dependencies_notice_archive`. Veri taşıma yok; eski satırlar `NULL` kalır (= F3 öncesi tarama) | ADR-006 Karar 9–10, D-57, D-62, D-79 | İki önbellek (kayıt defterlerinden yeniden indirilebilir) ve F3 sonrası taramaların etkin lisans / NOTICE alanları (kalıcı; bu taramalar F3 öncesi gibi görünür, NOTICE için yeniden tarama gerekir) |
+| `007_vulnerability_recheck` | `vulnerability_recheck_runs` (günlük yeniden kontrol çalıştırma kaydı; `runtime_run_id` çiti, aynı anda tek `running` satırı: `uq_vulnerability_recheck_runs_running`), `osv_vulnerability_cache` (kırpılmış OSV kayıtları), `nvd_cvss_cache` (CVE başına CVSS özeti); `scans.vulnerability_data_status` (`complete`/`partial`/`unavailable`/`disabled`, `NULL` = F4 öncesi), `scans.vulnerability_checked_at`; `findings.recheck_run_id` (FK, `ON DELETE SET NULL`); `scan_dependencies.lock_integrity` (L-5: `match`/`mismatch`/`not_comparable`); `idx_findings_recheck_run`, `idx_findings_accepted`, `idx_scans_project_completed`. Enum değişikliği ve veri taşıma yok; eski satırlar `NULL` kalır | ADR-007 Karar 14, D-102, D-103 | Yeniden kontrol çalıştırma geçmişi, bulguların yeniden kontrol bağlantısı (bulgular, incelemeler ve denetim satırları **kalır**), taramaların güvenlik açığı verisi durumu ve son kontrol zamanı, L-5 işaretleri (kalıcı); iki önbellek (OSV/NVD'den yeniden alınabilir) |
 
 **Dağıtım sırası:**
 
@@ -55,6 +57,11 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
   NOTICE kodu yeni tabloları ve kolonları okur/yazar; `npm start` göç bekliyorsa
   başlamaz). `006`'yı geri almak REQ-004 kodunu geri almakla birlikte yapılır.
   REQ-004 öncesi kod yeni tabloları ve kolonları yok sayar.
+- `007`, REQ-005 çalışma zamanından **önce** uygulanır (worker, yeniden kontrol
+  zamanlayıcısı, risk kabulü süre değerlendirmesi, durum uç noktası ve L-5
+  rapor/NOTICE/SBOM kodu yeni tabloları ve kolonları okur/yazar; `npm start`
+  göç bekliyorsa başlamaz). `007`'yi geri almak REQ-005 kodunu geri almakla
+  birlikte yapılır. REQ-005 öncesi kod yeni tabloları ve kolonları yok sayar.
 - Veritabanında dosyası olmayan bir sürüm varsa (veritabanı koddan yeni) ne
   araç (`up`/`down`) ne `npm start` çalışır; önce kodu güncelleyin.
 
@@ -246,6 +253,10 @@ açılır. Testler uygulamanın kendi veritabanına asla bağlanmaz.
   doğrulaması, BOM/CRLF): REQ-003 Vitest göç testleri (`tests/`).
 - `006` (up → down → up, CHECK kümeleri, `ON DELETE SET NULL`, `schema.sql`
   eşitliği): REQ-004 AC-G-7 Vitest göç testleri (`tests/`, qa-automation).
+- `007` (up → down → up, CHECK kümelerinin contract ile birebirliği, tek
+  `running` satırı, `ON DELETE SET NULL`, down'da bulguların korunması,
+  `schema.sql` eşitliği): REQ-005 AC-G-7 Vitest göç testleri (`tests/`,
+  qa-automation).
 
 ## Kayıt defteri önbelleği (`006`)
 
@@ -316,6 +327,113 @@ karşılamaz (ADR-006 Karar 9). SBOM telif bilgisi artık
 `registry_archive_cache.copyright_lines`'tan okunur. Kolonların silinmesi ayrı
 bir temizlik kararı ve ayrı bir göçtür; `006` geri alındığında da dokunulmaz.
 
+## Güvenlik açığı önbellekleri ve yeniden kontrol kaydı (`007`)
+
+REQ-005 (F4) güvenlik açığı sorgusu OSV ayrıntı kayıtlarını ve NVD CVSS
+özetlerini iki tabloda önbelleğe alır, günlük yeniden kontrolün her
+çalıştırmasını bir kayıt tablosuna yazar (ADR-007 Karar 4, 6, 7, 8, 14; D-102).
+Önbellek kayıtları tarama sonucu transaction'ından **bağımsız**, ayrıntı alındığı
+anda kendi transaction'ında yazılır; geri alınan tarama önbelleği silmez
+(AC-P17-5). İçerik OSV ve NVD'den yeniden alınabilir; önbellekler her zaman
+güvenle temizlenebilir.
+
+| Tablo | Anahtar | İçerik | Geçerlilik |
+| --- | --- | --- | --- |
+| `osv_vulnerability_cache` | `osv_id` (OSV kimliği, kalıp `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`) | Kırpılmış ve arındırılmış kayıt `record` (JSONB; `id`, `aliases`, `summary`, `details`, `severity`, `affected`, `references`, `published`, `modified`, `withdrawn`), `modified`, `withdrawn`, `record_version` (koddaki `NORMALIZED_RECORD_VERSION`), `fetched_at` | Süresiz. Toplu yanıttaki `modified` saklanandan yeniyse veya `record_version` eskiyse ıskalama sayılır ve aynı satır üzerine yazılır. 404 ve geçici hatalar yazılmaz (negatif önbellek yok). |
+| `nvd_cvss_cache` | `cve_id` (`^CVE-[0-9]{4}-[0-9]{4,}$`) | `outcome` (`found`/`no_cvss`), `cvss_score` (yalnız `found`'da dolu, 0–10), `cvss_vector` (≤ 256), `cvss_version` (≤ 8), `base_severity`, `fetched_at`, `expires_at` | `found`: 7 gün, `no_cvss`: 24 saat; `expires_at > now` uygulamanın (enjekte) saatiyle değerlendirilir, veritabanı saatiyle değil. Ağ, `429`, `5xx`, bütçe, devre kesici ve bozuk yanıt yazılmaz. |
+| `vulnerability_recheck_runs` | `id` (UUID) | `runtime_run_id` (yazan sürecin çalıştırma kimliği), `status` (`running`/`completed`/`partial`/`failed`/`interrupted`/`disabled`), `started_at`/`finished_at` (enjekte saat; yalnız `running` satırında `finished_at` boş), sayaçlar (`projects_checked`, `packages_checked`, `packages_unchecked`, `findings_opened`, `acceptances_reopened`, hepsi `>= 0`), `error_summary` (sabit kod listesi, ≤ 500 karakter) | Günde bir satır büyür; kendiliğinden silinmez (aşağıdaki temizlik). |
+
+Taramaya ve bulguya bağlı alanlar:
+
+- `scans.vulnerability_data_status` (`complete`/`partial`/`unavailable`/`disabled`;
+  `NULL` = F4 öncesi tarama) ve `scans.vulnerability_checked_at`. Değer kümesi
+  `docs/contracts/REQ-005-vulnerability-data.md` bölüm 3.1 ile birebir aynıdır.
+- `findings.recheck_run_id`: bulguyu açan yeniden kontrol çalıştırması;
+  `vulnerability_recheck_runs(id)`'ye `ON DELETE SET NULL` ile bağlıdır. `NULL`
+  = bulguyu taramanın kendisi açtı (veya çalıştırma geçmişi silindi).
+- `scan_dependencies.lock_integrity` (L-5; `match`/`mismatch`/`not_comparable`;
+  `NULL` = karşılaştırılmadı). Değer kümesi
+  `docs/contracts/REQ-004-notice-and-outputs.md` bölüm 4.4 ile birebir aynıdır.
+
+Durum ve sayaç kümeleri `CHECK` kısıtlarıyla korunur; yeni değer contract
+revizyonu ve yeni göç gerektirir.
+
+### Önbelleği temizleme (SQL)
+
+pgAdmin Query Tool'unda (uygulamanın veritabanına bağlıyken) veya `psql` ile
+çalıştırılır. Production veritabanında veri silmek insan onayı gerektirir.
+Önbellekleri silmek hiçbir taramayı, bulguyu veya katalog satırını
+(`vulnerabilities`) etkilemez; yalnız sonraki tarama ve yeniden kontroller
+ayrıntıları ve CVSS'i yeniden ister (NVD anahtarsız hız sınırı nedeniyle ilk
+çalıştırmalar yavaşlayabilir). Uygulama çalışırken de güvenlidir.
+
+```sql
+-- Tüm güvenlik açığı önbellekleri (OSV ayrıntı + NVD CVSS):
+BEGIN;
+DELETE FROM osv_vulnerability_cache;
+DELETE FROM nvd_cvss_cache;
+COMMIT;
+
+-- Yalnız süresi dolmuş NVD kayıtları (isteğe bağlı bakım; süresi dolmuş kayıt
+-- zaten ıskalama sayılır ve bir sonraki istekte üzerine yazılır):
+DELETE FROM nvd_cvss_cache WHERE expires_at <= NOW();
+
+-- Yalnız "CVSS yok" NVD kayıtları (NVD'ye yeni puan eklendiyse hemen yeniden
+-- sorgulamak için):
+DELETE FROM nvd_cvss_cache WHERE outcome = 'no_cvss';
+```
+
+- Kırpma kuralı değiştiğinde önbelleği elle silmek gerekmez: kod sabiti
+  `NORMALIZED_RECORD_VERSION` artırılır, eski sürümlü kayıtlar ıskalama sayılır.
+
+### Yeniden kontrol çalıştırma geçmişini temizleme (SQL)
+
+`running` dışındaki satırlar silinebilir. Bu satırlara bağlı bulgular
+**silinmez**: `findings.recheck_run_id` `ON DELETE SET NULL` ile `NULL` olur;
+bulgunun kendisi, incelemeleri ve denetim satırı (`new_data.recheck_run_id`
+dahil) kalır. Production veritabanında veri silmek insan onayı gerektirir.
+
+```sql
+-- Tüm bitmiş çalıştırmalar:
+DELETE FROM vulnerability_recheck_runs WHERE status <> 'running';
+
+-- Yalnız 90 günden eski bitmiş çalıştırmalar:
+DELETE FROM vulnerability_recheck_runs
+ WHERE status <> 'running' AND started_at < NOW() - INTERVAL '90 days';
+```
+
+- Geçmiş silinince zamanlayıcının vade hesabı en son başarılı (`completed`,
+  `partial`, `disabled`) kaydı bulamaz; uygulama çalışıyorsa bir sonraki 10
+  dakikalık tetikte, yeniden başlatıldıysa ~60 sn sonra yeni bir yeniden kontrol
+  çalışır. Durum uç noktasının `last_run` alanı yeni kayıt yazılana kadar `null`
+  döner.
+
+### Tek `running` satırı ve çit (kilit notu)
+
+- `uq_vulnerability_recheck_runs_running` aynı anda en fazla bir `running`
+  satırına izin verir; eşzamanlı ikinci başlatma `23505` ile reddedilir ve
+  çalıştırma başlamaz.
+- Her proje yazımı önce kendi satırını
+  `status = 'running' AND runtime_run_id = <kendi kimliği>` koşuluyla
+  `FOR UPDATE` kilitler (çit, ADR-004 Karar 4). Uygulama çalışırken `running`
+  satırını **silmeyin veya değiştirmeyin**: çalıştırma yazımı durdurur ve
+  yarım kalır.
+- Süreç çökerse satır `running` kalır; sonraki `npm start` zamanlayıcıyı
+  başlatırken onu kendiliğinden `interrupted` yapar (başlangıç süpürmesi).
+  Elle düzeltme gerekmez. Yine de gerekirse yalnız uygulama **durmuşken**:
+
+  ```sql
+  UPDATE vulnerability_recheck_runs
+     SET status = 'interrupted', finished_at = NOW()
+   WHERE status = 'running';
+  ```
+
+- Göç `007` kendisi: yeni tablolar boş oluşturulur; `scans`, `findings` ve
+  `scan_dependencies`'e varsayılansız `NULL` kolon eklemek tabloyu yeniden
+  yazmaz ama `CHECK`/yabancı anahtar doğrulaması boyunca kısa süre `ACCESS
+  EXCLUSIVE` kilit tutar, ardından üç indeks `SHARE` kilidiyle oluşturulur.
+  Yerel veritabanlarında saniyeler sürer; göçten önce uygulamayı durdurun.
+
 ## Parola kurtarma (SQL adımı)
 
 Arayüz veya API üzerinden parola kurtarma ya da değiştirme yoktur (ADR-001
@@ -365,7 +483,8 @@ Sonrasında:
 - Yeni şema değişikliği yalnız yeni bir `NNN_ad.up.sql` + `.down.sql` çiftiyle,
   uygulanmış en büyük numaradan sonra yapılır; **uygulanmış bir göç dosyası
   değiştirilmez**, düzeltme yeni göçle yapılır (araç checksum saklamaz; `001`…
-  `005`'in normalize içerik özetleri testle sabitlenir).
+  `006`'nın normalize içerik özetleri testle sabitlenir; `007` REQ-005 ile
+  sabitlenir).
 - Her `.down.sql`, kaybolacak veriyi dosya başında açıkça yazar.
 - Göç dosyaları `BEGIN/COMMIT/ROLLBACK/START TRANSACTION` ve `psql` meta
   komutu içermez; araç her dosyayı kendi transaction'ında çalıştırır.

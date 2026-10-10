@@ -4,7 +4,8 @@
 --
 -- Reference snapshot of the schema after migrations
 --   001_initial_core_schema, 002_local_auth, 003_declared_range,
---   004_finding_fingerprint, 005_scan_next_attempt, 006_registry_enrichment
+--   004_finding_fingerprint, 005_scan_next_attempt, 006_registry_enrichment,
+--   007_vulnerability_recheck
 -- The migrations in db/migrations/ are the source of truth and are applied
 -- with `npm run db:migrate` (src/db/migrate.ts). Do not load this file into a
 -- database that is (or will be) managed by the migration tool: it does not
@@ -258,11 +259,21 @@ CREATE TABLE scans (
     updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     -- Retry backoff (005, REQ-003 P-13, ADR-004 Karar 8): earliest time a
     -- queued scan may be claimed again, database clock. NULL = immediately.
-    next_attempt_at         TIMESTAMPTZ  NULL
+    next_attempt_at         TIMESTAMPTZ  NULL,
+    -- Vulnerability data completeness (007, REQ-005 P-17/P-18, ADR-007 Karar 5,
+    -- 7.5.6). NULL = scan completed before F4. Value set =
+    -- docs/contracts/REQ-005-vulnerability-data.md §3.1.
+    vulnerability_data_status TEXT       NULL CHECK (vulnerability_data_status IN
+        ('complete', 'partial', 'unavailable', 'disabled')),
+    vulnerability_checked_at  TIMESTAMPTZ NULL
 );
 
 COMMENT ON COLUMN scans.next_attempt_at IS
   'Earliest time a queued scan may be claimed again (retry backoff, REQ-003 P-13). NULL = immediately.';
+COMMENT ON COLUMN scans.vulnerability_data_status IS
+  'Vulnerability data completeness (REQ-005 P-17/P-18, ADR-007 Karar 5). NULL = scan completed before F4.';
+COMMENT ON COLUMN scans.vulnerability_checked_at IS
+  'Start of the last vulnerability check of this scan (scan lookup or the recheck that made it complete); injected clock.';
 
 CREATE TABLE scan_files (
     id          UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -409,6 +420,10 @@ CREATE TABLE scan_dependencies (
          'budget_exceeded', 'not_attempted', 'not_runtime')),
     notice_archive_id         UUID    NULL
         REFERENCES registry_archive_cache(id) ON DELETE SET NULL,
+    -- L-5 lockfile integrity (007, REQ-005, ADR-007 Karar 12). NULL = not
+    -- compared. Value set = docs/contracts/REQ-004-notice-and-outputs.md §4.4.
+    lock_integrity            TEXT    NULL CHECK (lock_integrity IN
+        ('match', 'mismatch', 'not_comparable')),
     UNIQUE (scan_id, package_id, manifest_path, scope),
     CONSTRAINT scan_dependencies_license_f3_together
         CHECK ((license_source IS NULL) = (license_enrichment_status IS NULL))
@@ -418,6 +433,8 @@ COMMENT ON COLUMN scan_dependencies.license_source IS
   'Effective license source (REQ-004 L-6, ADR-006 Karar 11). NULL = scan completed before license enrichment (F3).';
 COMMENT ON COLUMN scan_dependencies.notice_archive_id IS
   'registry_archive_cache row used for NOTICE/copyright; set to NULL when the cache is cleared (rescan required).';
+COMMENT ON COLUMN scan_dependencies.lock_integrity IS
+  'npm lockfile sha512 vs registry dist.integrity (REQ-005 L-5, ADR-007 Karar 12). NULL = not compared (enrichment off, non-npm, scan before F4).';
 
 -- =============================================================================
 -- LICENSES
@@ -496,6 +513,78 @@ CREATE TABLE vulnerability_aliases (
 );
 
 -- =============================================================================
+-- VULNERABILITY LOOKUP CACHES AND RECHECK RUNS (007, REQ-005, ADR-007 Karar 4,
+-- 6, 7, 8, 14). The two caches are independent of scans (own autocommit
+-- transaction), re-fetchable and safe to clear (db/README.md). Times marked
+-- "injected" come from the application clock, not the database.
+-- =============================================================================
+
+-- One row per daily recheck run. At most one 'running' row
+-- (uq_vulnerability_recheck_runs_running); runtime_run_id fences every
+-- per-project write (ADR-004 Karar 4). Value set =
+-- docs/contracts/REQ-005-vulnerability-data.md §4.1.
+CREATE TABLE vulnerability_recheck_runs (
+    id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    runtime_run_id       TEXT        NOT NULL,   -- process run id (fencing, ADR-004 Karar 4)
+    status               TEXT        NOT NULL CHECK (status IN
+                             ('running', 'completed', 'partial', 'failed', 'interrupted', 'disabled')),
+    started_at           TIMESTAMPTZ NOT NULL,   -- injected application clock
+    finished_at          TIMESTAMPTZ NULL,
+    projects_checked     INTEGER     NOT NULL DEFAULT 0 CHECK (projects_checked >= 0),
+    packages_checked     INTEGER     NOT NULL DEFAULT 0 CHECK (packages_checked >= 0),
+    packages_unchecked   INTEGER     NOT NULL DEFAULT 0 CHECK (packages_unchecked >= 0),
+    findings_opened      INTEGER     NOT NULL DEFAULT 0 CHECK (findings_opened >= 0),
+    acceptances_reopened INTEGER     NOT NULL DEFAULT 0 CHECK (acceptances_reopened >= 0),
+    error_summary        TEXT        NULL CHECK (error_summary IS NULL OR char_length(error_summary) <= 500),
+    -- only a running row has no finish time
+    CONSTRAINT vulnerability_recheck_runs_finished
+        CHECK ((status = 'running') = (finished_at IS NULL))
+);
+
+COMMENT ON TABLE vulnerability_recheck_runs IS
+  'Daily vulnerability recheck runs (REQ-005 P-18, ADR-007 Karar 7, 8). At most one running row. Finished rows may be deleted (db/README.md); findings keep existing.';
+COMMENT ON COLUMN vulnerability_recheck_runs.runtime_run_id IS
+  'Run id of the process that owns the run; every per-project write locks this row with status = running AND runtime_run_id = <own id> (fence).';
+COMMENT ON COLUMN vulnerability_recheck_runs.error_summary IS
+  'NULL or a ", "-joined list of fixed codes (contract REQ-005 section 4.3); never package names, URLs or secrets.';
+
+-- Trimmed, sanitized OSV records keyed by OSV id (ADR-007 Karar 4).
+CREATE TABLE osv_vulnerability_cache (
+    osv_id            TEXT        PRIMARY KEY
+                          CHECK (osv_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'),
+    modified          TIMESTAMPTZ NULL,
+    withdrawn         BOOLEAN     NOT NULL DEFAULT FALSE,
+    record            JSONB       NOT NULL,      -- trimmed, sanitized record (ADR-007 Karar 4)
+    record_version    INTEGER     NOT NULL CHECK (record_version > 0),
+    fetched_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE osv_vulnerability_cache IS
+  'Trimmed OSV vulnerability records (REQ-005 P-17, ADR-007 Karar 4). Independent of scans; re-fetchable; safe to clear (db/README.md).';
+COMMENT ON COLUMN osv_vulnerability_cache.record_version IS
+  'NORMALIZED_RECORD_VERSION of the code that wrote the row; a row with an older version is a cache miss.';
+COMMENT ON COLUMN osv_vulnerability_cache.modified IS
+  'OSV "modified" of the stored record; a newer "modified" in a querybatch response triggers a re-fetch.';
+
+-- NVD CVSS summary per CVE (ADR-007 Karar 6). found: valid 7 days, no_cvss:
+-- 24 h; transient errors are never stored.
+CREATE TABLE nvd_cvss_cache (
+    cve_id        TEXT         PRIMARY KEY CHECK (cve_id ~ '^CVE-[0-9]{4}-[0-9]{4,}$'),
+    outcome       TEXT         NOT NULL CHECK (outcome IN ('found', 'no_cvss')),
+    cvss_score    NUMERIC(4,1) NULL CHECK (cvss_score >= 0 AND cvss_score <= 10),
+    cvss_vector   TEXT         NULL CHECK (cvss_vector IS NULL OR char_length(cvss_vector) <= 256),
+    cvss_version  TEXT         NULL CHECK (cvss_version IS NULL OR char_length(cvss_version) <= 8),
+    base_severity TEXT         NULL CHECK (base_severity IN ('none', 'low', 'medium', 'high', 'critical')),
+    fetched_at    TIMESTAMPTZ  NOT NULL,         -- injected application clock
+    expires_at    TIMESTAMPTZ  NOT NULL,         -- found: +7 d, no_cvss: +24 h
+    -- a score exists exactly for found rows
+    CONSTRAINT nvd_cvss_cache_found CHECK ((outcome = 'found') = (cvss_score IS NOT NULL))
+);
+
+COMMENT ON TABLE nvd_cvss_cache IS
+  'NVD CVSS summary per CVE (REQ-005 P-17, ADR-007 Karar 6). Valid while expires_at > now (injected clock); re-fetchable; safe to clear (db/README.md).';
+
+-- =============================================================================
 -- FINDINGS (unified base for security, license, and copyright findings)
 -- =============================================================================
 
@@ -521,11 +610,18 @@ CREATE TABLE findings (
     fingerprint         CHAR(64)       NOT NULL,
     -- Previous finding whose decision was carried over to this one (P-08)
     carried_from_finding_id UUID       REFERENCES findings(id) ON DELETE SET NULL,
+    -- Recheck run that opened this finding after the scan (007, REQ-005 P-18);
+    -- NULL = opened by the scan itself, or run history deleted.
+    recheck_run_id      UUID           NULL
+        REFERENCES vulnerability_recheck_runs(id) ON DELETE SET NULL,
     CONSTRAINT findings_fingerprint_format_chk
         CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
     CONSTRAINT findings_carried_from_not_self_chk
         CHECK (carried_from_finding_id IS NULL OR carried_from_finding_id <> id)
 );
+
+COMMENT ON COLUMN findings.recheck_run_id IS
+  'vulnerability_recheck_runs row that opened this finding after the scan (REQ-005 P-18). NULL = opened by the scan itself, or run history deleted.';
 
 -- Security-specific finding detail (one row per security finding)
 CREATE TABLE security_findings (
@@ -693,6 +789,9 @@ CREATE INDEX idx_scans_project_status  ON scans(project_id, status);
 CREATE INDEX idx_scans_project_created ON scans(project_id, created_at DESC);
 CREATE INDEX idx_scans_status_active   ON scans(status) WHERE status IN ('pending', 'queued', 'running');
 CREATE INDEX idx_scans_worker          ON scans(worker_id) WHERE worker_id IS NOT NULL;
+-- latest completed scan per project: recheck scope, "newer completed scan"
+-- fence, status endpoint (007, ADR-007 Karar 7, 10)
+CREATE INDEX idx_scans_project_completed ON scans(project_id, completed_at DESC, id DESC) WHERE status = 'completed';
 
 -- scan_files
 CREATE INDEX idx_scan_files_scan ON scan_files(scan_id);
@@ -728,6 +827,17 @@ CREATE INDEX idx_findings_assignee    ON findings(assignee_id)    WHERE assignee
 CREATE INDEX idx_findings_deadline    ON findings(deadline)       WHERE deadline IS NOT NULL AND status = 'open';
 CREATE INDEX idx_findings_fingerprint_created ON findings(fingerprint, created_at DESC);
 CREATE INDEX idx_findings_carried_from        ON findings(carried_from_finding_id) WHERE carried_from_finding_id IS NOT NULL;
+-- ON DELETE SET NULL from vulnerability_recheck_runs, run -> findings (007)
+CREATE INDEX idx_findings_recheck_run         ON findings(recheck_run_id) WHERE recheck_run_id IS NOT NULL;
+-- P-19 keyset cursor over accepted findings (007, ADR-007 Karar 9)
+CREATE INDEX idx_findings_accepted            ON findings(id) WHERE status = 'accepted';
+
+-- vulnerability_recheck_runs (007, ADR-007 Karar 7, 8)
+CREATE UNIQUE INDEX uq_vulnerability_recheck_runs_running ON vulnerability_recheck_runs ((TRUE)) WHERE status = 'running';
+CREATE INDEX idx_vulnerability_recheck_runs_started       ON vulnerability_recheck_runs(started_at DESC);
+
+-- osv_vulnerability_cache / nvd_cvss_cache: no extra index; every lookup is by
+-- primary key (osv_id = ANY($1), cve_id = ANY($1)) (007, ADR-007 Karar 4, 6).
 
 -- security_findings
 CREATE INDEX idx_sec_findings_vuln    ON security_findings(vulnerability_id);

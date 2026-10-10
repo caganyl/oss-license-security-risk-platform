@@ -1032,6 +1032,169 @@ bağlanmıştır. "Doğrulanması gerekiyor" işaretli dış bilgilerin (OSV
 biri için tanımlı yedek veya AC-P18-14 sırasında teyit adımı vardır (Karar 3,
 6).
 
+## REQ-005 güvenlik düzeltmesi (2026-10-11)
+
+> **REQ-005 güvenlik düzeltmesi (2026-10-11).** Güvenlik incelemesi
+> (`docs/quality/security-reports/REQ-005-security-review.md`; ilk karar
+> Conditional Go, yeniden doğrulama 2026-10-11: **Go**) ve contract
+> `docs/contracts/REQ-005-vulnerability-data.md` 1.1.0 (V-15…V-19) sonrası
+> Karar 2–4, 6, 7, 8 ve 11 aşağıdaki kurallarla sıkılaştırılır (commit
+> `3fdb538` düzeltmeler, `3cda79a` L-3, `f79d3d5` yeniden doğrulamanın takip
+> bulguları Y-1…Y-3). Y-1…Y-3 yeniden doğrulamada merge'ü engellemeyen takip
+> olarak açılmış ve `f79d3d5`'te giderilmiştir. Bu bir gevşetme değil
+> sertleştirmedir; çeliştiği yerde yukarıdaki metnin yerine geçer.
+>
+> - **Karar 4, kimlik ve ayrıntı sınırları (M-1; V-15, contract §3.5.1):**
+>   `VULNERABILITY_LIMITS`'e üç sabit eklenir (ortam değişkeni yok). Tarama
+>   sorgusunda ve yeniden kontrol çalıştırmasında lookup başına ayrı ayrı
+>   uygulanır:
+>   - `osvMaxIdsPerPackage = 200`: paket başına (tüm sayfalar toplamı) benzersiz
+>     kimlik. Aşılınca o paketin sayfalaması durur, paket `unchecked` olur ve
+>     kimliklerinin **hiçbiri** işlenmez. Kod `osv:id_limit`.
+>   - `osvMaxDistinctIds = 5 000`: lookup başına benzersiz kimlik. Kümeye yeni
+>     kimlik ekleyip toplamı aşacak paket `unchecked` olur. Sayım referanslıdır:
+>     düşürülen paket getirdiği kimlikleri serbest bırakır. Kimlikleri tümüyle
+>     kümede olan paket `checked` kalır. Kod `osv:total_id_limit`.
+>   - `osvMaxDetailRequests = 2 000`: lookup başına ağa çıkan ayrıntı isteği
+>     (önbellek isabeti sayılmaz, bir isteğin yeniden denemeleri tek istektir).
+>     Sınır dolunca kalan kimlikler önbellekteki (eski dahil) kayıtla, yoksa
+>     asgari kayıtla yazılır ve "ayrıntı eksik" sayılır. Kod `osv:detail_limit`.
+>
+>   `[osv]` şablonları değişmez; sınırlar `U`/`D` sayımlarına yansır. Yeniden
+>   kontrolde herhangi bir sınır aşılırsa çalıştırma `partial` olur. Böylece
+>   bellek haritaları ve yazılan açık sayısı lookup başına ≤ 5 000 kimlikle
+>   sınırlıdır.
+> - **Karar 7, yazma fazının süresi (M-1, Y-1):** adım 4'teki
+>   `timeout(30 dk)` yerine lookup, çalıştırma başlangıcından (P-19 ve kapsam
+>   okuma dahil) itibaren en geç `runTimeoutMs × 5/6` = **25 dk**'da biter
+>   (`lookupBudgetShare`). Böylece yazma fazına **en az 5 dk** kalır. Yazma
+>   fazı da 30 dk çalıştırma sınırına bağlıdır. Son tarih her proje
+>   transaction'ından ve proje içindeki her bağımlılık yazımından önce
+>   denetlenir. Dolmuşsa o anki proje `ROLLBACK` edilir, kalan projeler
+>   yazılmaz ve çalıştırma `partial` + `osv:time_limit` ile kapanır. Bu durum
+>   vadeyi ilerletir; atlanan projeler sonraki çalıştırmada telafi edilir.
+>   Daha önce commit edilmiş projeler kalır; bağlantı bozuk sayılmaz.
+> - **Karar 3–4 ve 6, tarih ve puan doğrulaması (L-1; V-16, §3.5.2):**
+>   `published`/`modified` (ayrıntı kaydı ve querybatch sonucu) yalnız **katı
+>   RFC 3339** olarak kabul edilir. Buna takvim ve saat denetimi (yıl
+>   0001–9999) eklenir; değer `toISOString()` ile UTC'ye normalleştirilir.
+>   Geçersiz tarih alanı yok sayılır (`NULL`), kayıt reddedilmez. Geçersiz
+>   querybatch `modified` değeri tazeliği "bilinmiyor" yapar ve ayrıntı yeniden
+>   istenir (ayrıntı sınırına tabi). Karar 3 madde 3'teki "ISO 8601 olarak
+>   ayrıştırılabilir" ifadesi bu kuralla okunur. Sayısal CVSS puanı (OSV
+>   `severity[].score` ve NVD `baseScore`) yalnız sonlu ve **0–10** ise kabul
+>   edilir; aksi hâlde o kaynakta puan yok sayılır ve sıradaki kaynağa geçilir.
+>   Tek bozuk kayıt artık sonuç transaction'ını düşürmez.
+> - **Karar 6, CVSS kaynağı ve yerel hesap (P-1; V-18, §3.5.3):** CVSS taban
+>   puanı şu sırayla, ilk başarılı adımdan alınır:
+>   1. OSV kaydındaki geçerli sayısal puan.
+>   2. OSV kaydındaki ilk geçerli `CVSS_V3` vektöründen **yerel hesap**
+>      (`src/vulnerability/cvss3.ts`, ağ yok, düzenli ifade yok). Vektör
+>      `CVSS:3.0/` veya `CVSS:3.1/` önekli ve ≤ 256 karakter olmalı; 8 taban
+>      metriğinin her biri tam bir kez bulunmalı. Temporal/environmental
+>      metrikler yok sayılır. Formül FIRST CVSS v3.1 taban denklemleridir (v3.0
+>      ile aynı). Yuvarlama, spesifikasyon Ek A'daki tam sayı tabanlı
+>      `Roundup`'tır.
+>   3. NVD, yalnız ilk iki adımda puan elde edilemezse (yalnız `CVSS_V4`/
+>      `CVSS_V2` vektörü olan, geçersiz vektörlü veya `severity`'siz CVE).
+>   4. Varsayılan (önem `medium`, CVSS boş).
+>
+>   Puanın kaynağı yalnız `advisory_data` CVSS özetinde `source`
+>   (`osv_score` | `osv_vector` | `nvd`) olarak tutulur; API yanıt şemaları ve
+>   `[nvd]` şablonu değişmez. Kabul edilen kalıntılar: OSV ve NVD vektörleri
+>   farklıysa puan farklı olabilir; v3.0 vektörlerinde nadir kayan nokta
+>   sınırlarında 0,1 fark çıkabilir. Gerçek ağ ölçümü (I-15, ana oturum beyanı,
+>   **doğrulanmadı**): ilk tarama **649 sn → 326 sn**, NVD isteği **96 → 43**.
+> - **Karar 11, tek açma/kapama ayrıştırıcısı (L-2; V-17, §7.1):**
+>   `VULNERABILITY_LOOKUP`, `VULNERABILITY_RECHECK`, `NVD_ENABLED` ve
+>   `REGISTRY_ENRICHMENT` aynı `parseSwitch`'i kullanır. Değer baş/son
+>   boşlukları kırpılarak, harf duyarsız okunur:
+>   - `on`/`true`/`1`/`yes` → açık;
+>   - `off`/`false`/`0`/`no` → kapalı;
+>   - boş veya tanımsız → açık (varsayılan);
+>   - başka her değer → **kapalı** (gizlilik için fail-closed). Açılışta
+>     değişken başına tek uyarı yazılır; uyarı yalnız adı içerir, değer
+>     loglanmaz.
+>
+>   Karar 11'deki "geçersiz değer → varsayılan" ifadesi açma/kapama ayarları
+>   için ve `NVD_ENABLED` "yalnız `false` kapatır" ifadesi bu kadar superseded.
+>   Sayısal ayarların kuralı değişmez. `REGISTRY_ENRICHMENT` için ADR-006
+>   Karar 14'e tarihli not eklendi.
+> - **Karar 8, kilit kaybında P-19 (L-3):** `pause()` ve `stop()`, uçuştaki
+>   yeniden kontrolün yanında canlı **her** P-19 değerlendirmesinin
+>   denetleyicisini de iptal eder. Denetleyiciler bir kümede
+>   (`expiryControllers`) izlenir; mutex arkasında bekleyen bir tetik, çalışan
+>   değerlendirmenin denetleyicisini ezemez. `canTrigger()` sıradaki tetiği
+>   de durdurur. Commit sırasında iptal edilen parti geri alınır.
+> - **Karar 2, deneme başına devre kesici (L-4):** devre kesici her denemeden
+>   önce denetlenir ve her denemeden sonra güncellenir (`AttemptBreaker`).
+>   `429` ve `5xx` **başarısız deneme** sayılır; diğer HTTP yanıtları sayacı
+>   sıfırlar. Art arda 5 başarısız deneme host'u oturum için kapatır. Böylece
+>   sürekli 503 dönen bir uç da kapanır. Karar 2'deki "her HTTP yanıtı sayacı
+>   sıfırlar, 5 ardışık ağ düzeyi başarısız deneme" ifadesi bu kadar
+>   superseded. Paylaşılan uçuştaki istekte iz yalnız diğer oturumların
+>   bekleyenlerine yeniden oynatılır, çift sayım olmaz (I-7). NVD `429`'u da
+>   sayılmaya devam eder. NVD için `429`'u devre kesiciden ayırmak açık
+>   seçenektir (aşağıdaki takipler).
+> - **Karar 6 ve 11, NVD hız sınırlayıcısı (Y-2):** sınırlayıcı deneme
+>   başlangıcını, NVD ise varışı saydığı için pencere **35 000 ms** olur
+>   (NVD'nin 30 sn'si + 5 sn güvenlik payı). Anahtarsız kullanımda iki deneme
+>   başlangıcı arasında **en az 6 sn** bırakılır. 5/50 değerleri değişmez.
+>   Her NVD `429`'unda sınırlayıcı süreç genelinde tüm yeni NVD
+>   başlangıçlarını durdurur (`pause`; bu oturumun yeniden denemesi ve diğer
+>   oturumlar dahil). Süre, kullanılabilir `Retry-After` (≤ 30 sn) varsa o
+>   kadar, yoksa (veya ayrıştırılamaz ya da daha uzunsa) bir pencere (35
+>   sn)'dir. `pause` önceki duraklamayı yalnız uzatır, kısaltmaz. Karar 11
+>   sabitlerindeki "NVD penceresi 30 sn" değeri 35 sn + 6 sn aralık olarak
+>   okunur.
+> - **Karar 4, 5 ve 7, eşzamanlı katalog yazımı (L-6, Y-3):**
+>   - `upsertVulnerability` ekleme yolu hedefsiz `INSERT … ON CONFLICT DO
+>     NOTHING` kullanır. Satır eklenmezse kayıt bir kez yeniden okunup
+>     güncelleme yoluna gidilir; ikinci başarısızlık sentetik `23505` üretir.
+>     Sonsuz döngü ve sessiz kayıp olmaz (I-11, kabul edildi).
+>   - Upsert bir savepoint içinde çalışır ve `40P01` (deadlock) veya `40001`
+>     (serileştirme) hatasında bir kez yeniden denenir. Bu kural tarama ve
+>     yeniden kontrol için aynıdır.
+>   - Yeniden kontrolde bir proje transaction'ı `40P01`/`40001` ile düşerse,
+>     kısa rastgele bir beklemeden sonra bir kez daha denenir. İkinci
+>     başarısızlık bugünkü gibi yalnız o projeyi geri alır (`db:40`,
+>     `partial`).
+>   - Küresel kilit sırası (açıkları upsert'ten önce birincil kimliğe göre
+>     sıralamak) **eklenmedi**. Olasılık düşük ve yeniden deneme yeterli
+>     olduğu için bu durum kabul edildi.
+> - **Karar 7, sayfalı kapsam (L-7):** adım 3'te kapsam, benzersiz koordinatlar
+>   üzerinden SQL'de keyset ile 5 000'lik sayfalar hâlinde okunur
+>   (`COLLATE "C"`). 10 000 sınırı sayfalama sırasında uygulanır; bellekte en
+>   fazla 10 000 temsilci ve bir sayfa tutulur. Proje başına anahtarlar yazım
+>   transaction'ında yeniden hesaplanır. "Tarama başına anahtar kümesi
+>   bellekte tutulur" ifadesi bu kadar superseded. (I-14: Türkçe
+>   `LC_CTYPE`'ta `lower('I')` farkı yalnız `packages_unchecked` sayacını
+>   etkileyebilir. `db/README.md`'deki C/en yereli önerisiyle etkisizdir.)
+> - **F4 dışında kalan takipler (bu ADR'yi değiştirmez):**
+>   - **NVD CVSS'in arka plan yeniden kontrolüne taşınması (I-16):** ilk
+>     taramanın kalan gecikmesi büyük ölçüde anahtarsız NVD sınırından gelir
+>     (43 istek ≥ ~258 sn; `NVD_API_KEY` ile ~26 sn). Taşınırsa koşullar:
+>     (1) CVSS gelene kadar bulgu "CVSS bekleniyor" olarak görünür biçimde
+>     işaretlenir, `medium` varsayılanı kesin değer gibi sunulmaz; (2) CVSS
+>     geldiğinde açık bulguların `security_findings.severity`/`cvss_score`
+>     değeri ve **SLA son tarihi** yeniden hesaplanır ve denetime yazılır;
+>     (3) arka plan işi aynı sınırlayıcıyı ve devre kesiciyi paylaşır;
+>     (4) contract ve ADR revizyonu gerekir.
+>   - **NVD `429`'unun devre kesiciden ayrılması:** yalnız ağ hatası ve `5xx`
+>     sayılır. Y-2 sınırlayıcı düzeltmesinden sonra açık seçenek olarak kalır.
+>   - **Küresel kilit sırası:** Y-3'ün ikinci yolu; bugün yeniden denemeyle
+>     yetinildi.
+> - **Etki:** yeni bağımlılık, göç, yetki veya dış uç nokta değişikliği
+>   yoktur. Durum uç noktası şeması ve `[osv]`/`[nvd]` şablonları değişmez.
+>   Görünür davranış değişiklikleri şunlardır: geçersiz açma/kapama değeri
+>   artık kapatır; vektörlü açıkta puan OSV vektöründen gelir; NVD daha yavaş
+>   ama 429'suz ilerler. Bunlar README'de ve handoff'ta belirtilmelidir.
+>   `docs/handoffs/REQ-005.md` bu nota ve yeniden doğrulamanın açık insan
+>   onayı kapılarına (L-5 ön kontrol kabulü, `main` merge, I-15 gerçek ağ
+>   beyanı) atıfla güncellenmelidir. Karar veren: kullanıcının daimi talimatı
+>   (önerilen seçenek), contract 1.1.0 ile aynı dayanak. ADR durumu `Accepted`
+>   kalır; kayıt kullanıcının commit'iyle kesinleşir.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

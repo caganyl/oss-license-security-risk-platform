@@ -144,6 +144,20 @@
   etmez; yinelenen anahtarda ikisi de sonuncuyu alır. Tam sayı biçimli nesne
   anahtarları (`"123"`) JS'te sırayı değiştirir; yalnız aynı manifestteki
   ilk-gelen-kazanır kararını etkileyebilir. Bu iki fark kabul edilen sınırdır.
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Yardımcıların uygulama biçimi
+> netleşir (güvenlik raporu M-1, commit `f32b00c`):
+>
+> - `pyStrip`/`pyRstrip` **düzenli ifade kullanmaz**; Python `str.isspace`
+>   kümesini karakter karakter tarayan doğrusal (O(n)) döngülerdir. Önceki
+>   regex biçimi uzun boşluk dizilerinde karesel zamanlıydı.
+> - `REQUIREMENT_RE` düzenli ifadesi yerine doğrusal `matchRequirementLine`
+>   kullanılır (aynı gruplar: ad, isteğe bağlı extras, kalan belirteç). Eski
+>   regex `\n` içeren metinde kübik zamanlıydı.
+> - Eşdeğerlik, eski regex uygulamasına karşı 800 bin rastgele girdi ve tüm BMP
+>   karakterleriyle doğrulanmıştır; golden testleri yeşildir.
+> - Kural: ayrıştırıcıda güvenilmeyen girdiye uygulanan yeni düzenli ifadeler
+>   iç içe/örtüşen niceleyici içermez; şüpheli durumda doğrusal tarama yazılır.
+
 - `pyproject.toml`'daki tablo biçimli sürüm (`{ version = "^1.2" }`), `python`
   girdisinin yalnız `tool.poetry.dependencies` içinde atlanması, bare sürüm
   (`1.2.3` → kesin), `poetry.lock` `category = "dev"` → `dev`, aksi `transitive`
@@ -255,6 +269,26 @@
   kök dışı bir dosyaya sabit bağlantı oluşturmak o dizine yazma yetkisi gerektirir
   ve clone'da oluşmaz. Kabul edildi.
 
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Bu kararın bağlantı kayıt ve
+> ikinci savunma kuralları şöyle değişir (güvenlik raporu L-2, commit `f32b00c`):
+>
+> - **Bağlantı hedefi hiçbir koşulda çözülmez** (`stat`, `statSync`, `realpath`,
+>   `readlink` bağlantı girdisinde çağrılmaz). Gerekçe: yerel taramada hedefi UNC
+>   yolu (`\\sunucu\paylaşım`) olan bir bağlantıyı çözmek Windows'ta dışarıya SMB
+>   bağlantısı ve NTLM kimlik doğrulaması tetikleyebilir.
+> - Karar yalnız **`lstat` sonucu + girdi adıyla** verilir. Windows'ta `lstat`
+>   junction'ı dosya/dizin sembolik bağlantısından ayırmaz (ölçüldü); bu yüzden
+>   bağlantının "dizin mi dosya mı" olduğuna bakılmaz:
+>   - adı desteklenen bir manifest adıysa → ilgili ekosistem (`nodejs`/`python`)
+>     için bir `parse_errors` kaydı;
+>   - adı `SKIP_DIRS` içindeyse → kayıtsız atlanır;
+>   - diğer **her** bağlantı → bir `filesystem` kaydı.
+>   Önceki "ilgisiz dosya bağlantıları sessizce atlanır" ve "dizin bağlantısında
+>   `filesystem`" ayrımı **geçersizdir**.
+> - `realpath.native` ikinci savunması yalnız `lstat` sonucu **düz dosya** olan
+>   girdilerde çalışır (bağlantı olmayan yeniden ayrıştırma noktalarına karşı).
+>   Bağlantı olarak bildirilen girdiye hiç uygulanmaz.
+
 ### 7. Dosya okuma, boyut sınırı ve hata metinleri (D-28 a, c; AC-P10-12, AC-P10-13)
 
 - Her dosya **bir kez** okunur (`readFileSync`); aynı tampondan hem SHA-256/
@@ -276,6 +310,12 @@
   içerikten kısa parça içerebilir). TOML hatası: kütüphane mesajının ilk satırı,
   en fazla 200 karakter. Son güvence olarak her `error` metni kök yolu, `%TEMP%`
   ve kullanıcı profil yolu için ADR-002 Ek'teki yer tutucu değişiminden geçer.
+
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Maskelemenin yeri netleşir:
+> iş parçacığı `env: {}` ile çalıştığı için `%TEMP%` ve kullanıcı profil yolunu
+> güvenilir biçimde bilemez. İş parçacığı içinde yalnız **tarama kökü** yer
+> tutucuyla değiştirilir; `%TEMP%`, çalışma klasörü, `SCAN_ROOTS` ve profil yolu
+> **ana iş parçacığında** `sanitizeErrorText` (ADR-002 Ek E3) ile maskelenir.
 
 ### 8. TOML kütüphanesi (D-29, AC-P10-15)
 
@@ -427,6 +467,9 @@ D-42, D-49.
 3. **AC-P10-11 kayıt kapsamı:** `parse_errors` kaydı dizin bağlantıları ve
    manifest adlı dosya bağlantıları için açılır; ilgisiz dosya bağlantıları
    sessizce atlanır. Dizin bağlantısı kaydında `ecosystem = 'filesystem'`.
+   *(REQ-003 güvenlik düzeltmesi, 2026-10-10: geçersiz. Güncel kural Karar 6
+   notunda — manifest adlı bağlantı → ekosistem kaydı, `SKIP_DIRS` adlı → atlanır,
+   diğer her bağlantı → `filesystem` kaydı; hedef çözülmez.)*
 4. **BOM:** Python davranışı (BOM'lu ilk `requirements` satırının atlanması)
    birebir korunur; düzeltme sonraki faz.
 5. **D-49:** yol (2) seçildi (`overrides.uuid = 11.1.1`).

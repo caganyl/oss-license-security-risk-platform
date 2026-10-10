@@ -360,6 +360,42 @@ workspaceDirs, scanRoots, homeDir })`. Sıra önemlidir:
   büyüklüğüyle), `SCAN_ROOTS` kökü, profil yolu, `\x1b[31m`, `\x00`, `\x07` ve
   3000 karakter içeren sahte git stderr'i (bugünkü kodda başarısız olur).
 
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Yukarıdaki 1–4 sırası
+> geçersizdir (güvenlik raporu L-1: sır ve yol maskesi kontrol karakteri
+> temizliğinden önce çalıştığı için ANSI'ye yapışık veya kontrol karakteriyle
+> bölünmüş token/yol maskeden kaçıyordu; I-8: biçim karakterleri kalıcı metinde
+> kalıyordu). Güncel karar (commit `f32b00c`):
+>
+> 1. **Kontrol ve biçim karakterleri önce temizlenir:** ESC ve C1 dizileri
+>    **tamamen** silinir — CSI, OSC, DCS, SOS, PM, APC; hem 7 bit (`ESC [`,
+>    `ESC ]`, `ESC P`, `ESC X`, `ESC ^`, `ESC _`) hem 8 bit (`\x9B`, `\x9D`,
+>    `\x90`, `\x98`, `\x9E`, `\x9F`) biçimleri, sonlandırıcılarıyla birlikte.
+>    Ardından `\p{Cf}` (sıfır genişlikli/biçim karakterleri), `\n` ve `\t` dışındaki
+>    C0, `DEL` ve C1 silinir; `\r\n` → `\n`.
+> 2. **Sırlar** maskelenir.
+> 3. **Yollar** yer tutucuyla değiştirilir.
+> 4. **Uzunluk:** en fazla 2000 kod noktası (vekil çifti bölünmez), en son.
+>
+> - Adım 2 ve 3, adım 1'den **önce ham metin üzerinde de bir kez** uygulanır.
+>   Gerekçe: dizi temizliği önekini yutabilir (ör. `ESC[1C:\Users\…` dizisinde
+>   `C`, CSI son baytı olarak silinir ve temizlenmiş metinde yol `:\Users\…` olarak
+>   kalır, eşleşmez). İki geçiş birlikte hem yapışık hem bölünmüş biçimleri yakalar.
+> - **Belirteç sınırı:** sır desenlerinde `\b` yerine `(?<![A-Za-z0-9])` kullanılır
+>   (`\b`, `_`/`-` gibi token karakterlerinde ve Unicode bitişiklerinde yanlış
+>   sınır verir). İstisnalar: `%XX` yüzde kodlamasından sonra gelen token
+>   (`%3A<token>`) ve CSI girişi + en fazla 16 parametre baytından
+>   (`ESC[`/`\x9B` + `[0-?]{0,16}`) sonra gelen token da başlangıç sayılır (ham
+>   metin geçişi için). Tüm alternatifler sınırlı uzunlukta olduğundan geri bakış
+>   konum başına sabit maliyetlidir (`src/lib/errorText.ts`).
+> - **`Bearer`, `Basic`, `Authorization`** anahtar sözcükleri büyük/küçük harfe
+>   duyarsız eşleşir; başlıksız, çıplak `Basic <base64>` biçimi de maskelenir.
+> - **`redact.ts` URL kimlik bilgisi deseni:** şema kısmı `{0,31}` ile
+>   sınırlandırılır (karesel geri izlemeyi önler; RFC 3986 şemaları bu sınırın
+>   altında kalır).
+> - Test: ANSI'ye yapışık token, kontrol karakteriyle bölünmüş token ve yol,
+>   8 bit CSI/OSC, `\u200B`/`\u2066` gibi biçim karakterleri, büyük harfli
+>   `BEARER`, çıplak `Basic`, uzun şemalı URL için zaman sınırlı test.
+
 ### E4. Bu ADR'nin diğer bölümlerine etkiler
 
 - **Karar 3 "Hata":** "ağ hataları mevcut retry politikasına tabidir" →

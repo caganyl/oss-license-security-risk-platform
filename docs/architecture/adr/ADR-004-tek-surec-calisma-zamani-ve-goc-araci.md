@@ -98,6 +98,16 @@ başlamaz, hiçbir tarama veya rapor durumu değişmez.
 Kurtarmanın dinlemeden **sonra** yapılması bilinçlidir: port doluysa veya önceki
 adımlar başarısızsa veritabanında hiçbir tarama durumu değişmez.
 
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Adım 1 **PORT doğrulamasını** da
+> içerir (güvenlik raporu I-1, commit `f32b00c`): ortam değişkeni `PORT`
+> tanımlıysa 1–65535 aralığında bir tam sayı olmalıdır; `0`, aralık dışı veya
+> sayı olmayan değer → `RuntimeStartupError`, exit code 1. Kod içinden verilen
+> `port: 0` (işletim sisteminin boş port seçmesi) yalnız testler için kabul edilir;
+> bu durumda Host/Origin izin listesi yapılandırılan değerden değil, sunucunun
+> **gerçekte bağlandığı porttan** (`server.address().port`) kurulur. (Önceki
+> davranışta `PORT=0` izin listesini `:0` ile kuruyor ve her isteği `403` ile
+> reddediyordu.)
+
 ### 3. Tek örnek kilidi (D-34, AC-P11-11, AC-P12-4)
 
 - **Kilit türü:** PostgreSQL **session-level** advisory lock, iki `int4` anahtarlı
@@ -203,6 +213,29 @@ adımlar başarısızsa veritabanında hiçbir tarama durumu değişmez.
      kapanışta `exit(1)`). Açık kalan tutamaçlara güvenilmez, çıkış açıkça
      yapılır.
 - Kapanış iadesinde `error_message` değiştirilmez (önceki deneme mesajı korunur).
+
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** Rapor kapanışı iki noktada
+> değişir (güvenlik raporu L-5, commit `f32b00c`):
+>
+> - **Rapor iptali:** `ReportService.processReport(reportId, signal)` bir
+>   `AbortSignal` alır. Sinyali rapor worker'ının süre sınırı
+>   (`EXPORT_WORKER_TIMEOUT_MS`) tetikler. Sinyal **adımlar arasında** denetlenir:
+>   başlangıçta, veri yüklendikten sonra, çizimden sonra, dosya yazımından önce
+>   ve sonra (`ready` güncellemesinden önce). Çizim (pdfkit/exceljs) sırasında
+>   kesilemez; o adım biter, sonraki denetimde iptal uygulanır. Sinyal tetiklendikten
+>   sonra dosya yazılmaz ve satır `ready` yapılmaz; süre sınırı iptali bugünkü gibi
+>   `failed` olur. (Önceki `Promise.race` yalnız bekleyeni bırakıyor, üretim arka
+>   planda sürüp satırı sonradan `ready` yapabiliyordu.) Kapanıştaki davranış
+>   (adım 5: sınırlı bekleme, adım 6: kalanların `pending`'e süpürülmesi) değişmez.
+> - **`lock-lost` kapanışı:** kilit başka bir örneğe geçtiği için yapılan
+>   kapanışta (Karar 3) adım 6'daki **rapor süpürmesi atlanır**. `reports`
+>   tablosunda sahip kolonu yoktur; kilit artık bu süreçte olmadığından
+>   `generating` satırları yeni örneğe ait olabilir ve süpürme onun raporlarını
+>   `pending`'e çekip iki kez ürettirirdi. Tarama süpürmesi çalışmaya devam eder,
+>   çünkü `worker_id = $runId` ile çitlidir (Karar 4) ve yalnız bu sürecin
+>   satırlarını etkiler. Diğer kapanış nedenlerinde (`signal`, `fatal`) rapor
+>   süpürmesi değişmez. Raporlara sahip kolonu eklenmesi şema değişikliğidir ve
+>   sonraki faza bırakılmıştır.
 
 ### 6. Hata yalıtımı (D-38, AC-P12-7…9)
 
@@ -314,6 +347,31 @@ WHERE id = $id;
 
 Bekleyen bir yeniden deneme, sonra gelen yeni taramayı engellemez: filtre
 satırı atlar, sıra `created_at`'tir (AC-P13-7).
+
+> **REQ-003 güvenlik düzeltmesi (2026-10-10).** İki ek kural (güvenlik raporu
+> I-3, commit `f32b00c`):
+>
+> - **Ayar üst sınırları:** `system_settings` ve ortam değişkenlerinden okunan
+>   sayısal ayarlar aralık denetiminden geçer; aralık dışı, sonlu olmayan veya
+>   tam sayı olması gerekirken tam sayı olmayan değer **varsayılana döner ve bir
+>   uyarı log'lanır** (başlangıç durmaz).
+>
+>   | Ayar | Geçerli aralık |
+>   | --- | --- |
+>   | `scan.max_retries` | 1–10 (tam sayı) |
+>   | `scan.timeout_minutes` | (0, 1440] |
+>   | Süre sınırları (ms; clone, rapor, ayrıştırıcı) | 1 ms – 24 sa |
+>   | Yoklama aralıkları (ms) | 1 ms – 1 sa |
+>   | Eşzamanlılık (`WORKER_MAX_CONCURRENT`, `EXPORT_WORKER_MAX_CONCURRENT`) | 1–32 |
+>
+>   Gerekçe: üst sınırsız değerler `setTimeout` taşmasına (2^31−1 ms üstü
+>   değer hemen tetiklenir) ve sonsuza yakın yeniden denemeye yol açıyordu.
+> - **Deneme hakkı tükenmiş bekleyen satır:** sahiplenme transaction'ı, aynı
+>   transaction içinde `status IN ('pending','queued') AND retry_count >= max`
+>   olan satırları `failed` yapar (`completed_at = NOW()`, `next_attempt_at =
+>   NULL`, açıklayıcı `error_message`) ve her biri için `scan_failed` denetim
+>   kaydı yazar. Böylece `max_retries` düşürüldüğünde kuyrukta sonsuza kadar
+>   bekleyen satır kalmaz (aşağıdaki "Kalan notlar 1" bu kuralla kapanır).
 
 ### 9. Sahipsiz tarama kurtarma (D-41, AC-P12-11)
 
@@ -612,7 +670,8 @@ AC-T-3 (başlangıç adımı); kararlar D-32…D-43, D-46, D-52.
 
 1. `scan.max_retries` düşürülürse `retry_count >= max` olan `queued` satırlar
    sahiplenilmez ve kuyrukta kalır (bugünkü davranış). Gerekirse sonraki fazda
-   kurtarma kuralına eklenir.
+   kurtarma kuralına eklenir. *(REQ-003 güvenlik düzeltmesi, 2026-10-10: kapandı —
+   Karar 8 notu; bu satırlar sahiplenme transaction'ında `failed` olur.)*
 2. `WORKER_MAX_CONCURRENT` (varsayılan 4) ile her tarama bir ayrıştırıcı iş
    parçacığı açar; bellek üst sınırı ADR-005'te.
 3. Rapor üretimi ana iş parçacığında kalır (REQ-003 riskler).

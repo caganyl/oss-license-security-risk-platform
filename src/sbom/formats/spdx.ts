@@ -121,7 +121,9 @@ export function generateSpdxTagValue(data: SbomScanData): string {
   const DOC = 'SPDXRef-DOCUMENT';
   const ROOT = 'SPDXRef-ROOT';
   const lines: string[] = [];
-  // Single-line fields never carry a line break (contract section 6.1, AC-P16-4).
+  // Single-line fields never carry a line break and never a raw `<text>` /
+  // `</text>` (contract section 6.1, AC-P16-4; 1.1.0 L-1): every value that
+  // is not a `<text>` block goes through `sl`.
   const sl = tagValueSingleLine;
 
   lines.push('SPDXVersion: SPDX-2.3');

@@ -11,6 +11,11 @@ const SCOPE_MAP: Record<string, string> = {
   optional:   'optional',
 };
 
+/** CycloneDX scope of a dependency scope; own keys only (L-3), so `constructor` & co. give none. */
+function cdxScope(scope: string | null | undefined): string | undefined {
+  return typeof scope === 'string' && Object.hasOwn(SCOPE_MAP, scope) ? SCOPE_MAP[scope] : undefined;
+}
+
 interface CdxLicenseEntry {
   license?: { id: string } | { name: string };
   expression?: string;
@@ -118,7 +123,8 @@ export function generateCycloneDxJson(data: SbomScanData): string {
     const copyright = buildCdxCopyright(dep, data);
     if (copyright !== null) component.copyright = copyright;
 
-    if (SCOPE_MAP[dep.scope]) component.scope = SCOPE_MAP[dep.scope];
+    const scope = cdxScope(dep.scope);
+    if (scope) component.scope = scope;
 
     components.push(component);
   }
@@ -197,7 +203,8 @@ export function generateCycloneDxXml(data: SbomScanData): string {
     lines.push(`      <name>${xe(dep.name)}</name>`);
     lines.push(`      <version>${xe(dep.version)}</version>`);
     if (dep.description) lines.push(`      <description>${xe(dep.description)}</description>`);
-    if (SCOPE_MAP[dep.scope]) lines.push(`      <scope>${SCOPE_MAP[dep.scope]}</scope>`);
+    const scope = cdxScope(dep.scope);
+    if (scope) lines.push(`      <scope>${scope}</scope>`);
 
     const cdxLicenses = buildCdxLicenses(dep, data);
     if (cdxLicenses.length > 0) {

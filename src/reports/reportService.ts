@@ -565,7 +565,7 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
 
   const summary = workbook.addWorksheet('Summary');
   summary.columns = [{ header: 'Metric', key: 'metric', width: 28 }, { header: 'Value', key: 'value', width: 48 }];
-  summary.addRows([
+  summary.addRows(excelRows([
     { metric: 'Report Type', value: reportTitle(reportType) },
     { metric: 'Project', value: data.project.name },
     { metric: 'Project Criticality', value: data.project.criticality },
@@ -581,7 +581,7 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
     { metric: 'Medium Vulnerabilities', value: data.scan.mediumVulns },
     { metric: 'Low Vulnerabilities', value: data.scan.lowVulns },
     { metric: 'License Violations', value: data.scan.licenseViolations },
-  ]);
+  ]));
 
   addDependencyWorksheet(workbook, data);
   addLicenseWorksheet(workbook, data);
@@ -616,7 +616,7 @@ function addDependencyWorksheet(workbook: ExcelJS.Workbook, data: ReportData): v
     { header: 'License', key: 'license', width: 32 },
     { header: 'License Source', key: 'licenseSource', width: 48 },
   ];
-  sheet.addRows(data.dependencies.map((dep) => ({
+  sheet.addRows(excelRows(data.dependencies.map((dep) => ({
     name: dep.name,
     version: dep.version,
     ecosystem: dep.ecosystem,
@@ -624,10 +624,25 @@ function addDependencyWorksheet(workbook: ExcelJS.Workbook, data: ReportData): v
     manifest: dep.manifestPath || dep.manifestFile,
     depth: dep.depth,
     purl: dep.purl,
-    // Always plain strings (never `{ formula }`), formula-guarded (ADR-006 Karar 13).
-    license: excelSafeText(singleLine(dep.licenseExpression)),
-    licenseSource: excelSafeText(licenseSourceCell(dep)),
-  })));
+    // Always plain strings (never `{ formula }`); single-line folded here,
+    // formula-guarded by `excelRows` like every other string cell (5.1, 5.1a).
+    license: singleLine(dep.licenseExpression),
+    licenseSource: licenseSourceCell(dep),
+  }))));
+}
+
+/**
+ * Excel formula-injection guard on every string cell of every sheet
+ * (contract 5.1a, 1.1.0 L-2; ADR-006 Karar 13): string values get
+ * `excelSafeText` applied to the raw value (no folding is added to existing
+ * columns); numbers, dates and other types keep their cell type.
+ */
+function excelRows<T extends Record<string, unknown>>(rows: T[]): T[] {
+  return rows.map((row) => {
+    const guarded: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) guarded[key] = typeof value === 'string' ? excelSafeText(value) : value;
+    return guarded as T;
+  });
 }
 
 /** Maximum length of the lock hint in report cells, in code points (contract 4.1). */
@@ -666,7 +681,7 @@ function addLicenseWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void
     { header: 'Suppressed', key: 'suppressed', width: 12 },
   ];
 
-  sheet.addRows(data.dependencies.flatMap((dep) =>
+  sheet.addRows(excelRows(data.dependencies.flatMap((dep) =>
     dep.licenses.map((license) => ({
       packageName: dep.name,
       version: dep.version,
@@ -677,7 +692,7 @@ function addLicenseWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void
       status: license.status,
       suppressed: license.suppressed ? 'yes' : 'no',
     })),
-  ));
+  )));
 }
 
 function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void {
@@ -696,7 +711,7 @@ function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData)
     { header: 'Published At', key: 'publishedAt', width: 24 },
   ];
 
-  sheet.addRows(data.dependencies.flatMap((dep) =>
+  sheet.addRows(excelRows(data.dependencies.flatMap((dep) =>
     dep.vulnerabilities.map((vuln) => ({
       packageName: dep.name,
       version: dep.version,
@@ -710,7 +725,7 @@ function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData)
       suppressed: vuln.suppressed ? 'yes' : 'no',
       publishedAt: formatDate(vuln.publishedAt),
     })),
-  ));
+  )));
 }
 
 function writePdfSection(doc: PDFKit.PDFDocument, title: string): void {

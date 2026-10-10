@@ -166,6 +166,12 @@ export const ENRICHMENT_LIMITS = Object.freeze({
     maxFiles: 10,
     maxLongNameBytes: 64 * 1024,
     scanDownloadQuotaBytes: 2 * 1024 * MiB,
+    /**
+     * Archive bytes held in memory at once across all scans of the process
+     * (REQ-004 security review L-4): download body until its archive thread
+     * has finished. See `InFlightByteBudget` (src/enrichment/budget.ts).
+     */
+    processInFlightBytes: 256 * MiB,
     threadTimeoutMs: 60_000,
     maxThreads: 2,
     maxCandidatesTried: 3,

@@ -73,7 +73,8 @@ export function classifierTerm(classifier: string): ClassifierTerm | null {
     .filter((part) => part.length > 0)
     .join(' :: ');
   if (rest.length === 0 || NAMELESS.has(rest)) return null;
-  const mapped = TROVE_CLASSIFIER_MAP[rest];
+  // Own keys only (I-6/L-3): `constructor`, `toString`, … are not classifiers.
+  const mapped = Object.hasOwn(TROVE_CLASSIFIER_MAP, rest) ? TROVE_CLASSIFIER_MAP[rest] : undefined;
   if (mapped !== undefined) return { kind: 'spdx', id: mapped };
   const sep = rest.lastIndexOf(' :: ');
   const last = sep === -1 ? rest : rest.slice(sep + 4);

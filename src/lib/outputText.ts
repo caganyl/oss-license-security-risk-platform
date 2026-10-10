@@ -20,22 +20,45 @@ export function outputClean(text: string | null | undefined): string {
 }
 
 /**
+ * U+0085 (NEL), U+2028 (LINE SEPARATOR), U+2029 (PARAGRAPH SEPARATOR)
+ * (contract 1.1.0, I-3). Built from code points so that no raw line
+ * separator character appears in this source file (a raw U+2028/U+2029
+ * would end a regular expression literal).
+ */
+const UNICODE_LINE_BREAKS = String.fromCharCode(0x85, 0x2028, 0x2029);
+const SINGLE_LINE_FOLD_RE = new RegExp(`[\\n\\t${UNICODE_LINE_BREAKS}]`, 'g');
+const UNICODE_LINE_BREAK_RE = new RegExp(`[${UNICODE_LINE_BREAKS}]`, 'g');
+const HAS_UNICODE_LINE_BREAK_RE = new RegExp(`[${UNICODE_LINE_BREAKS}]`);
+
+/**
  * Single-line value (contract section 9, steps 1–3): cleaned first (`\r\n`
- * and `\r` become `\n`, control/format characters removed), then every `\n`
- * and `\t` becomes one space. Target-specific escaping (step 4, e.g.
- * `excelSafeText`) is applied by the caller afterwards.
+ * and `\r` become `\n`, control/format characters removed), then every `\n`,
+ * `\t`, U+0085, U+2028 and U+2029 becomes one space (contract 1.1.0, I-3;
+ * one space per character, runs are not collapsed). Target-specific escaping
+ * (step 4, e.g. `excelSafeText`) is applied by the caller afterwards.
  */
 export function singleLine(text: string | null | undefined): string {
-  return outputClean(text).replace(/[\n\t]/g, ' ');
+  return outputClean(text).replace(SINGLE_LINE_FOLD_RE, ' ');
+}
+
+function startsWithSeparator(text: string, at: number): boolean {
+  return text.startsWith(ENTRY_SEP, at) || text.startsWith(FILE_SEP, at);
 }
 
 /**
  * NOTICE delimiter shield (contract section 3.6): a line of untrusted
  * multi-line text that starts with `ENTRY_SEP` or `FILE_SEP` gets one leading
- * space, so package text can never forge an entry or a file header.
+ * space, so package text can never forge an entry or a file header. U+0085,
+ * U+2028 and U+2029 count as line breaks for the shield only (1.1.0, I-3):
+ * a separator right after one of them gets one space inserted after the
+ * break character; the break character itself and all other bytes are kept.
  */
 export function shieldNoticeLine(line: string): string {
-  return line.startsWith(ENTRY_SEP) || line.startsWith(FILE_SEP) ? ` ${line}` : line;
+  const out = startsWithSeparator(line, 0) ? ` ${line}` : line;
+  if (!HAS_UNICODE_LINE_BREAK_RE.test(out)) return out;
+  return out.replace(UNICODE_LINE_BREAK_RE, (brk: string, offset: number, whole: string) =>
+    startsWithSeparator(whole, offset + brk.length) ? `${brk} ` : brk,
+  );
 }
 
 /**
@@ -51,9 +74,20 @@ export function noticeTextLines(text: string | null | undefined): string[] {
 
 const TEXT_TAG_RE = /<(\/?)text>/gi;
 
-/** SPDX tag-value single-line field (`PackageName`, `PackageVersion`, …): no line break survives. */
+/**
+ * SPDX tag-value single-line field (`PackageName`, `PackageVersion`, …): no
+ * line break survives (section 9 steps 1–3), then `<text>` / `</text>` (any
+ * letter case) become `&lt;text&gt;` / `&lt;/text&gt;` (step 4, contract
+ * 6.1, 1.1.0 L-1), so a single-line value can never open or close a
+ * `<text>` block. Escaping after folding also catches sequences formed by
+ * removed format characters (`<te` U+200B `xt>`).
+ */
 export function tagValueSingleLine(text: string | null | undefined): string {
-  return singleLine(text);
+  return escapeTextTags(singleLine(text));
+}
+
+function escapeTextTags(value: string): string {
+  return value.replace(TEXT_TAG_RE, (_m, slash: string) => `&lt;${slash}text&gt;`);
 }
 
 /**
@@ -62,7 +96,7 @@ export function tagValueSingleLine(text: string | null | undefined): string {
  * `&lt;/text&gt;`, so the value cannot leave its block (AC-P16-4).
  */
 export function tagValueText(text: string | null | undefined): string {
-  const escaped = outputClean(text).replace(TEXT_TAG_RE, (_m, slash: string) => `&lt;${slash}text&gt;`);
+  const escaped = escapeTextTags(outputClean(text));
   return `<text>${escaped}</text>`;
 }
 

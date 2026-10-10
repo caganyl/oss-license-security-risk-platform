@@ -17,7 +17,7 @@
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
 import type { ArchiveThreadOptions, ArchiveThreadOutcome } from './archive/archiveThread';
 import type { ArchiveKind } from './archive/extract';
-import type { DownloadQuota } from './budget';
+import { type DownloadQuota, type InFlightByteBudget, processInFlightBudget } from './budget';
 import { type CacheDb, type CachedArchive, writeArchiveCache } from './cache';
 import { type RegistryEcosystem, coordinateKey } from './coordinates';
 import { digestKey, verifyDigest } from './integrity';
@@ -53,6 +53,8 @@ export interface ArchiveStageContext {
   threadOptions: ArchiveThreadOptions;
   runThread: RunArchiveThreadFn;
   warn: (message: string) => void;
+  /** In-flight archive byte budget (L-4); default: the process-wide budget. */
+  inFlight?: InFlightByteBudget;
 }
 
 /** Map key of `readArchiveCache` results. */
@@ -96,39 +98,53 @@ export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext
     if (host !== null && ctx.session.isHostClosed(host)) return { noticeStatus: 'download_failed', archiveId: null };
 
     const reserved = candidate.size ?? ENRICHMENT_LIMITS.client.archiveMaxBytes;
-    if (!ctx.quota.reserve(reserved)) return { noticeStatus: 'limit_exceeded', archiveId: null };
-    let downloaded = 0;
+    // L-4: hold the expected body size in the process-wide in-flight budget
+    // from before the download until the archive thread has finished with the
+    // body (waits, never fails; an abort of `ctx.signal` is rethrown like any
+    // other abort of this stage). A body larger than declared (the client caps
+    // it at `archiveMaxBytes`) is accounted on top without waiting.
+    const inFlight = ctx.inFlight ?? processInFlightBudget(ENRICHMENT_LIMITS.archive.processInFlightBytes);
+    const held = Math.min(reserved, ENRICHMENT_LIMITS.client.archiveMaxBytes);
+    const releases: Array<() => void> = [await inFlight.acquire(held, ctx.signal)];
+    let outcome: ArchiveThreadOutcome;
     let download;
     try {
-      download = await ctx.session.getArchive(candidate.url, purpose, {
-        signal: ctx.signal,
-        algorithm: candidate.algorithm,
-        dedupeKey: `${coordinateKey(task.ecosystem, task.requestName, task.version)}\u0000${candidate.digests[0] ?? ''}`,
-      });
-      if (download.kind === 'ok') downloaded = download.size;
-    } finally {
-      // The reservation becomes the real byte count (failed downloads count 0: the client hides partial sizes).
-      ctx.quota.settle(reserved, downloaded);
-    }
-    if (download.kind === 'download_failed') {
-      last = 'download_failed';
-      continue;
-    }
-    if (download.kind === 'limit_exceeded') {
-      last = 'limit_exceeded';
-      continue;
-    }
-    if (!verifyDigest({ algorithm: candidate.algorithm, values: candidate.digests }, download.digest)) {
-      // Integrity before parsing: the buffer is dropped, nothing is cached.
-      last = 'integrity_failed';
-      continue;
-    }
+      if (!ctx.quota.reserve(reserved)) return { noticeStatus: 'limit_exceeded', archiveId: null };
+      let downloaded = 0;
+      try {
+        download = await ctx.session.getArchive(candidate.url, purpose, {
+          signal: ctx.signal,
+          algorithm: candidate.algorithm,
+          dedupeKey: `${coordinateKey(task.ecosystem, task.requestName, task.version)}\u0000${candidate.digests[0] ?? ''}`,
+        });
+        if (download.kind === 'ok') downloaded = download.size;
+      } finally {
+        // The reservation becomes the real byte count (failed downloads count 0: the client hides partial sizes).
+        ctx.quota.settle(reserved, downloaded);
+      }
+      if (download.kind === 'download_failed') {
+        last = 'download_failed';
+        continue;
+      }
+      if (download.kind === 'limit_exceeded') {
+        last = 'limit_exceeded';
+        continue;
+      }
+      if (download.size > held) releases.push(inFlight.grow(download.size - held));
+      if (!verifyDigest({ algorithm: candidate.algorithm, values: candidate.digests }, download.digest)) {
+        // Integrity before parsing: the buffer is dropped, nothing is cached.
+        last = 'integrity_failed';
+        continue;
+      }
 
-    const outcome = await ctx.runThread(
-      { kind: task.ecosystem, filename: candidate.filename, bytes: download.body },
-      ctx.signal,
-      ctx.threadOptions,
-    );
+      outcome = await ctx.runThread(
+        { kind: task.ecosystem, filename: candidate.filename, bytes: download.body },
+        ctx.signal,
+        ctx.threadOptions,
+      );
+    } finally {
+      for (const release of releases) release();
+    }
     if (outcome.kind === 'aborted') throw abortError(ctx.signal);
     if (outcome.kind === 'failed') {
       ctx.warn(`Arşiv işlenemedi (${outcome.code}); önbelleğe yazılmadı.`);

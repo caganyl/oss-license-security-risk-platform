@@ -2,13 +2,21 @@
  * NOTICE.txt generation (REQ-004 P-15, AC-P15-11…14; ADR-006 Karar 12;
  * contract `docs/contracts/REQ-004-notice-and-outputs.md` sections 2.5, 3, 4).
  *
- * Read-only and synchronous after three or four queries: no network request,
- * no write to any table or to disk, no audit entry. The body depends only on
- * the database (no generation time), so two requests return the same bytes
- * while the caches do not change.
+ * Read-only: no network request, no write to any table or to disk, no audit
+ * entry. All queries run in one `REPEATABLE READ READ ONLY` transaction, so
+ * the light structure queries and the batched text reads see the same data.
+ * The body depends only on the database (no generation time), so two requests
+ * return the same bytes while the caches do not change.
+ *
+ * Memory bound (contract 3.7, 1.1.0 M-1): license file texts and PyPI
+ * metadata texts are never loaded all at once. Structure lines, header counts
+ * and `Reason:` come from light queries that return no text; texts are read
+ * in entry order in batches of `TEXT_BATCH_SIZE` entries, released after the
+ * entry is rendered, and no batch is read once the size limit has been
+ * exceeded. Output bytes are identical to a single bulk read.
  */
 import crypto from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { ARCHIVE_EXTRACTOR_VERSION } from '../enrichment/cache';
 import { registryEcosystemOf, requestName } from '../enrichment/coordinates';
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
@@ -23,6 +31,9 @@ export const NOTICE_MAX_BYTES = ENRICHMENT_LIMITS.notice.maxBytes;
 export const NOTICE_SIZE_LIMIT_LINE = '[text omitted: NOTICE size limit]';
 export const PRE_F3_NOTE =
   'Note: This scan predates license enrichment. License data is incomplete; rescan the project for a complete NOTICE.';
+
+/** Entries whose texts are read per query (contract 3.7, M-1: "e.g. 50 records"). */
+export const TEXT_BATCH_SIZE = 50;
 
 /** Archive outcomes stored in `registry_archive_cache` (ADR-006 Karar 7, 10). */
 const CACHED_OUTCOMES: ReadonlySet<string> = new Set(['collected', 'no_license_file', 'unsupported_format', 'limit_exceeded']);
@@ -61,6 +72,11 @@ const REASON_CACHE_CLEARED = 'license file data no longer cached; rescan require
 const REASON_UNSUPPORTED_ECOSYSTEM = 'license enrichment not supported for this ecosystem';
 const REASON_NOT_COLLECTED = 'package archive not collected';
 
+/** Own-key lookup (L-3): inherited keys (`constructor`, …) never select a text. */
+function own(map: Readonly<Record<string, string>>, key: string | null | undefined): string | undefined {
+  return typeof key === 'string' && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 export interface NoticeDocument {
   /** Lower-case canonical scan UUID read from the database. */
   scanId: string;
@@ -69,11 +85,16 @@ export interface NoticeDocument {
   sha256: string;
 }
 
-type LicenseFile = { path: string; text: string } | { path: string; omitted: string };
+/**
+ * One `license_files` item without its text (light query, M-1): `ord` is the
+ * 1-based position in the stored array, used to fetch the text later.
+ */
+type LicenseFileMeta = { path: string; hasText: true; ord: number } | { path: string; hasText: false; omitted: string };
 
 interface ArchiveRecord {
+  id: string;
   outcome: string;
-  licenseFiles: LicenseFile[];
+  licenseFiles: LicenseFileMeta[];
   copyrightLines: string[];
 }
 
@@ -98,8 +119,17 @@ interface NoticeEntry {
   purl: string | null;
   row: DependencyRow;
   archive: ArchiveRecord | null;
-  metadataText: string | null;
+  /** PyPI metadata license text exists (light query); the text itself is read per batch. */
+  hasMetadataText: boolean;
 }
+
+/** Texts of one batch: archive id -> (ord -> text), and entry -> metadata text. */
+interface TextBatch {
+  files: Map<string, Map<number, string>>;
+  metadata: Map<NoticeEntry, string>;
+}
+
+type Queryable = Pick<PoolClient, 'query'>;
 
 export interface NoticeServiceOptions {
   /** Body limit in bytes (default `NOTICE_MAX_BYTES`); code-level test injection only. */
@@ -129,29 +159,45 @@ function compareEntries(a: NoticeEntry, b: NoticeEntry): number {
   );
 }
 
-function parseLicenseFiles(value: unknown): LicenseFile[] {
+/**
+ * `license_files` with every `text` replaced by `has_text` (and its array
+ * position `ord`), so the structure is read without any license text (M-1).
+ * Non-object items pass through unchanged and are skipped when parsed, as
+ * before.
+ */
+const LICENSE_FILES_META_SQL = `COALESCE((
+         SELECT jsonb_agg(CASE WHEN jsonb_typeof(f) = 'object'
+                               THEN (f - 'text') || jsonb_build_object('has_text', jsonb_typeof(f -> 'text') = 'string', 'ord', o)
+                               ELSE f END ORDER BY o)
+         FROM jsonb_array_elements(CASE WHEN jsonb_typeof(c.license_files) = 'array' THEN c.license_files ELSE '[]'::jsonb END)
+              WITH ORDINALITY AS t(f, o)
+       ), '[]'::jsonb) AS license_files`;
+
+/** Same rules as the former full parse: object items with a string `path`; text items keep only their position. */
+function parseLicenseFilesMeta(value: unknown): LicenseFileMeta[] {
   if (!Array.isArray(value)) return [];
-  const files: LicenseFile[] = [];
+  const files: LicenseFileMeta[] = [];
   for (const item of value) {
     if (typeof item !== 'object' || item === null) continue;
-    const { path, text, omitted } = item as { path?: unknown; text?: unknown; omitted?: unknown };
+    const { path, has_text: hasText, ord, omitted } = item as { path?: unknown; has_text?: unknown; ord?: unknown; omitted?: unknown };
     if (typeof path !== 'string') continue;
-    if (typeof text === 'string') files.push({ path, text });
-    else files.push({ path, omitted: typeof omitted === 'string' ? omitted : '' });
+    if (hasText === true && typeof ord === 'number') files.push({ path, hasText: true, ord });
+    else files.push({ path, hasText: false, omitted: typeof omitted === 'string' ? omitted : '' });
   }
   return files;
 }
 
-function toArchive(row: { outcome: string; license_files: unknown; copyright_lines: string[] | null }): ArchiveRecord {
+function toArchive(row: { id: string; outcome: string; license_files: unknown; copyright_lines: string[] | null }): ArchiveRecord {
   return {
+    id: row.id,
     outcome: row.outcome,
-    licenseFiles: parseLicenseFiles(row.license_files),
+    licenseFiles: parseLicenseFilesMeta(row.license_files),
     copyrightLines: Array.isArray(row.copyright_lines) ? row.copyright_lines.filter((l) => typeof l === 'string') : [],
   };
 }
 
 function hasText(entry: NoticeEntry): boolean {
-  return entry.archive !== null && entry.archive.licenseFiles.some((f) => 'text' in f);
+  return entry.archive !== null && entry.archive.licenseFiles.some((f) => f.hasText);
 }
 
 /** Contract section 4.1 "NOTICE" column. */
@@ -166,14 +212,14 @@ function reasonOf(entry: NoticeEntry, preF3: boolean): string {
   if (registryEcosystemOf(entry.ecosystem) === null) return REASON_UNSUPPORTED_ECOSYSTEM;
   if (preF3) {
     if (archive === null) return REASON_PRE_F3;
-    return NOTICE_STATUS_REASONS[archive.outcome] ?? REASON_NOT_COLLECTED;
+    return own(NOTICE_STATUS_REASONS, archive.outcome) ?? REASON_NOT_COLLECTED;
   }
   const status = row.notice_status;
   if (row.notice_archive_id === null && status !== null && CACHED_OUTCOMES.has(status)) return REASON_CACHE_CLEARED;
   if (status === 'not_attempted' || status === null) {
-    return NOT_ATTEMPTED_REASONS[row.license_enrichment_status ?? ''] ?? REASON_NOT_COLLECTED;
+    return own(NOT_ATTEMPTED_REASONS, row.license_enrichment_status) ?? REASON_NOT_COLLECTED;
   }
-  return NOTICE_STATUS_REASONS[status] ?? REASON_NOT_COLLECTED;
+  return own(NOTICE_STATUS_REASONS, status) ?? REASON_NOT_COLLECTED;
 }
 
 /** Byte-counting body builder (contract section 3.7). */
@@ -193,23 +239,30 @@ class NoticeWriter {
   /**
    * A text block: written only while `written + block <= limit`; after the
    * first overflow every later block is replaced by the omission line
-   * (deterministic, no retry with smaller blocks).
+   * (deterministic, no retry with smaller blocks). `text` is only called
+   * while the limit has not been exceeded, so no text is needed afterwards.
    */
-  textBlock(lines: string[]): void {
+  textBlock(text: () => string | null): void {
     if (!this.truncated) {
+      const lines = noticeTextLines(text());
       let blockBytes = 0;
       for (const l of lines) blockBytes += Buffer.byteLength(l, 'utf8') + 1;
-      if (this.bytes + blockBytes > this.maxBytes) this.truncated = true;
+      if (this.bytes + blockBytes > this.maxBytes) {
+        this.truncated = true;
+      } else {
+        for (const l of lines) this.line(l);
+        return;
+      }
     }
-    if (this.truncated) {
-      this.line(NOTICE_SIZE_LIMIT_LINE);
-      return;
-    }
-    for (const l of lines) this.line(l);
+    this.line(NOTICE_SIZE_LIMIT_LINE);
   }
 
+  /** One copy into a buffer of the exact size (no joined intermediate string, M-1). */
   toBuffer(): Buffer {
-    return Buffer.from(this.parts.join(''), 'utf8');
+    const out = Buffer.allocUnsafe(this.bytes);
+    let offset = 0;
+    for (const part of this.parts) offset += out.write(part, offset, 'utf8');
+    return offset === out.length ? out : out.subarray(0, offset);
   }
 }
 
@@ -221,7 +274,22 @@ export class NoticeService {
   }
 
   async generate(scanId: string): Promise<NoticeDocument> {
-    const scanResult = await this.db.query<{ id: string; completed_at: Date | null; project_name: string }>(
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const body = await this.generateIn(client, scanId);
+      await client.query('COMMIT');
+      return body;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async generateIn(q: Queryable, scanId: string): Promise<NoticeDocument> {
+    const scanResult = await q.query<{ id: string; completed_at: Date | null; project_name: string }>(
       `SELECT s.id::text AS id, s.completed_at, p.name AS project_name
        FROM scans s
        JOIN projects p ON p.id = s.project_id
@@ -231,7 +299,7 @@ export class NoticeService {
     if (scanResult.rows.length === 0) throw notFound();
     const scan = scanResult.rows[0];
 
-    const depResult = await this.db.query<DependencyRow>(
+    const depResult = await q.query<DependencyRow>(
       `SELECT p.ecosystem::text AS ecosystem, p.name, p.version, p.purl, sd.scope::text AS scope,
               sd.license_expression, sd.license_source, sd.license_enrichment_status,
               sd.notice_status, sd.notice_archive_id::text AS notice_archive_id
@@ -246,15 +314,15 @@ export class NoticeService {
     // Pre-F3: at least one row and the effective license columns are NULL (contract 2.5).
     const preF3 = rows.length > 0 && rows.every((r) => r.license_source === null);
     const entries = this.groupRuntimeEntries(rows);
-    await this.attachArchives(entries, preF3);
-    await this.attachMetadataTexts(entries);
+    await this.attachArchives(q, entries, preF3);
+    await this.attachMetadataFlags(q, entries);
     entries.sort(compareEntries);
 
     // AC-P16-3 id set: the normalizer ids plus `licenses.spdx_id` (same as the SBOM writers).
-    const licenseIds = await this.db.query<{ spdx_id: string }>('SELECT spdx_id FROM licenses WHERE spdx_id IS NOT NULL');
+    const licenseIds = await q.query<{ spdx_id: string }>('SELECT spdx_id FROM licenses WHERE spdx_id IS NOT NULL');
     const knownIds = buildIdIndex([...KNOWN_SPDX_IDS, ...licenseIds.rows.map((r) => r.spdx_id)]);
 
-    const body = this.render(scan, entries, preF3, knownIds);
+    const body = await this.render(q, scan, entries, preF3, knownIds);
     return { scanId: scan.id.toLowerCase(), body, sha256: crypto.createHash('sha256').update(body).digest('hex') };
   }
 
@@ -278,20 +346,24 @@ export class NoticeService {
         purl: row.purl,
         row,
         archive: null,
-        metadataText: null,
+        hasMetadataText: false,
       });
     }
     return [...byKey.values()];
   }
 
-  /** F3: `registry_archive_cache` by `notice_archive_id`; pre-F3: by `(registry, request name, version)` at the current extractor version. */
-  private async attachArchives(entries: NoticeEntry[], preF3: boolean): Promise<void> {
+  /**
+   * Archive structure without texts (M-1). F3: `registry_archive_cache` by
+   * `notice_archive_id`; pre-F3: by `(registry, request name, version)` at
+   * the current extractor version.
+   */
+  private async attachArchives(q: Queryable, entries: NoticeEntry[], preF3: boolean): Promise<void> {
     if (!preF3) {
       const ids = [...new Set(entries.map((e) => e.row.notice_archive_id).filter((id): id is string => id !== null))];
       if (ids.length === 0) return;
-      const result = await this.db.query<{ id: string; outcome: string; license_files: unknown; copyright_lines: string[] | null }>(
-        `SELECT id::text AS id, outcome, license_files, copyright_lines
-         FROM registry_archive_cache WHERE id = ANY($1::uuid[])`,
+      const result = await q.query<{ id: string; outcome: string; license_files: unknown; copyright_lines: string[] | null }>(
+        `SELECT c.id::text AS id, c.outcome, ${LICENSE_FILES_META_SQL}, c.copyright_lines
+         FROM registry_archive_cache c WHERE c.id = ANY($1::uuid[])`,
         [ids],
       );
       const byId = new Map(result.rows.map((r) => [r.id, toArchive(r)]));
@@ -303,11 +375,11 @@ export class NoticeService {
     const lookups = this.registryLookups(entries);
     if (lookups.size === 0) return;
     const keys = [...lookups.values()];
-    const result = await this.db.query<{
-      ecosystem: string; name: string; version: string; outcome: string; license_files: unknown; copyright_lines: string[] | null;
+    const result = await q.query<{
+      id: string; ecosystem: string; name: string; version: string; outcome: string; license_files: unknown; copyright_lines: string[] | null;
     }>(
       `SELECT DISTINCT ON (c.ecosystem, c.name, c.version)
-              c.ecosystem, c.name, c.version, c.outcome, c.license_files, c.copyright_lines
+              c.id::text AS id, c.ecosystem, c.name, c.version, c.outcome, ${LICENSE_FILES_META_SQL}, c.copyright_lines
        FROM registry_archive_cache c
        JOIN unnest($1::text[], $2::text[], $3::text[]) AS k(ecosystem, name, version)
          ON c.ecosystem = k.ecosystem AND c.name = k.name AND c.version = k.version
@@ -329,31 +401,77 @@ export class NoticeService {
     return lookups;
   }
 
-  /** PyPI metadata license text for PyPI entries without license text (contract 3.5, AC-P15-13). */
-  private async attachMetadataTexts(entries: NoticeEntry[]): Promise<void> {
+  /** PyPI entries without license text whose metadata cache has a license text (contract 3.5, AC-P15-13); no text read. */
+  private metadataCandidates(entries: NoticeEntry[]): NoticeEntry[] {
     // Pre-F3 entries use the same lookup: the metadata cache is keyed by coordinates, not by scan.
-    const candidates = entries.filter((e) => registryEcosystemOf(e.ecosystem) === 'pypi' && !hasText(e));
-    const lookups = this.registryLookups(candidates);
+    return entries.filter((e) => registryEcosystemOf(e.ecosystem) === 'pypi' && !hasText(e));
+  }
+
+  private async attachMetadataFlags(q: Queryable, entries: NoticeEntry[]): Promise<void> {
+    const lookups = this.registryLookups(this.metadataCandidates(entries));
     if (lookups.size === 0) return;
     const keys = [...lookups.values()];
-    const result = await this.db.query<{ name: string; version: string; license_text: string }>(
-      `SELECT c.name, c.version, c.license_text
+    const result = await q.query<{ name: string; version: string }>(
+      `SELECT c.name, c.version
        FROM registry_package_cache c
        JOIN unnest($1::text[], $2::text[]) AS k(name, version) ON c.name = k.name AND c.version = k.version
        WHERE c.ecosystem = 'pypi' AND c.outcome = 'found' AND c.license_text IS NOT NULL AND c.license_text <> ''`,
       [keys.map((k) => k.name), keys.map((k) => k.version)],
     );
-    const found = new Map(result.rows.map((r) => [JSON.stringify([r.name, r.version]), r.license_text]));
-    for (const [entry, key] of lookups) entry.metadataText = found.get(JSON.stringify([key.name, key.version])) ?? null;
+    const found = new Set(result.rows.map((r) => JSON.stringify([r.name, r.version])));
+    for (const [entry, key] of lookups) entry.hasMetadataText = found.has(JSON.stringify([key.name, key.version]));
   }
 
-  private render(
+  /** Reads the texts one batch of entries needs (archive files with text, PyPI metadata texts). */
+  private async loadTextBatch(q: Queryable, batch: NoticeEntry[]): Promise<TextBatch> {
+    const files = new Map<string, Map<number, string>>();
+    const metadata = new Map<NoticeEntry, string>();
+
+    const archiveIds = [...new Set(batch.filter(hasText).map((e) => e.archive!.id))];
+    if (archiveIds.length > 0) {
+      const result = await q.query<{ id: string; ord: string | number; text: string }>(
+        `SELECT c.id::text AS id, t.o AS ord, t.f ->> 'text' AS text
+         FROM registry_archive_cache c
+         CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(c.license_files) = 'array' THEN c.license_files ELSE '[]'::jsonb END)
+              WITH ORDINALITY AS t(f, o)
+         WHERE c.id = ANY($1::uuid[]) AND jsonb_typeof(t.f) = 'object' AND jsonb_typeof(t.f -> 'text') = 'string'`,
+        [archiveIds],
+      );
+      for (const r of result.rows) {
+        let byOrd = files.get(r.id);
+        if (!byOrd) files.set(r.id, (byOrd = new Map()));
+        byOrd.set(Number(r.ord), r.text);
+      }
+    }
+
+    const lookups = this.registryLookups(batch.filter((e) => e.hasMetadataText && !hasText(e)));
+    if (lookups.size > 0) {
+      const keys = [...lookups.values()];
+      const result = await q.query<{ name: string; version: string; license_text: string }>(
+        `SELECT c.name, c.version, c.license_text
+         FROM registry_package_cache c
+         JOIN unnest($1::text[], $2::text[]) AS k(name, version) ON c.name = k.name AND c.version = k.version
+         WHERE c.ecosystem = 'pypi' AND c.outcome = 'found' AND c.license_text IS NOT NULL AND c.license_text <> ''`,
+        [keys.map((k) => k.name), keys.map((k) => k.version)],
+      );
+      const found = new Map(result.rows.map((r) => [JSON.stringify([r.name, r.version]), r.license_text]));
+      for (const [entry, key] of lookups) {
+        const text = found.get(JSON.stringify([key.name, key.version]));
+        if (text !== undefined) metadata.set(entry, text);
+      }
+    }
+    return { files, metadata };
+  }
+
+  private async render(
+    q: Queryable,
     scan: { id: string; completed_at: Date | null; project_name: string },
     entries: NoticeEntry[],
     preF3: boolean,
     knownIds: ReadonlyMap<string, string>,
-  ): Buffer {
+  ): Promise<Buffer> {
     const w = new NoticeWriter(this.maxBytes);
+    // Counts over all entries, independent of the size limit (contract 3.2, 3.7).
     const withText = entries.filter(hasText).length;
 
     w.line('THIRD-PARTY SOFTWARE NOTICES');
@@ -367,11 +485,19 @@ export class NoticeService {
     w.line('Generated automatically; not legal advice. Review before distribution.');
     if (preF3) w.line(PRE_F3_NOTE);
 
-    for (const entry of entries) this.renderEntry(w, entry, preF3, knownIds);
+    const empty: TextBatch = { files: new Map(), metadata: new Map() };
+    for (let start = 0; start < entries.length; start += TEXT_BATCH_SIZE) {
+      const batch = entries.slice(start, start + TEXT_BATCH_SIZE);
+      // After the first overflow no text is read any more (M-1); every later
+      // block becomes the omission line without its text.
+      const texts = w.truncated ? empty : await this.loadTextBatch(q, batch);
+      for (const entry of batch) this.renderEntry(w, entry, preF3, knownIds, texts);
+      // `texts` goes out of scope here: at most one batch of text is held.
+    }
     return w.toBuffer();
   }
 
-  private renderEntry(w: NoticeWriter, entry: NoticeEntry, preF3: boolean, knownIds: ReadonlyMap<string, string>): void {
+  private renderEntry(w: NoticeWriter, entry: NoticeEntry, preF3: boolean, knownIds: ReadonlyMap<string, string>, texts: TextBatch): void {
     const { row, archive } = entry;
     const expression = preF3 ? '' : singleLine(row.license_expression);
     w.line('');
@@ -396,22 +522,24 @@ export class NoticeService {
       }
     }
 
+    const archiveTexts = archive === null ? undefined : texts.files.get(archive.id);
     for (const file of archive?.licenseFiles ?? []) {
       w.line(FILE_SEP);
       w.line(`File: ${singleLine(file.path)}`);
-      if ('text' in file) {
+      if (file.hasText) {
         w.line(FILE_SEP);
-        w.textBlock(noticeTextLines(file.text));
+        // Same snapshot as the structure query (REPEATABLE READ), so the text is present.
+        w.textBlock(() => archiveTexts?.get(file.ord) ?? null);
       } else {
-        w.line(`[omitted: ${OMITTED_REASONS[file.omitted] ?? 'not available'}]`);
+        w.line(`[omitted: ${own(OMITTED_REASONS, file.omitted) ?? 'not available'}]`);
       }
     }
 
-    if (!textual && entry.label === 'pypi' && entry.metadataText !== null) {
+    if (!textual && entry.label === 'pypi' && entry.hasMetadataText) {
       w.line(FILE_SEP);
       w.line('License text from package metadata');
       w.line(FILE_SEP);
-      w.textBlock(noticeTextLines(entry.metadataText));
+      w.textBlock(() => texts.metadata.get(entry) ?? null);
     }
   }
 }

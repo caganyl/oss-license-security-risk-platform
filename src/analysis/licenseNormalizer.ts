@@ -365,24 +365,53 @@ export function normalizeLicense(raw: string): NormalizationResult {
     return { spdxId: null, normalized: trimmed, riskLevel: 'unknown', isSpdxExpression: false, originalRaw: raw };
   }
 
-  // Detect SPDX expression operators — handle before alias lookup
-  if (/\b(AND|OR|WITH)\b/i.test(trimmed)) {
+  // Detect SPDX expression operators — handle before alias lookup. Operators
+  // must be whitespace-delimited (B-2): `\b` would also match the `-or-` of
+  // ids such as `GPL-3.0-or-later`, and this test must agree with the
+  // whitespace-delimited splits in `_normalizeSpdxExpression` so that every
+  // detected expression really splits into strictly shorter parts.
+  if (SPDX_OPERATOR_RE.test(trimmed)) {
     return _normalizeSpdxExpression(trimmed, raw);
   }
 
+  return _normalizeAtomic(trimmed, raw);
+}
+
+/** Whitespace-delimited SPDX operator (same delimiting as the splits below). */
+const SPDX_OPERATOR_RE = /\s(?:AND|OR|WITH)\s/i;
+
+/**
+ * Own-property lookups only (L-3): inherited keys such as `constructor`,
+ * `toString` or `__proto__` are not license ids and must never yield a
+ * (function-valued) risk level or alias.
+ */
+function riskOf(spdxId: string): LicenseRiskLevel | undefined {
+  return Object.hasOwn(SPDX_RISK_MAP, spdxId) ? SPDX_RISK_MAP[spdxId] : undefined;
+}
+
+function aliasOf(key: string): string | undefined {
+  return Object.hasOwn(ALIAS_MAP, key) ? ALIAS_MAP[key] : undefined;
+}
+
+/**
+ * Single license term (no operator handling, never recurses — B-2): exact
+ * SPDX id, then case-insensitive alias, else unrecognized.
+ */
+function _normalizeAtomic(trimmed: string, raw: string): NormalizationResult {
   // Strip trailing parentheticals added by some tools (e.g. "MIT License (MIT)")
   const cleaned = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim();
 
   // Direct match on canonical SPDX ID (exact case)
-  if (SPDX_RISK_MAP[cleaned] !== undefined) {
-    return { spdxId: cleaned, normalized: cleaned, riskLevel: SPDX_RISK_MAP[cleaned], isSpdxExpression: false, originalRaw: raw };
+  const direct = riskOf(cleaned);
+  if (direct !== undefined) {
+    return { spdxId: cleaned, normalized: cleaned, riskLevel: direct, isSpdxExpression: false, originalRaw: raw };
   }
 
   // Alias map lookup (case-insensitive)
   const aliasKey = cleaned.toLowerCase();
-  const spdxId = ALIAS_MAP[aliasKey];
+  const spdxId = aliasOf(aliasKey);
   if (spdxId) {
-    const riskLevel = SPDX_RISK_MAP[spdxId] ?? 'unknown';
+    const riskLevel = riskOf(spdxId) ?? 'unknown';
     return { spdxId, normalized: spdxId, riskLevel, isSpdxExpression: false, originalRaw: raw };
   }
 
@@ -466,7 +495,7 @@ export function isRecognizedLicense(raw: string): boolean {
  * Returns 'unknown' if the ID is not in the built-in risk map.
  */
 export function evaluateLicenseRisk(spdxId: string): LicenseRiskLevel {
-  return SPDX_RISK_MAP[spdxId] ?? 'unknown';
+  return riskOf(spdxId) ?? 'unknown';
 }
 
 // ---------------------------------------------------------------------------
@@ -515,5 +544,8 @@ function _normalizeSpdxExpression(expression: string, raw: string): Normalizatio
     return { ...base, normalized: expression, isSpdxExpression: true, originalRaw: raw };
   }
 
-  return normalizeLicense(expression);
+  // Unreachable while SPDX_OPERATOR_RE and the splits agree; kept as a
+  // non-recursive atomic lookup so the same input can never re-enter
+  // operator handling (B-2: unbounded recursion crashed real scans).
+  return _normalizeAtomic(expression, raw);
 }

@@ -387,6 +387,12 @@ workspaceDirs, scanRoots, homeDir })`. Sıra önemlidir:
 >   (`ESC[`/`\x9B` + `[0-?]{0,16}`) sonra gelen token da başlangıç sayılır (ham
 >   metin geçişi için). Tüm alternatifler sınırlı uzunlukta olduğundan geri bakış
 >   konum başına sabit maliyetlidir (`src/lib/errorText.ts`).
+> - **Yer tutucuya bitişik token karakterleri:** bir yer tutucuya (`[REDACTED]`)
+>   bitişik token karakterleri (`[A-Za-z0-9_+/=~-]`, aralarındaki nokta dahil;
+>   cümle sonu noktası hariç) yer tutucuya katılır. Gerekçe (L-1 kalıntısı):
+>   kontrol karakteriyle bölünmüş bir sırrın ham ön geçişte yalnız ilk parçası
+>   maskelendiğinde kalan parçası açıkta kalmamalıdır. Bedeli fazla maskelemedir
+>   (ör. `C:\Users\qa-user\r2` → `<home>2`), sızıntı değil.
 > - **`Bearer`, `Basic`, `Authorization`** anahtar sözcükleri büyük/küçük harfe
 >   duyarsız eşleşir; başlıksız, çıplak `Basic <base64>` biçimi de maskelenir.
 > - **`redact.ts` URL kimlik bilgisi deseni:** şema kısmı `{0,31}` ile

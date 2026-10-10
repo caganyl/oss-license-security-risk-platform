@@ -436,6 +436,16 @@ dolaylı olarak "parti başına bir metin sorgusu / kesimden sonra sorgu yok" il
 `ReportService` iç metotları (`loadReportData`, `renderContent`) L-2 testinde tip dönüşümüyle
 çağrılır; metot adları değişirse test güncellenmelidir.
 
+### REQ-005 (F4) AC → test (hazırlık; devam ediyor)
+
+`setup/networkGuard.ts` ayrıca `VULNERABILITY_LOOKUP=off`, `VULNERABILITY_RECHECK=off`
+atar ve `OSV_API_URL` / `NVD_API_URL`'yi siler (D-91, ADR-007 "Test stratejisi").
+
+| AC | Dosya |
+| --- | --- |
+| D-91 (test varsayılanları) | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` "REQ-005 D-91 …" |
+| AC-G-7 (göç `007`) | `integration/migrateTool.test.ts` "REQ-005 AC-G-7: migration 007_vulnerability_recheck" (up → down → up şema eşitliği, `006` şemasına birebir dönüş, enum değişmez, CHECK kümeleri, tek `running` satırı → 23505, `findings.recheck_run_id` ON DELETE SET NULL, down bulgu silmez) ve "AC-P11-15 …" (007 SHA-256 donduruldu) |
+
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının
 `textContent` ile gösterilmesi, migration testi).

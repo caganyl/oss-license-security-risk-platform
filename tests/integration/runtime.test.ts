@@ -650,7 +650,9 @@ describe('AC-P12-7 / AC-P12-8: job and database failures do not stop the process
 
     await runtime.start();
     await vi.waitFor(async () => expect((await scan(db, good)).status).toBe('completed'), { timeout: 10_000, interval: 100 });
-    expect((await scan(db, bad)).status).toBe('failed');
+    // Jobs run concurrently: under full-suite load the permanent failure of `bad`
+    // can be persisted after `good` completes, so wait for it as well.
+    await vi.waitFor(async () => expect((await scan(db, bad)).status).toBe('failed'), { timeout: 10_000, interval: 100 });
     expect(await health(port)).toBe(200);
     expect(runtime.state).toBe('running');
   });

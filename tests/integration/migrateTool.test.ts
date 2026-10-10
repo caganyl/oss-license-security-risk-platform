@@ -57,6 +57,7 @@ const ALL = [
   '004_finding_fingerprint',
   '005_scan_next_attempt',
   '006_registry_enrichment', // REQ-004
+  '007_vulnerability_recheck', // REQ-005
 ];
 /** Newest real migration (the "latest version" of the --to / compiled-CLI scenarios). */
 const LATEST = ALL[ALL.length - 1];
@@ -297,6 +298,189 @@ describe('AC-P11-16: migration 005_scan_next_attempt', () => {
     expect(up.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual(ALL.slice(3));
     expect(await versions(db)).toEqual(ALL);
     expect(await schemaSnapshot(db)).toEqual(full);
+  });
+});
+
+describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
+  const V007 = '007_vulnerability_recheck';
+
+  /** Error of a rejected query (pg DatabaseError: code + constraint). */
+  async function pgError(p: Promise<unknown>): Promise<{ code?: string; constraint?: string }> {
+    const e = await p.then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(e, 'query should have been rejected').not.toBeNull();
+    return e as { code?: string; constraint?: string };
+  }
+
+  /** project -> scan -> package -> scan_dependency; returns the ids a finding needs. */
+  async function seedDependency(db: ScratchDatabase): Promise<{ scanId: string; depId: string }> {
+    const [p] = await db.query<{ id: string }>(`INSERT INTO projects (name) VALUES ('qa-007') RETURNING id`);
+    const [s] = await db.query<{ id: string }>(
+      `INSERT INTO scans (project_id, trigger, status, ref, completed_at) VALUES ($1, 'manual', 'completed', 'main', NOW()) RETURNING id`,
+      [p.id],
+    );
+    const [pkg] = await db.query<{ id: string }>(
+      `INSERT INTO packages (ecosystem, name, version, purl) VALUES ('nodejs', 'qa-007-pkg', '1.0.0', 'pkg:npm/qa-007-pkg@1.0.0') RETURNING id`,
+    );
+    const [d] = await db.query<{ id: string }>(
+      `INSERT INTO scan_dependencies (scan_id, package_id, manifest_file, manifest_path) VALUES ($1, $2, 'package-lock.json', 'package-lock.json') RETURNING id`,
+      [s.id, pkg.id],
+    );
+    return { scanId: s.id, depId: d.id };
+  }
+
+  async function insertRun(db: ScratchDatabase, status: string): Promise<string> {
+    const [r] = await db.query<{ id: string }>(
+      `INSERT INTO vulnerability_recheck_runs (runtime_run_id, status, started_at, finished_at)
+       VALUES ('qa-run', $1, NOW(), CASE WHEN $1 = 'running' THEN NULL ELSE NOW() END) RETURNING id`,
+      [status],
+    );
+    return r.id;
+  }
+
+  async function insertFinding(db: ScratchDatabase, ids: { scanId: string; depId: string }, recheckRunId: string | null, n: number): Promise<string> {
+    const [f] = await db.query<{ id: string }>(
+      `INSERT INTO findings (scan_id, scan_dependency_id, finding_type, fingerprint, recheck_run_id)
+       VALUES ($1, $2, 'security', $3, $4) RETURNING id`,
+      [ids.scanId, ids.depId, String(n).repeat(64), recheckRunId],
+    );
+    return f.id;
+  }
+
+  it('up -> down --to 006 (restores exactly the 006 schema, enum types untouched) -> up yields the identical schema', async () => {
+    const db = await newDb({ migrated: false });
+    const up = await cli(['up'], { url: db.url });
+    expect(up.code, up.all).toBe(0);
+    expect(up.out).toContainEqual(expect.stringMatching(new RegExp(`^uygulandı ${V007} \\(\\d+ ms\\)$`)));
+    const full = await schemaSnapshot(db);
+
+    // Reference: a fresh database migrated with 001…006 only.
+    const dir006 = copyOfRealMigrations();
+    for (const f of [`${V007}.up.sql`, `${V007}.down.sql`]) fs.rmSync(path.join(dir006, f));
+    const ref = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: ref.url, dir: dir006 })).code).toBe(0);
+    const at006 = await schemaSnapshot(ref);
+
+    const down = await cli(['down', '--to', '006'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${V007}`);
+    expect(await versions(db)).toEqual(ALL.slice(0, 6));
+    for (const t of ['vulnerability_recheck_runs', 'osv_vulnerability_cache', 'nvd_cvss_cache']) expect(await tableExists(db, t), t).toBe(false);
+    for (const [t, c] of [['scans', 'vulnerability_data_status'], ['scans', 'vulnerability_checked_at'], ['findings', 'recheck_run_id'], ['scan_dependencies', 'lock_integrity']]) {
+      expect(await columnExists(db, t, c), `${t}.${c}`).toBe(false);
+    }
+    expect(await schemaSnapshot(db)).toEqual(at006);
+    // No enum type gains or loses a value (finding_status, audit_action, scan_trigger …).
+    expect(full.types).toEqual(at006.types);
+
+    const again = await cli(['up'], { url: db.url });
+    expect(again.code, again.all).toBe(0);
+    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V007]);
+    expect(await versions(db)).toEqual(ALL);
+    expect(await schemaSnapshot(db)).toEqual(full);
+  });
+
+  it('CHECK value sets: recheck run status, scans.vulnerability_data_status, scan_dependencies.lock_integrity, nvd_cvss_cache.outcome', async () => {
+    const db = await newDb(); // migrated template: 001…latest
+    const ids = await seedDependency(db);
+
+    for (const status of ['completed', 'partial', 'failed', 'interrupted', 'disabled']) await insertRun(db, status);
+    await insertRun(db, 'running');
+    expect((await pgError(insertRun(db, 'bogus'))).code).toBe('23514');
+    // running <=> finished_at IS NULL
+    expect(
+      (await pgError(db.query(`INSERT INTO vulnerability_recheck_runs (runtime_run_id, status, started_at, finished_at) VALUES ('qa', 'completed', NOW(), NULL)`))).constraint,
+    ).toBe('vulnerability_recheck_runs_finished');
+
+    for (const v of ['complete', 'partial', 'unavailable', 'disabled', null]) {
+      await db.query(`UPDATE scans SET vulnerability_data_status = $1 WHERE id = $2`, [v, ids.scanId]);
+    }
+    expect((await pgError(db.query(`UPDATE scans SET vulnerability_data_status = 'bogus' WHERE id = $1`, [ids.scanId]))).code).toBe('23514');
+
+    for (const v of ['match', 'mismatch', 'not_comparable', null]) {
+      await db.query(`UPDATE scan_dependencies SET lock_integrity = $1 WHERE id = $2`, [v, ids.depId]);
+    }
+    expect((await pgError(db.query(`UPDATE scan_dependencies SET lock_integrity = 'bogus' WHERE id = $1`, [ids.depId]))).code).toBe('23514');
+
+    const nvd = (cve: string, outcome: string, score: number | null) =>
+      db.query(
+        `INSERT INTO nvd_cvss_cache (cve_id, outcome, cvss_score, fetched_at, expires_at) VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '1 day')`,
+        [cve, outcome, score],
+      );
+    await nvd('CVE-2024-0001', 'found', 7.5);
+    await nvd('CVE-2024-0002', 'no_cvss', null);
+    expect((await pgError(nvd('CVE-2024-0003', 'error', null))).code).toBe('23514'); // transient errors are never stored
+    expect((await pgError(nvd('CVE-2024-0004', 'found', null))).constraint).toBe('nvd_cvss_cache_found');
+
+    // The declared sets match the contract exactly (no extra value hidden in the definition).
+    const defs = await db.query<{ tbl: string; def: string }>(
+      `SELECT conrelid::regclass::text AS tbl, pg_get_constraintdef(oid) AS def FROM pg_constraint
+       WHERE contype = 'c' AND connamespace = 'public'::regnamespace
+         AND conrelid::regclass::text IN ('vulnerability_recheck_runs', 'scans', 'scan_dependencies', 'nvd_cvss_cache')`,
+    );
+    const setOf = (tbl: string, column: string): string[] => {
+      const def = defs.find((d) => d.tbl === tbl && new RegExp(`\\(?${column}\\b.*ANY`).test(d.def))?.def ?? '';
+      return [...def.matchAll(/'([^']+)'::text/g)].map((m) => m[1]).sort();
+    };
+    expect(setOf('vulnerability_recheck_runs', 'status')).toEqual(['completed', 'disabled', 'failed', 'interrupted', 'partial', 'running']);
+    expect(setOf('scans', 'vulnerability_data_status')).toEqual(['complete', 'disabled', 'partial', 'unavailable']);
+    expect(setOf('scan_dependencies', 'lock_integrity')).toEqual(['match', 'mismatch', 'not_comparable']);
+    expect(setOf('nvd_cvss_cache', 'outcome')).toEqual(['found', 'no_cvss']);
+  });
+
+  it('at most one running recheck run: a second running row -> 23505 on uq_vulnerability_recheck_runs_running; a finished row frees the slot', async () => {
+    const db = await newDb();
+    const first = await insertRun(db, 'running');
+    const err = await pgError(insertRun(db, 'running'));
+    expect(err).toMatchObject({ code: '23505', constraint: 'uq_vulnerability_recheck_runs_running' });
+    expect(await db.query(`SELECT 1 FROM vulnerability_recheck_runs WHERE status = 'running'`)).toHaveLength(1);
+    await insertRun(db, 'completed'); // finished rows are not limited
+    await db.query(`UPDATE vulnerability_recheck_runs SET status = 'interrupted', finished_at = NOW() WHERE id = $1`, [first]);
+    await insertRun(db, 'running');
+    expect(await db.query(`SELECT 1 FROM vulnerability_recheck_runs WHERE status = 'running'`)).toHaveLength(1);
+  });
+
+  it('findings.recheck_run_id is ON DELETE SET NULL: deleting run history keeps the finding', async () => {
+    const db = await newDb();
+    const ids = await seedDependency(db);
+    const run = await insertRun(db, 'completed');
+    const linked = await insertFinding(db, ids, run, 1);
+    const [{ deltype }] = await db.query<{ deltype: string }>(
+      `SELECT confdeltype AS deltype FROM pg_constraint
+       WHERE conrelid = 'findings'::regclass AND contype = 'f' AND confrelid = 'vulnerability_recheck_runs'::regclass`,
+    );
+    expect(deltype).toBe('n'); // SET NULL
+
+    await db.query(`DELETE FROM vulnerability_recheck_runs WHERE id = $1`, [run]);
+    expect(await db.query(`SELECT id, recheck_run_id FROM findings WHERE id = $1`, [linked])).toEqual([{ id: linked, recheck_run_id: null }]);
+  });
+
+  it('down keeps every finding (recheck-opened ones lose only their link); the .down.sql header lists the lost data', async () => {
+    const db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+    const ids = await seedDependency(db);
+    const run = await insertRun(db, 'completed');
+    const byRecheck = await insertFinding(db, ids, run, 2);
+    const byScan = await insertFinding(db, ids, null, 3);
+    await db.query(`UPDATE scan_dependencies SET lock_integrity = 'mismatch' WHERE id = $1`, [ids.depId]);
+    await db.query(`UPDATE scans SET vulnerability_data_status = 'partial', vulnerability_checked_at = NOW() WHERE id = $1`, [ids.scanId]);
+
+    const down = await cli(['down', '--to', '006'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+    const rows = await db.query<{ id: string; scan_id: string; status: string }>(`SELECT id, scan_id, status::text AS status FROM findings ORDER BY id`);
+    expect(rows.map((r) => r.id).sort()).toEqual([byRecheck, byScan].sort());
+    expect(rows.every((r) => r.scan_id === ids.scanId && r.status === 'open')).toBe(true);
+    expect(await db.query(`SELECT 1 FROM scan_dependencies WHERE id = $1`, [ids.depId])).toHaveLength(1);
+    expect(await db.query(`SELECT 1 FROM scans WHERE id = $1`, [ids.scanId])).toHaveLength(1);
+
+    const text = fs.readFileSync(path.join(MIGRATIONS_DIR, `${V007}.down.sql`), 'utf8');
+    expect(text).toMatch(/DATA LOSS/);
+    for (const what of ['vulnerability_recheck_runs', 'findings.recheck_run_id', 'scans.vulnerability_data_status', 'scan_dependencies.lock_integrity']) {
+      expect(text, what).toContain(what);
+    }
+    expect(text).toMatch(/findings THEMSELVES are KEPT/);
   });
 });
 
@@ -812,9 +996,12 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
     // REQ-004 AC-G-7: frozen once REQ-004 ships (QA batch B).
     '006_registry_enrichment.up.sql': '4fa782f6a5f01c9562bea6d533fdd24c8f3c071c9d2130bedbd6f7edd4a14a85',
     '006_registry_enrichment.down.sql': '36b32e6e35b8ba193fef5a2221010eea3af8ce31aac5c91c8574ea8a0181ee79',
+    // REQ-005 AC-G-7: frozen with the 007 commit (32a6ee2).
+    '007_vulnerability_recheck.up.sql': '6147d9288c2147b008bcb9a1f4a0f5bf6969ab1546bb7261fa2b6d4d3969f4c8',
+    '007_vulnerability_recheck.down.sql': '39305662c8c90d6e69ed7a2c0bdd2202cbf968359082bd1ff599bb973f079835',
   };
 
-  it('AC-G-7: 001…006 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
+  it('AC-G-7 (REQ-004, REQ-005): 001…007 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
     const actual = Object.fromEntries(
       Object.keys(FROZEN).map((name) => [
         name,
@@ -822,7 +1009,7 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
       ]),
     );
     expect(actual).toEqual(FROZEN);
-    expect(migrationVersions().slice(0, 6)).toEqual(ALL.slice(0, 6));
+    expect(migrationVersions().slice(0, 7)).toEqual(ALL.slice(0, 7));
     expect(migrationVersions()).toEqual(ALL); // ALL above lists every real migration
   });
 

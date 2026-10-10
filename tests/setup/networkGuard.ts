@@ -7,7 +7,10 @@
  *    `REGISTRY_ENRICHMENT=on` must not turn the suite into a networked run.
  *    A test that needs enrichment sets the variable itself (e.g.
  *    `vi.stubEnv('REGISTRY_ENRICHMENT', 'on')`) and points the enricher at
- *    the loopback fake registry.
+ *    the loopback fake registry. REQ-005 (D-91, ADR-007 "Test stratejisi"):
+ *    `VULNERABILITY_LOOKUP` and `VULNERABILITY_RECHECK` are forced to `off`
+ *    the same way, and `OSV_API_URL` / `NVD_API_URL` are removed so a
+ *    developer override can never redirect a test to a real endpoint.
  * 2. Every outbound TCP/TLS connection attempt to a non-loopback host is
  *    blocked: `net.Socket.prototype.connect` is wrapped (this covers
  *    `net.connect`/`net.createConnection`, `tls.connect`, `http(s).request`,
@@ -147,6 +150,13 @@ function install(): void {
 
 install();
 process.env.REGISTRY_ENRICHMENT = 'off';
+// REQ-005 D-91 / ADR-007 test strategy: same rule for the OSV/NVD lookup and
+// the daily recheck scheduler. A test that needs them sets the variables
+// itself and points the client at a loopback fake (never the real services).
+process.env.VULNERABILITY_LOOKUP = 'off';
+process.env.VULNERABILITY_RECHECK = 'off';
+delete process.env.OSV_API_URL;
+delete process.env.NVD_API_URL;
 
 function failOnViolations(phase: string): void {
   const seen = takeNetworkViolations();

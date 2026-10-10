@@ -1,5 +1,6 @@
 /**
- * REQ-004 AC-G-2 / D-75 (ADR-006 test strategy): self-test of the Vitest
+ * REQ-004 AC-G-2 / D-75 (ADR-006 test strategy) and REQ-005 D-91 (ADR-007
+ * test strategy): self-test of the Vitest
  * network guard (tests/setup/networkGuard.ts, registered as `setupFiles`).
  *
  * Non-loopback targets use TEST-NET-3 (203.0.113.0/24, RFC 5737, never
@@ -47,6 +48,13 @@ const closeServer = (server: net.Server) => new Promise<void>((resolve) => serve
 describe('network guard: defaults', () => {
   it('REGISTRY_ENRICHMENT is off unless a test sets it', () => {
     expect(process.env.REGISTRY_ENRICHMENT).toBe('off');
+  });
+
+  it('REQ-005 D-91: VULNERABILITY_LOOKUP / VULNERABILITY_RECHECK are off and OSV_API_URL / NVD_API_URL are unset', () => {
+    expect(process.env.VULNERABILITY_LOOKUP).toBe('off');
+    expect(process.env.VULNERABILITY_RECHECK).toBe('off');
+    expect('OSV_API_URL' in process.env).toBe(false);
+    expect('NVD_API_URL' in process.env).toBe(false);
   });
 
   it('isLoopbackHost: loopback / local-only hosts allowed, everything else not', () => {

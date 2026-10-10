@@ -134,7 +134,8 @@ describe('AC-P16-2 / AC-P16-4: SPDX tag-value', () => {
     expect(inner).toContain('&lt;/text&gt;');
     expect(inner).toContain('&lt;text&gt;');
     const nameLine = lines.find((l) => l.startsWith('PackageName: ev'));
-    expect(nameLine).toBe('PackageName: ev</TEXT>il PackageName: sahte<text>');
+    // Contract 1.1.0 L-1 (C-14): single-line values escape <text>/</text> too (any case in, lower case out).
+    expect(nameLine).toBe('PackageName: ev&lt;/text&gt;il PackageName: sahte&lt;text&gt;');
   });
 });
 
@@ -209,7 +210,7 @@ describe('AC-P16-6: CycloneDX 1.5 XML', () => {
 });
 
 describe('contract section 9 / 5.1: common text rules', () => {
-  it('AC-P16-4 / contract 9 step 3 (known red): single-line rule maps \\n and \\t to one space (\\r normalized first)', () => {
+  it('AC-P16-4 / contract 9 step 3 / B-1: single-line rule maps \\n and \\t to one space (\\r normalized first)', () => {
     expect(singleLine('a\r\nb\rc\nd')).toBe('a b c d');
     expect(singleLine('a\tb')).toBe('a b');
   });

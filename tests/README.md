@@ -410,17 +410,31 @@ Golden NOTICE: `fixtures/notice/golden-f3.txt` — contract bölüm 3'ten **elle
 | AC-P16-1, -2, -4, -5, -6 | `unit/sbomF3.test.ts` |
 | AC-P16-3 | `unit/enrichmentPure.test.ts` |
 | AC-P16-7 | `integration/f3Outputs.test.ts` (`SbomService`, dört biçim) |
+| Contract 1.1.0 (L-1, L-2, I-3, M-1) ve B-2, L-3, L-4 | `unit/f3SecurityFixes.test.ts`, `integration/f3SecurityFixes.test.ts` (aşağıdaki tablo) |
 
 64 MiB NOTICE sınırı `NoticeService({ maxBytes })` enjeksiyonuyla test edilir (gerçek
 64 MiB metin üretilmez). PDF `License` sütun içeriği sıkıştırılmış akışlar nedeniyle
 metin olarak doğrulanmaz (inceleme ile); PDF üretiminin hatasızlığı test edilir.
 
-Bilinen kırmızılar:
+Bilinen kırmızılar: yok. (B-1 — `singleLine` sekmeyi katlamıyordu — `f680a89` ile
+düzeltildi; `unit/sbomF3.test.ts` "AC-P16-4 / contract 9 step 3 / B-1" artık yeşil.)
 
-- `unit/sbomF3.test.ts` "AC-P16-4 / contract 9 step 3 (known red)": `src/lib/outputText.ts`
-  `singleLine` yalnız `\n`'i boşluğa çevirir; contract bölüm 9 adım 3 `\t`'nin de tek
-  boşluk olmasını ister. Sekme NOTICE/Excel/PDF/SPDX tek satırlık alanlarında kalır
-  (backend-engineer).
+#### Güvenlik incelemesi düzeltmeleri → test (`docs/quality/security-reports/REQ-004-security-review.md`, contract 1.1.0, `e526d6d`)
+
+| Bulgu | Dosya / test adı öneki |
+| --- | --- |
+| B-2 (normalleştiricide `-or-later` özyinelemesi) | `unit/f3SecurityFixes.test.ts` "B-2 …" (`GPL-3.0-or-later`, `LGPL-2.1-or-later`, `*-only`, `(MIT OR GPL-3.0-or-later)`, `Apache-2.0 WITH LLVM-exception`, 5000 girdilik deterministik fuzz); `integration/f3SecurityFixes.test.ts` "B-2 / AC-P14-1" (sahte kayıt defteriyle uçtan uca tarama `completed`) |
+| L-3 (miras anahtarları) | `unit/f3SecurityFixes.test.ts` "SEC L-3" (normalleştirici, `evaluateLicenseRisk`, `isRecognizedLicense`, `canonicalSpdx`, trove sınıflandırıcı, CycloneDX kapsam haritası JSON/XML); `integration/f3SecurityFixes.test.ts` "SEC L-3" (worker politikası `unknown` bulgu açar, NOTICE `[omitted: not available]`) |
+| I-3 (U+0085/U+2028/U+2029) | `unit/f3SecurityFixes.test.ts` "SEC I-3" (katlama, kalkan, çok satırlı metin korunur, telif satırları SPDX/CycloneDX) |
+| L-1 (tag-value tek satır `<text>`) | `unit/f3SecurityFixes.test.ts` "SEC L-1" (tüm tek satırlık alanlar), `unit/sbomF3.test.ts` "AC-P16-4: </text> …" (beklenti 1.1.0'a güncellendi) |
+| L-2 (Excel kalkanı tüm sayfalar) | `unit/f3SecurityFixes.test.ts` "SEC L-2 / C-15" (sahte `Pool` → gerçek `loadReportData`/`renderContent` → `.xlsx` ExcelJS ile geri okunur; dört sayfa, sayı hücreleri sayı, formül hücresi yok) |
+| M-1 (NOTICE parti okuma) | `integration/f3SecurityFixes.test.ts` "SEC M-1" (120 girdi = 3 parti, contract'tan kurulan beklentiyle bayt eşitliği, tek REPEATABLE READ anlık görüntüsü, parti başına bir metin sorgusu, kesimden sonra metin sorgusu yok) |
+| L-4 (süreç geneli uçuştaki bayt bütçesi) | `unit/f3SecurityFixes.test.ts` "SEC L-4" (FIFO, iptal, çift serbest bırakma, büyük isteğin kırpılması, `grow`, tekil 256 MiB; `collectArchive` enjekte `inFlight` ile serileştirme, kota reddi, bütünlük hatası, iptal) |
+
+M-1 tepe bellek ölçümü (heap) otomatik testte **yok**: CI'da kararsız olur; bellek sınırı
+dolaylı olarak "parti başına bir metin sorgusu / kesimden sonra sorgu yok" ile doğrulanır.
+`ReportService` iç metotları (`loadReportData`, `renderContent`) L-2 testinde tip dönüşümüyle
+çağrılır; metot adları değişirse test güncellenmelidir.
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

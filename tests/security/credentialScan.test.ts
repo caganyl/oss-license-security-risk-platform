@@ -114,7 +114,7 @@ describe('P-09 no hard-coded credentials in the working tree', () => {
   it('AC-P09-1 / AC-P09-4: gitleaks-like scan of tracked and untracked files is clean', () => {
     const findings = scanWorkingTree();
     expect(findings, `hard-coded credentials found (values not shown):\n${findings.join('\n')}`).toEqual([]);
-  });
+  }, 60_000); // < 1 s alone; the full parallel suite plus many untracked files can exceed the 5 s default
 });
 
 describe('P-09 env example file (AC-P09-2)', () => {

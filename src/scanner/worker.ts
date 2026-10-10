@@ -37,7 +37,7 @@ import { type DependencyEnricher, type EnrichmentResult, disabledEnrichment, enr
 import { computeBudgetMs } from '../enrichment/budget';
 import { resolveEffectiveLicense } from '../enrichment/effectiveLicense';
 import { sanitizeText } from '../enrichment/text';
-import { systemClock, type AppClock } from '../lib/clock';
+import { localDateString, systemClock, type AppClock } from '../lib/clock';
 import { normalizeLegacyVulnerability } from '../vulnerability/normalize';
 import {
   computeVulnerabilityBudgetMs,
@@ -787,8 +787,10 @@ export class ScanWorker {
       // One finding per fingerprint per scan (ADR-003 c, AC-P08-2): the same
       // package in several manifests stays in the inventory but is reported once.
       const seenFingerprints = new Set<string>();
+      // "Today" of the carry-over check from the injected clock, not CURRENT_DATE (ADR-007 Karar 9).
+      const today = localDateString(this.deps.clock.now());
       const openFinding = (spec: Omit<NewFinding, 'scanId' | 'projectId' | 'scanDependencyId'>, scanDependencyId: string) =>
-        insertFinding(client, seenFingerprints, { ...spec, scanId, projectId, scanDependencyId });
+        insertFinding(client, seenFingerprints, { ...spec, scanId, projectId, scanDependencyId }, { today });
 
       // Process dependencies
       for (const dep of result.dependencies) {

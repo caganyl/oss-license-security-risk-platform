@@ -42,6 +42,7 @@ import { createDependencyEnricher, type DependencyEnricher } from './enrichment'
 import { createVulnerabilityClient, type VulnerabilityClient } from './vulnerability/client';
 import { warnRemovedVulnerabilitySettings } from './vulnerability/endpoints';
 import { createVulnerabilityLookup, type VulnerabilityLookup } from './vulnerability/lookup';
+import { createVulnerabilityScheduler, type SchedulerOptions, type VulnerabilityScheduler } from './vulnerability/scheduler';
 
 export type RuntimeLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 export type ExitFn = (code: number) => void;
@@ -112,6 +113,12 @@ export interface RuntimeOptions {
    * `scanWorker.gitVersion` is given.
    */
   gitVersion?: GitVersionProvider;
+  /**
+   * Vulnerability recheck / expiry scheduler (ADR-007 Karar 8). Tests only:
+   * `null` = not created, an object = timer/component overrides. Production
+   * never passes it (the scheduler is always created at step 7).
+   */
+  vulnerabilityScheduler?: null | SchedulerOptions;
 }
 
 /** What `installProcessHandlers` needs from a runtime. */
@@ -149,6 +156,8 @@ class Runtime implements RuntimeHandle {
   private enricher: DependencyEnricher | null = null;
   /** Vulnerability (OSV/NVD) client created by the runtime (ADR-007 Karar 11); null when injected or not started. */
   private vulnerabilityClient: VulnerabilityClient | null = null;
+  /** Recheck / expiry scheduler (lock-holding process only, ADR-007 Karar 8); null before step 7 or when disabled by tests. */
+  vulnerabilityScheduler: VulnerabilityScheduler | null = null;
 
   private readonly env: NodeJS.ProcessEnv;
   private readonly logger: RuntimeLogger;
@@ -314,6 +323,24 @@ class Runtime implements RuntimeHandle {
       this.scanWorker.startPolling();
       this.exportWorker.startPolling();
       this.state = 'running';
+      // (e) Recheck / expiry scheduler: after recovery and the sweep, only in
+      // the lock-holding process (ADR-007 Karar 8). Start errors are logged.
+      if (this.options.vulnerabilityScheduler !== null) {
+        this.vulnerabilityScheduler = createVulnerabilityScheduler({
+          ...(this.options.vulnerabilityScheduler ?? {}),
+          db: pool,
+          lookup: this.options.scanWorker?.vulnerabilityLookup ?? vulnerabilityLookup,
+          config: sandboxRunnerConfig.vulnerability,
+          runtimeRunId: this.runId,
+          isRunning: () => this.state === 'running',
+          logger: this.logger,
+        });
+        try {
+          await this.vulnerabilityScheduler.start();
+        } catch (err) {
+          this.logger.error(`Güvenlik açığı zamanlayıcısı başlatılamadı (${errorCode(err)}).`);
+        }
+      }
       this.logger.log(`Uygulama hazır (çalışma kimliği ${this.runId}).`);
     } catch (err) {
       await this.closeAfterFailedStart();
@@ -345,6 +372,7 @@ class Runtime implements RuntimeHandle {
   private async closeAfterFailedStart(): Promise<void> {
     this.scanWorker?.stop();
     this.exportWorker?.stop();
+    await this.vulnerabilityScheduler?.stop().catch(() => undefined);
     this.closeEnricher();
     if (this.server) {
       const server = this.server;
@@ -380,6 +408,8 @@ class Runtime implements RuntimeHandle {
     );
     this.scanWorker?.pause();
     this.exportWorker?.pause();
+    // Unlike scans, the in-flight recheck is aborted (cheap, repeatable; ADR-007 Karar 8).
+    this.vulnerabilityScheduler?.pause();
     this.scheduleRelock();
   }
 
@@ -423,6 +453,7 @@ class Runtime implements RuntimeHandle {
       // No orphan recovery here: the running scans are this process's (Karar 3).
       this.scanWorker?.resume();
       this.exportWorker?.resume();
+      this.vulnerabilityScheduler?.resume();
       return;
     }
     // Held by someone: our own half-open old session, or another instance.
@@ -505,6 +536,20 @@ class Runtime implements RuntimeHandle {
 
       // 4. Running scans: abort with reason 'shutdown'; each returns its row to `queued`.
       await this.scanWorker?.abortActiveJobs('shutdown');
+      // 4a. Recheck / expiry scheduler: timers cleared, in-flight run and
+      //     evaluation aborted ('shutdown') and awaited within the budget
+      //     (ADR-007 Karar 8); then the vulnerability client is closed.
+      if (this.vulnerabilityScheduler) {
+        const schedulerBudget = Math.max(0, budgetMs - (Date.now() - startedAt) - 3_000);
+        let budgetTimer: NodeJS.Timeout | null = null;
+        await Promise.race([
+          this.vulnerabilityScheduler.stop().catch((err) => this.logger.warn(`Zamanlayıcı durdurulamadı (${errorCode(err)}).`)),
+          new Promise<void>((resolve) => {
+            budgetTimer = setTimeout(resolve, schedulerBudget);
+          }),
+        ]);
+        if (budgetTimer) clearTimeout(budgetTimer);
+      }
       this.closeEnricher();
 
       // 5. Running reports cannot be cancelled: wait within the remaining budget.

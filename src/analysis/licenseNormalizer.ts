@@ -13,6 +13,7 @@
  */
 
 import { classifierTerm } from '../enrichment/classifiers';
+import { truncateCodePoints } from '../lib/errorText';
 import { buildIdIndex, canonicalizeSpdxExpression } from '../lib/spdxExpression';
 
 export type LicenseRiskLevel ='safe' | 'medium' | 'high' | 'critical' | 'unknown';
@@ -357,8 +358,12 @@ const PROPRIETARY_MARKERS = new Set([
  *   - SPDX expression operators (OR/AND/WITH)
  *   - Proprietary/unlicensed markers
  */
+/** Input cap of `normalizeLicense` in code points (N-1, ADR-007 Karar 13). */
+export const MAX_LICENSE_INPUT_CODE_POINTS = 1000;
+
 export function normalizeLicense(raw: string): NormalizationResult {
-  const trimmed = raw.trim();
+  // Lock hints and registry text pass the same gate (bounded work per call).
+  const trimmed = truncateCodePoints(raw, MAX_LICENSE_INPUT_CODE_POINTS).trim();
   const lower = trimmed.toLowerCase();
 
   if (PROPRIETARY_MARKERS.has(lower)) {
@@ -397,9 +402,32 @@ function aliasOf(key: string): string | undefined {
  * Single license term (no operator handling, never recurses — B-2): exact
  * SPDX id, then case-insensitive alias, else unrecognized.
  */
+/**
+ * Strips one trailing parenthetical added by some tools ("MIT License (MIT)")
+ * with a single linear scan (N-1, ADR-007 Karar 13). Same result as the
+ * former `replace(/\s*\([^)]*\)\s*$/, '')`: the trailing `)` pairs with the
+ * leftmost `(` after the previous `)`, and the whitespace before that `(` is
+ * cut with it.
+ */
+export function stripTrailingParenthetical(text: string): string {
+  let end = text.length;
+  while (end > 0 && /\s/.test(text[end - 1])) end--;
+  if (end === 0 || text[end - 1] !== ')') return text;
+  let open = -1;
+  for (let i = end - 2; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === ')') break;
+    if (ch === '(') open = i;
+  }
+  if (open < 0) return text;
+  let start = open;
+  while (start > 0 && /\s/.test(text[start - 1])) start--;
+  return text.slice(0, start);
+}
+
 function _normalizeAtomic(trimmed: string, raw: string): NormalizationResult {
   // Strip trailing parentheticals added by some tools (e.g. "MIT License (MIT)")
-  const cleaned = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  const cleaned = stripTrailingParenthetical(trimmed).trim();
 
   // Direct match on canonical SPDX ID (exact case)
   const direct = riskOf(cleaned);

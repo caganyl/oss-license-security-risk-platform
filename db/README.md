@@ -16,6 +16,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 - [Geri alma (`down --to`)](#geri-alma-down---to)
 - [Tam sıfırlama](#tam-sıfırlama)
 - [Göç testleri](#göç-testleri)
+- [Kayıt defteri önbelleği (`006`)](#kayıt-defteri-önbelleği-006)
 - [Parola kurtarma (SQL adımı)](#parola-kurtarma-sql-adımı)
 - [Kurallar](#kurallar)
 
@@ -24,7 +25,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | Yol | Amaç |
 | --- | --- |
 | `migrations/NNN_ad.up.sql` / `.down.sql` | İleri / geri göç. Araç her dosyayı, `schema_migrations` kaydıyla (`up`'ta `INSERT`, `down`'da `DELETE`) birlikte **tek transaction** içinde çalıştırır: ya ikisi birden işlenir ya hiçbiri. Dosyalarda `BEGIN/COMMIT` yoktur. |
-| `schema.sql` | `001`–`005` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
+| `schema.sql` | `001`–`006` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
 | `tests/f1_migrations_test.sql` | `002`–`004` için up → assert → down → up senaryosu. `psql` gerektirmez: `npm test` bunu `tests/integration/migrations.test.ts` içinde gömülü PostgreSQL'e karşı çalıştırır (`\ir` satırları satır içine alınır). Bulgu parmak izi referans değerleri de buradadır. |
 | `../src/db/migrate.ts` | CLI (`npm run db:migrate` = `node dist/db/migrate.js`). |
 | `../src/db/migrator.ts` | Göç kütüphanesi: klasör doğrulama, durum okuma, `up`, `down`, `status`, `npm start` için bekleyen göç kontrolü. |
@@ -39,6 +40,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | `003_declared_range` | `packages.version` NULL olabilir; `scan_dependencies.declared_range`; sürümsüz paket için kısmi benzersiz indeks; mevcut veride aralıkların taşınması | ADR-003 (a) | Manifest başına aralıklar (yalnız en son aralık `version`'a geri yazılır) |
 | `004_finding_fingerprint` | `findings.fingerprint` (backfill + NOT NULL), `carried_from_finding_id`, indeksler | ADR-003 (c), D-1 | Parmak izi (yeniden hesaplanabilir) ve karar taşıma bağlantısı (kalıcı) |
 | `005_scan_next_attempt` | `scans.next_attempt_at TIMESTAMPTZ NULL` (yeniden deneme bekleme zamanı); indeks ve CHECK yok | ADR-004 Karar 11, D-40 | Yalnız kuyruktaki taramaların yeniden deneme zamanlaması (bekleyenler hemen sahiplenilebilir olur) |
+| `006_registry_enrichment` | `registry_package_cache` (kayıt defteri lisans meta veri önbelleği), `registry_archive_cache` (arşivden çıkarılan lisans dosyaları ve telif satırları); `scan_dependencies`'e 7 kolon: `license_expression`, `license_source`, `license_lock_hint`, `license_hint_differs`, `license_enrichment_status`, `notice_status`, `notice_archive_id` (FK, `ON DELETE SET NULL`); `idx_scan_dependencies_notice_archive`. Veri taşıma yok; eski satırlar `NULL` kalır (= F3 öncesi tarama) | ADR-006 Karar 9–10, D-57, D-62, D-79 | İki önbellek (kayıt defterlerinden yeniden indirilebilir) ve F3 sonrası taramaların etkin lisans / NOTICE alanları (kalıcı; bu taramalar F3 öncesi gibi görünür, NOTICE için yeniden tarama gerekir) |
 
 **Dağıtım sırası:**
 
@@ -49,6 +51,10 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
   varsa başlamaz ve `npm run db:migrate` komutunu söyler (D-35); göçleri
   kendisi uygulamaz. `005`'i geri almak REQ-003 kodunu geri almakla birlikte
   yapılır (yeni worker kolonu okur/yazar). REQ-003 öncesi kod kolonu yok sayar.
+- `006`, REQ-004 çalışma zamanından **önce** uygulanır (worker, SBOM, rapor ve
+  NOTICE kodu yeni tabloları ve kolonları okur/yazar; `npm start` göç bekliyorsa
+  başlamaz). `006`'yı geri almak REQ-004 kodunu geri almakla birlikte yapılır.
+  REQ-004 öncesi kod yeni tabloları ve kolonları yok sayar.
 - Veritabanında dosyası olmayan bir sürüm varsa (veritabanı koddan yeni) ne
   araç (`up`/`down`) ne `npm start` çalışır; önce kodu güncelleyin.
 
@@ -56,7 +62,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 
 ### Ön koşullar
 
-1. Node.js ≥ 22 ve yerel PostgreSQL ≥ 15 (Windows kurulum paketi). `psql`'in
+1. Node.js `^22.21.0 || >=24.5.0` (REQ-004, ADR-006 Karar 5) ve yerel PostgreSQL ≥ 15 (Windows kurulum paketi). `psql`'in
    `PATH`'te olması gerekmez.
 2. Repo kökünde `.env` (`.env.example`'dan kopyalanır) veya oturumda
    `DATABASE_URL`. Parola URL içinde ya da `PGPASSWORD` ile verilir:
@@ -238,6 +244,77 @@ açılır. Testler uygulamanın kendi veritabanına asla bağlanmaz.
   çalışır ve sonda `ROLLBACK` edilir.
 - Göç aracı ve `005` (up → down → up, kilit, çıkış kodları, klasör
   doğrulaması, BOM/CRLF): REQ-003 Vitest göç testleri (`tests/`).
+- `006` (up → down → up, CHECK kümeleri, `ON DELETE SET NULL`, `schema.sql`
+  eşitliği): REQ-004 AC-G-7 Vitest göç testleri (`tests/`, qa-automation).
+
+## Kayıt defteri önbelleği (`006`)
+
+REQ-004 (F3) lisans zenginleştirmesi, npm ve PyPI'dan aldığı sonuçları iki
+tabloda kalıcı olarak önbelleğe alır (ADR-006 Karar 9–10, D-57). Kayıtlar
+tarama sonucu transaction'ından **bağımsız**, istek sonuçlandığı anda kendi
+transaction'ında yazılır; iptal edilen veya geri alınan bir tarama önbelleği
+silmez (AC-P14-8). İçerik herkese açık kayıt defterlerinden yeniden
+indirilebilir; önbellek her zaman güvenle temizlenebilir.
+
+| Tablo | Anahtar | İçerik | Geçerlilik |
+| --- | --- | --- | --- |
+| `registry_package_cache` | `(ecosystem, name, version)` — `ecosystem` `npm`/`pypi`, `name` istek adı (npm olduğu gibi, PyPI PEP 503), kesin sürüm | `outcome` (`found`/`not_found`), türetilmiş `declared_license`, PyPI uzun lisans metni `license_text` (NOTICE yedeği, ≤ 1 MiB), `archive_candidates` (arşiv URL'si, özet, boyut), `extractor_version` | `found`: süresiz (koddaki `METADATA_EXTRACTOR_VERSION` artınca yenilenir). `not_found` (404/410): `expires_at` = yazım + 24 saat, veritabanı saatiyle. Geçici hatalar hiç yazılmaz. |
+| `registry_archive_cache` | `id` (UUID); benzersiz `registry_archive_cache_key` = `(ecosystem, name, version, archive_digest)` | `outcome` (`collected`/`no_license_file`/`unsupported_format`/`limit_exceeded`), `outcome_detail`, `license_files` (`[{path,text}` \| `{path,omitted}]`), `copyright_lines`, arşiv URL'si/boyutu, `extractor_version` | Süresiz; `ARCHIVE_EXTRACTOR_VERSION` artınca aynı `id` ile yerinde güncellenir. İndirme/bütünlük/iş parçacığı hataları ve bütçe aşımı yazılmaz. |
+
+Taramaya bağlı alanlar `scan_dependencies` satırındadır (`license_expression`,
+`license_source`, `license_lock_hint`, `license_hint_differs`,
+`license_enrichment_status`, `notice_status`, `notice_archive_id`). Değer
+kümeleri `docs/contracts/REQ-004-notice-and-outputs.md` bölüm 4 ile birebir
+aynıdır ve `CHECK` kısıtlarıyla korunur. `license_source` ile
+`license_enrichment_status` birlikte yazılır (`scan_dependencies_license_f3_together`);
+ikisi de `NULL` ise tarama F3 öncesidir. `notice_archive_id`,
+`registry_archive_cache(id)`'ye `ON DELETE SET NULL` ile bağlıdır.
+
+### Önbelleği temizleme (SQL)
+
+pgAdmin Query Tool'unda (uygulamanın veritabanına bağlıyken) veya `psql` ile
+çalıştırılır. Production veritabanında veri silmek insan onayı gerektirir.
+Temizlik sırasında süren bir tarama, sonuç yazımında silinmiş arşiv kaydına
+başvurursa geçici veritabanı hatası alıp yeniden denenir (ADR-006 Karar 10);
+bunu önlemek için önce uygulamayı durdurun.
+
+```sql
+-- Tüm önbellek (sonraki taramalar kayıt defterlerinden yeniden indirir):
+BEGIN;
+DELETE FROM registry_archive_cache;
+DELETE FROM registry_package_cache;
+COMMIT;
+
+-- Yalnız negatif kayıtlar (404/410; yeni yayımlanmış bir paketin hemen
+-- yeniden sorgulanması için):
+DELETE FROM registry_package_cache WHERE outcome = 'not_found';
+
+-- Yalnız süresi dolmuş negatif kayıtlar (isteğe bağlı bakım; süresi dolmuş
+-- kayıt zaten ıskalama sayılır ve bir sonraki sorguda üzerine yazılır):
+DELETE FROM registry_package_cache WHERE outcome = 'not_found' AND expires_at <= NOW();
+```
+
+- `registry_archive_cache` silindiğinde eski taramaların
+  `scan_dependencies.notice_archive_id` değeri otomatik olarak `NULL` olur;
+  taramanın etkin lisansı ve `notice_status` değişmez. Bu taramaların NOTICE
+  dosyasında ilgili girdiler `license file data no longer cached; rescan required`
+  notuyla listelenir; metin için yeniden tarama gerekir. SBOM telif alanı da
+  önbellekten okunduğu için aynı şekilde boşalır.
+- `registry_package_cache` silmek eski taramaları etkilemez; yalnız PyPI
+  NOTICE yedek lisans metni (`license_text`) okunamaz hale gelir.
+- Çıkarım mantığı değiştiğinde önbelleği elle silmek gerekmez: kod sabiti
+  (`METADATA_EXTRACTOR_VERSION` / `ARCHIVE_EXTRACTOR_VERSION`) artırılır, eski
+  sürümlü kayıtlar ıskalama sayılır.
+
+### Kullanılmayan `packages` kolonları (D-79)
+
+`packages.copyright_text`, `notice_text`, `metadata` ve `enriched_at`
+kolonları `001`'den beri vardır ve hiç doldurulmaz. `006` bunları
+**kullanmaz ve silmez**: `packages` satırları sürümsüz olabilir ve tarama
+transaction'ında yazılıp geri alınabilir, bu yüzden kalıcı önbellek ihtiyacını
+karşılamaz (ADR-006 Karar 9). SBOM telif bilgisi artık
+`registry_archive_cache.copyright_lines`'tan okunur. Kolonların silinmesi ayrı
+bir temizlik kararı ve ayrı bir göçtür; `006` geri alındığında da dokunulmaz.
 
 ## Parola kurtarma (SQL adımı)
 

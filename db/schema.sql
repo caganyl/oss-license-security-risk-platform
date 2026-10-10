@@ -4,7 +4,7 @@
 --
 -- Reference snapshot of the schema after migrations
 --   001_initial_core_schema, 002_local_auth, 003_declared_range,
---   004_finding_fingerprint, 005_scan_next_attempt
+--   004_finding_fingerprint, 005_scan_next_attempt, 006_registry_enrichment
 -- The migrations in db/migrations/ are the source of truth and are applied
 -- with `npm run db:migrate` (src/db/migrate.ts). Do not load this file into a
 -- database that is (or will be) managed by the migration tool: it does not
@@ -289,7 +289,9 @@ CREATE TABLE packages (
     -- Package URL per https://github.com/package-url/purl-spec
     -- e.g. pkg:npm/lodash@4.17.21 or pkg:pypi/requests@2.31.0
     purl            TEXT           NOT NULL UNIQUE,
-    -- Enrichment from public registries
+    -- Enrichment from public registries. copyright_text, notice_text, metadata
+    -- and enriched_at are never written: the registry caches below replace
+    -- them (006, ADR-006 Karar 9); kept, not dropped (D-79).
     description     TEXT,
     homepage_url    TEXT,
     repository_url  TEXT,
@@ -309,6 +311,71 @@ CREATE TABLE packages (
 );
 
 -- =============================================================================
+-- REGISTRY ENRICHMENT CACHE (006, REQ-004, ADR-006 Karar 9-10, D-57)
+-- Independent of scans: written in its own autocommit transaction as soon as
+-- a registry response is classified; re-downloadable, safe to clear
+-- (db/README.md). ecosystem is the registry identity ('npm' | 'pypi'), not
+-- tech_ecosystem.
+-- =============================================================================
+
+-- License metadata per (ecosystem, request name, exact version). found rows
+-- never expire (refreshed when METADATA_EXTRACTOR_VERSION grows); not_found
+-- (404/410) rows expire after 24 h; transient errors are never stored.
+CREATE TABLE registry_package_cache (
+    ecosystem          TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi')),
+    name               TEXT        NOT NULL,  -- request name: npm as-is, PyPI PEP 503
+    version            TEXT        NOT NULL,
+    outcome            TEXT        NOT NULL CHECK (outcome IN ('found', 'not_found')),
+    declared_license   TEXT        NULL,      -- derived per AC-P14-1/2/3; NULL = registry has no license
+    license_text       TEXT        NULL,      -- long PyPI license text (NOTICE fallback), <= 1 MiB
+    archive_candidates JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    extractor_version  INTEGER     NOT NULL CHECK (extractor_version > 0),
+    fetched_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at         TIMESTAMPTZ NULL,      -- NULL = found (never expires); not_found = fetched_at + 24 h
+    PRIMARY KEY (ecosystem, name, version),
+    CONSTRAINT registry_package_cache_expiry
+        CHECK ((outcome = 'not_found') = (expires_at IS NOT NULL)),
+    CONSTRAINT registry_package_cache_not_found_empty
+        CHECK (outcome = 'found' OR (declared_license IS NULL AND license_text IS NULL
+                                     AND archive_candidates = '[]'::jsonb))
+);
+
+COMMENT ON TABLE registry_package_cache IS
+  'Registry license metadata cache (REQ-004 P-14, ADR-006 Karar 10). Re-downloadable; safe to clear (db/README.md).';
+COMMENT ON COLUMN registry_package_cache.expires_at IS
+  'NULL for found rows (never expire); NOW() + 24 h for not_found rows. Evaluated with the database clock.';
+COMMENT ON COLUMN registry_package_cache.extractor_version IS
+  'METADATA_EXTRACTOR_VERSION of the code that wrote the row; a row with an older version is a cache miss.';
+
+-- License files and copyright lines of one package archive. Only outcomes
+-- produced by the archive reader itself are stored; updated in place (same
+-- id) when ARCHIVE_EXTRACTOR_VERSION grows.
+CREATE TABLE registry_archive_cache (
+    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    ecosystem         TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi')),
+    name              TEXT        NOT NULL,
+    version           TEXT        NOT NULL,
+    archive_digest    TEXT        NOT NULL,   -- 'sha512-<b64>' | 'sha1-<hex>' | 'sha256-<hex>'
+    archive_url       TEXT        NOT NULL,
+    archive_size      BIGINT      NOT NULL CHECK (archive_size >= 0),
+    outcome           TEXT        NOT NULL CHECK (outcome IN
+                          ('collected', 'no_license_file', 'unsupported_format', 'limit_exceeded')),
+    outcome_detail    TEXT        NULL,       -- fixed code, e.g. 'entries', 'decompressed', 'zip64'
+    license_files     JSONB       NOT NULL DEFAULT '[]'::jsonb,  -- [{path,text} | {path,omitted}]
+    copyright_lines   TEXT[]      NOT NULL DEFAULT '{}',
+    extractor_version INTEGER     NOT NULL CHECK (extractor_version > 0),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- upsert target; the (ecosystem, name, version) prefix serves the pre-F3 NOTICE lookup
+    CONSTRAINT registry_archive_cache_key UNIQUE (ecosystem, name, version, archive_digest)
+);
+
+COMMENT ON TABLE registry_archive_cache IS
+  'License files and copyright lines extracted from package archives (REQ-004 P-15, ADR-006 Karar 7, 10). Re-downloadable; safe to clear (db/README.md).';
+COMMENT ON COLUMN registry_archive_cache.extractor_version IS
+  'ARCHIVE_EXTRACTOR_VERSION of the code that wrote the row; updated in place (same id) when it grows.';
+
+-- =============================================================================
 -- SCAN DEPENDENCIES (a package instance detected within one scan)
 -- =============================================================================
 
@@ -325,8 +392,32 @@ CREATE TABLE scan_dependencies (
     created_at      TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
     -- Version range as declared in this manifest, e.g. '^1.2.0' (003, ADR-003 a)
     declared_range  TEXT,
-    UNIQUE (scan_id, package_id, manifest_path, scope)
+    -- Effective license and NOTICE outcome (006, REQ-004 L-6/P-15, ADR-006
+    -- Karar 9, 11). Written in the scan result transaction; all NULL = scan
+    -- completed before F3. Value sets = docs/contracts/REQ-004-notice-and-outputs.md §4.
+    license_expression        TEXT    NULL,
+    license_source            TEXT    NULL CHECK (license_source IN
+        ('registry:npm', 'registry:pypi', 'lockfile (unverified)', 'none')),
+    license_lock_hint         TEXT    NULL,
+    license_hint_differs      BOOLEAN NULL,
+    license_enrichment_status TEXT    NULL CHECK (license_enrichment_status IN
+        ('ok', 'no_license', 'not_found', 'unreachable', 'error', 'disabled',
+         'version_unknown', 'invalid_coordinates', 'budget_exceeded')),
+    notice_status             TEXT    NULL CHECK (notice_status IN
+        ('collected', 'no_license_file', 'unsupported_format', 'limit_exceeded',
+         'no_candidate', 'integrity_failed', 'download_failed', 'processing_failed',
+         'budget_exceeded', 'not_attempted', 'not_runtime')),
+    notice_archive_id         UUID    NULL
+        REFERENCES registry_archive_cache(id) ON DELETE SET NULL,
+    UNIQUE (scan_id, package_id, manifest_path, scope),
+    CONSTRAINT scan_dependencies_license_f3_together
+        CHECK ((license_source IS NULL) = (license_enrichment_status IS NULL))
 );
+
+COMMENT ON COLUMN scan_dependencies.license_source IS
+  'Effective license source (REQ-004 L-6, ADR-006 Karar 11). NULL = scan completed before license enrichment (F3).';
+COMMENT ON COLUMN scan_dependencies.notice_archive_id IS
+  'registry_archive_cache row used for NOTICE/copyright; set to NULL when the cache is cleared (rescan required).';
 
 -- =============================================================================
 -- LICENSES
@@ -617,6 +708,11 @@ CREATE UNIQUE INDEX idx_packages_unversioned_unique ON packages(ecosystem, name)
 CREATE INDEX idx_scan_deps_scan    ON scan_dependencies(scan_id);
 CREATE INDEX idx_scan_deps_package ON scan_dependencies(package_id);
 CREATE INDEX idx_scan_deps_parent  ON scan_dependencies(parent_dep_id) WHERE parent_dep_id IS NOT NULL;
+-- supports ON DELETE SET NULL from registry_archive_cache and the NOTICE join (006)
+CREATE INDEX idx_scan_dependencies_notice_archive ON scan_dependencies(notice_archive_id) WHERE notice_archive_id IS NOT NULL;
+
+-- registry_package_cache / registry_archive_cache: no extra index; the primary
+-- key and registry_archive_cache_key cover every lookup (006, ADR-006 Karar 10, 12).
 
 -- vulnerabilities
 CREATE INDEX idx_vulns_cve       ON vulnerabilities(cve_id)                        WHERE cve_id IS NOT NULL;

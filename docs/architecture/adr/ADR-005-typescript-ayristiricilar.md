@@ -60,6 +60,13 @@
   başka bir çalışma zamanı modülü içe aktarılmaz. Böylece iş parçacığı sırlara ve
   veritabanına dokunan kodu yüklemez ve test için tek başına derlenebilir.
   qa-automation bunu statik bir testle (içe aktarım taraması) korur.
+
+> **REQ-004 / ADR-006 notu (2026-10-10).** Sınır kuralı kısmen superseded:
+> yalnız ana iş parçacığı tarafındaki `threadParser.ts`, kaynak modu
+> bootstrap'ının taşındığı ortak `src/lib/threadBootstrap.ts`'i (yalnız
+> `node:path` içe aktarır) içe aktarabilir. İş parçacığında yüklenen
+> `thread.ts` ve ayrıştırıcı modülleri için kural aynen geçerlidir. Karar 5
+> davranışı değişmez. Ayrıntı: ADR-006 Karar 1 ve 16.
 - **Çıktı tipi:** `SandboxScanResult` değişmez. `RunParserFn`'e isteğe bağlı
   dördüncü parametre `signal?: AbortSignal` eklenir (ADR-004 Karar 7); mevcut üç
   parametreli test taklitleri tip uyumlu kalır. `ScanWorker` varsayılan

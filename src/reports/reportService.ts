@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import type { Pool } from 'pg';
 import { sanitizeErrorText } from '../lib/errorText';
+import { excelSafeText, singleLine } from '../lib/outputText';
 
 export type ReportType =
   | 'executive_summary'
@@ -63,6 +64,12 @@ interface ReportDependency {
   manifestFile: string;
   manifestPath: string;
   depth: number;
+  /** Effective license fields (REQ-004 ADR-006 Karar 9); all null for a pre-F3 scan. */
+  licenseExpression: string | null;
+  licenseSource: string | null;
+  licenseLockHint: string | null;
+  licenseHintDiffers: boolean | null;
+  licenseEnrichmentStatus: string | null;
   licenses: ReportLicenseFinding[];
   vulnerabilities: ReportSecurityFinding[];
 }
@@ -330,9 +337,16 @@ export class ReportService {
       manifest_file: string;
       manifest_path: string;
       depth: number;
+      license_expression: string | null;
+      license_source: string | null;
+      license_lock_hint: string | null;
+      license_hint_differs: boolean | null;
+      license_enrichment_status: string | null;
     }>(
       `SELECT sd.id AS scan_dependency_id, p.ecosystem::text, p.name, p.version, p.purl,
-              sd.scope::text, sd.manifest_file, sd.manifest_path, sd.depth
+              sd.scope::text, sd.manifest_file, sd.manifest_path, sd.depth,
+              sd.license_expression, sd.license_source, sd.license_lock_hint,
+              sd.license_hint_differs, sd.license_enrichment_status
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
        WHERE sd.scan_id = $1
@@ -445,6 +459,11 @@ export class ReportService {
         manifestFile: row.manifest_file,
         manifestPath: row.manifest_path,
         depth: row.depth,
+        licenseExpression: row.license_expression,
+        licenseSource: row.license_source,
+        licenseLockHint: row.license_lock_hint,
+        licenseHintDiffers: row.license_hint_differs,
+        licenseEnrichmentStatus: row.license_enrichment_status,
         licenses: licensesByDependency.get(row.scan_dependency_id) ?? [],
         vulnerabilities: vulnerabilitiesByDependency.get(row.scan_dependency_id) ?? [],
       })),
@@ -527,8 +546,10 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
         dep.scope,
         dep.manifestPath,
         String(dep.depth),
+        // REQ-004 contract 5.2: effective license, empty (pre-F3 included) -> n/a.
+        singleLine(dep.licenseExpression) || 'n/a',
       ]),
-      ['Package', 'Eco', 'Scope', 'Manifest', 'Depth'],
+      ['Package', 'Eco', 'Scope', 'Manifest', 'Depth', 'License'],
     );
   }
 
@@ -544,7 +565,7 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
 
   const summary = workbook.addWorksheet('Summary');
   summary.columns = [{ header: 'Metric', key: 'metric', width: 28 }, { header: 'Value', key: 'value', width: 48 }];
-  summary.addRows([
+  summary.addRows(excelRows([
     { metric: 'Report Type', value: reportTitle(reportType) },
     { metric: 'Project', value: data.project.name },
     { metric: 'Project Criticality', value: data.project.criticality },
@@ -560,7 +581,7 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
     { metric: 'Medium Vulnerabilities', value: data.scan.mediumVulns },
     { metric: 'Low Vulnerabilities', value: data.scan.lowVulns },
     { metric: 'License Violations', value: data.scan.licenseViolations },
-  ]);
+  ]));
 
   addDependencyWorksheet(workbook, data);
   addLicenseWorksheet(workbook, data);
@@ -591,8 +612,11 @@ function addDependencyWorksheet(workbook: ExcelJS.Workbook, data: ReportData): v
     { header: 'Manifest', key: 'manifest', width: 36 },
     { header: 'Depth', key: 'depth', width: 10 },
     { header: 'PURL', key: 'purl', width: 72 },
+    // REQ-004 contract 5.1: new columns only at the end; existing ones unchanged.
+    { header: 'License', key: 'license', width: 32 },
+    { header: 'License Source', key: 'licenseSource', width: 48 },
   ];
-  sheet.addRows(data.dependencies.map((dep) => ({
+  sheet.addRows(excelRows(data.dependencies.map((dep) => ({
     name: dep.name,
     version: dep.version,
     ecosystem: dep.ecosystem,
@@ -600,7 +624,48 @@ function addDependencyWorksheet(workbook: ExcelJS.Workbook, data: ReportData): v
     manifest: dep.manifestPath || dep.manifestFile,
     depth: dep.depth,
     purl: dep.purl,
-  })));
+    // Always plain strings (never `{ formula }`); single-line folded here,
+    // formula-guarded by `excelRows` like every other string cell (5.1, 5.1a).
+    license: singleLine(dep.licenseExpression),
+    licenseSource: licenseSourceCell(dep),
+  }))));
+}
+
+/**
+ * Excel formula-injection guard on every string cell of every sheet
+ * (contract 5.1a, 1.1.0 L-2; ADR-006 Karar 13): string values get
+ * `excelSafeText` applied to the raw value (no folding is added to existing
+ * columns); numbers, dates and other types keep their cell type.
+ */
+function excelRows<T extends Record<string, unknown>>(rows: T[]): T[] {
+  return rows.map((row) => {
+    const guarded: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) guarded[key] = typeof value === 'string' ? excelSafeText(value) : value;
+    return guarded as T;
+  });
+}
+
+/** Maximum length of the lock hint in report cells, in code points (contract 4.1). */
+const LOCK_HINT_MAX_CODE_POINTS = 200;
+
+/**
+ * Excel `License Source` cell (contract section 4.1 "Excel" column): the
+ * stored source, with the lock hint when it differs from the registry
+ * (AC-L6-4) or was ignored because the registry has no license (C-8). Pre-F3
+ * scans (source `NULL`) give an empty cell (AC-P14-18).
+ */
+function licenseSourceCell(dep: Pick<ReportDependency,
+  'licenseSource' | 'licenseLockHint' | 'licenseHintDiffers' | 'licenseEnrichmentStatus'>): string {
+  const source = dep.licenseSource;
+  if (source === null || source === undefined || source === '') return '';
+  const hint = [...singleLine(dep.licenseLockHint)].slice(0, LOCK_HINT_MAX_CODE_POINTS).join('');
+  if ((source === 'registry:npm' || source === 'registry:pypi') && dep.licenseHintDiffers === true && hint !== '') {
+    return `${source} (lockfile differs: ${hint})`;
+  }
+  if (source === 'none' && dep.licenseEnrichmentStatus === 'no_license' && hint !== '') {
+    return `none (lockfile hint ignored: ${hint})`;
+  }
+  return singleLine(source);
 }
 
 function addLicenseWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void {
@@ -616,7 +681,7 @@ function addLicenseWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void
     { header: 'Suppressed', key: 'suppressed', width: 12 },
   ];
 
-  sheet.addRows(data.dependencies.flatMap((dep) =>
+  sheet.addRows(excelRows(data.dependencies.flatMap((dep) =>
     dep.licenses.map((license) => ({
       packageName: dep.name,
       version: dep.version,
@@ -627,7 +692,7 @@ function addLicenseWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void
       status: license.status,
       suppressed: license.suppressed ? 'yes' : 'no',
     })),
-  ));
+  )));
 }
 
 function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void {
@@ -646,7 +711,7 @@ function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData)
     { header: 'Published At', key: 'publishedAt', width: 24 },
   ];
 
-  sheet.addRows(data.dependencies.flatMap((dep) =>
+  sheet.addRows(excelRows(data.dependencies.flatMap((dep) =>
     dep.vulnerabilities.map((vuln) => ({
       packageName: dep.name,
       version: dep.version,
@@ -660,7 +725,7 @@ function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData)
       suppressed: vuln.suppressed ? 'yes' : 'no',
       publishedAt: formatDate(vuln.publishedAt),
     })),
-  ));
+  )));
 }
 
 function writePdfSection(doc: PDFKit.PDFDocument, title: string): void {

@@ -71,7 +71,7 @@ describe('REQ-003 AC-P12-3 single entry point (ADR-004 Karar 1, 4)', () => {
     expect(filesContaining(/\b(EXPORT_)?WORKER_ID\b/)).toEqual([]);
   });
 
-  it('package.json: build/start/db:migrate/typecheck/lint/test, no worker scripts, main = dist/main.js, engines.node >=22', () => {
+  it('package.json: build/start/db:migrate/typecheck/lint/test, no worker scripts, main = dist/main.js, engines.node ^22.21.0 || >=24.5.0 (REQ-004 ADR-006 Karar 5)', () => {
     const pkg = JSON.parse(read('package.json')) as { main?: string; engines?: { node?: string }; scripts?: Record<string, string> };
     const scripts = pkg.scripts ?? {};
     for (const name of ['build', 'start', 'db:migrate', 'typecheck', 'lint', 'test']) expect(scripts[name], name).toBeTruthy();
@@ -79,7 +79,7 @@ describe('REQ-003 AC-P12-3 single entry point (ADR-004 Karar 1, 4)', () => {
     expect(scripts.start).toBe('node dist/main.js');
     expect(scripts['db:migrate']).toBe('node dist/db/migrate.js');
     expect(pkg.main).toBe('dist/main.js');
-    expect(pkg.engines?.node).toBe('>=22');
+    expect(pkg.engines?.node).toBe('^22.21.0 || >=24.5.0');
   });
 
   it('only src/main.ts and src/db/migrate.ts are process entry points (no require.main block in app.ts or the workers)', () => {
@@ -97,7 +97,7 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
     return [...source.matchAll(SPECIFIER)].map((m) => ({ spec: m[3] ?? m[4] ?? m[5], typeOnly: Boolean(m[2]) }));
   }
 
-  it('ADR-005 Karar 1: src/scanner/parsers imports only node:fs/path/crypto/worker_threads, smol-toml (toml.ts), siblings and types', () => {
+  it('ADR-005 Karar 1: src/scanner/parsers imports only node:fs/path/crypto/worker_threads, smol-toml (toml.ts), siblings and types; threadParser.ts may also import ../../lib/threadBootstrap (ADR-006 Karar 16)', () => {
     const files = fs.readdirSync(parsersDir).filter((n) => n.endsWith('.ts'));
     expect(files.sort()).toEqual(['common.ts', 'index.ts', 'nodejs.ts', 'python.ts', 'thread.ts', 'threadParser.ts', 'toml.ts']);
     const violations: string[] = [];
@@ -109,9 +109,43 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
         if (ALLOWED_RUNTIME.has(spec)) continue;
         if (/^\.\/[A-Za-z]+$/.test(spec)) continue;
         if (spec === 'smol-toml' && name === 'toml.ts') continue;
+        // Main-thread side only; thread.ts and the parser modules keep the full rule.
+        if (spec === '../../lib/threadBootstrap' && name === 'threadParser.ts') continue;
         violations.push(`${name}: ${spec}`);
       }
     }
+    expect(violations).toEqual([]);
+  });
+
+  it('ADR-006 Karar 1: src/lib/threadBootstrap.ts imports only node:path (no runtime module of src/)', () => {
+    const imports = importsOf(path.join(REPO_ROOT, 'src', 'lib', 'threadBootstrap.ts')).filter((i) => !i.typeOnly);
+    expect(imports.map((i) => i.spec)).toEqual(['node:path']);
+  });
+
+  it('REQ-004 ADR-006 Karar 1 / AC-P15-4: archive thread modules import only node:zlib/worker_threads/buffer, each other and the import-free src/lib/textSanitize.ts', () => {
+    const enrichmentDir = path.join(REPO_ROOT, 'src', 'enrichment');
+    const threadModules = ['archive/thread.ts', 'archive/extract.ts', 'archive/gzip.ts', 'archive/tar.ts', 'archive/zip.ts', 'archive/licenseFiles.ts', 'text.ts', 'copyright.ts'].map(
+      (p) => path.join(enrichmentDir, ...p.split('/')),
+    );
+    const textSanitize = path.join(REPO_ROOT, 'src', 'lib', 'textSanitize.ts');
+    const allowedFiles = new Set([...threadModules, textSanitize].map((f) => path.normalize(f)));
+    const allowedRuntime = new Set(['node:zlib', 'node:worker_threads', 'node:buffer']);
+    const forbidden = /^(node:)?(fs|fs\/promises|net|tls|http|https|http2|dgram|dns|child_process|cluster)$|^(pg|dotenv)$|(^|\/)lib\/db$/;
+    const violations: string[] = [];
+    for (const file of threadModules) {
+      expect(fs.existsSync(file), rel(file)).toBe(true);
+      for (const { spec, typeOnly } of importsOf(file)) {
+        if (forbidden.test(spec)) {
+          violations.push(`${rel(file)}: ${spec} (forbidden${typeOnly ? ', even as type' : ''})`);
+          continue;
+        }
+        if (typeOnly || allowedRuntime.has(spec)) continue;
+        if (spec.startsWith('.') && allowedFiles.has(path.normalize(path.resolve(path.dirname(file), `${spec}.ts`)))) continue;
+        violations.push(`${rel(file)}: ${spec}`);
+      }
+    }
+    // textSanitize is reachable from the thread: it must not import any runtime module.
+    for (const { spec, typeOnly } of importsOf(textSanitize)) if (!typeOnly) violations.push(`src/lib/textSanitize.ts: ${spec}`);
     expect(violations).toEqual([]);
   });
 

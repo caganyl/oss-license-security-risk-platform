@@ -376,7 +376,65 @@ Performans testlerinde gereksinim "< 1 sn"dir; CI dalgalanmasına karşı assert
 sınırı 2 sn'dir. Eski karesel/kübik kod bu girdilerde dakikalar–saatler sürer,
 bu yüzden 2 sn hâlâ doğrusalı karesel davranıştan ayırır.
 
-Bilinen kırmızılar: yok (REQ-003 kapanışı, `.env.example` güncellendi).
+### REQ-004 (F3) AC → test
+
+Yardımcılar: `helpers/fakeRegistry.ts` (loopback sahte npm/PyPI), `helpers/archiveBuilder.ts`
+(tgz/zip üretimi), `helpers/f3Seed.ts` (F3 kolonlarını SQL ile doğrudan yazar),
+`setup/networkGuard.ts` (loopback dışı bağlantı = test hatası, `REGISTRY_ENRICHMENT=off`).
+Golden NOTICE: `fixtures/notice/golden-f3.txt` — contract bölüm 3'ten **elle** yazıldı
+(uygulamadan kopyalanmadı); `fixtures/.gitattributes` `* -text` ile korunur.
+
+| AC | Dosya |
+| --- | --- |
+| AC-G-1, AC-G-3 | `npx tsc -p tsconfig.test.json`, `npx eslint tests` (komut; handoff) |
+| AC-G-2 | `setup/networkGuard.ts`, `unit/networkGuard.test.ts` |
+| AC-G-4 | mevcut `helpers/contracts.ts` kullanan testler değişmeden yeşil |
+| AC-G-5 | `security/f3Static.test.ts` (runtime bağımlılık kümesi, engines), `security/staticCode.test.ts` |
+| AC-G-6 | `unit/parsersGolden.test.ts` (P-10 golden, değişmeden) |
+| AC-G-7 | `integration/enrichment.test.ts` (up→down→up), `integration/migrateTool.test.ts` (006 SHA-256 donduruldu), `integration/runtime.test.ts` |
+| AC-G-8 | `integration/enrichment.test.ts` |
+| AC-P14-1…16 | `unit/registryClient.test.ts`, `unit/enrichmentPure.test.ts`, `integration/enrichment.test.ts`; AC-P14-15/16 runtime bağlantısı ayrıca `security/f3Static.test.ts` (statik) |
+| AC-P14-17 | `integration/enrichment.test.ts` (kolonlar, L-6 durumları) |
+| AC-P14-18 | `integration/f3Outputs.test.ts` (xlsx geri okuma, F3 öncesi boş hücre, PDF hatasız), `integration/excelExport.test.ts`, `unit/sbomF3.test.ts` (formül kalkanı) |
+| AC-P14-19 | kısmi: `integration/enrichment.test.ts` (Python lisansı dolu) + `integration/f3Outputs.test.ts` (`registry:pypi` hücresi); poetry.lock + 4 PyPI varyantlı uçtan uca rapor fixture'ı **yok** |
+| AC-P14-20 | elle (insan doğrulaması, handoff) |
+| AC-L6-1…3 | `integration/enrichment.test.ts`, `unit/enrichmentPure.test.ts` |
+| AC-L6-4 | `integration/f3Outputs.test.ts` (`(lockfile differs: …)`, 200 kod noktası kesimi), `integration/enrichment.test.ts` |
+| AC-L6-5 | REQ-002 P-07 kapsam testleri (`fixtures/p07-dev-scope`, `unit/parsersGolden.test.ts`) — davranış değişmedi; ayrı REQ-004 adlı regresyon testi yok |
+| AC-P15-1 | `integration/enrichment.test.ts` |
+| AC-P15-2…10 | `unit/archives.test.ts`, `unit/enrichmentPure.test.ts`, `integration/enrichment.test.ts` |
+| AC-P15-11 | `integration/notice.test.ts` (başlıklar, çerez/Bearer, 400/401/403/404, salt okuma), `security/f3Static.test.ts` (route guard) |
+| AC-P15-12…14 | `integration/notice.test.ts` (golden, tekillik, sıralama, kesim, F3 öncesi, kontrol karakteri, ayraç kalkanı) |
+| AC-P15-15 | `security/noticeLink.test.ts` (jsdom) |
+| AC-P15-16 | inceleme ile (README/db README; doküman) |
+| AC-P16-1, -2, -4, -5, -6 | `unit/sbomF3.test.ts` |
+| AC-P16-3 | `unit/enrichmentPure.test.ts` |
+| AC-P16-7 | `integration/f3Outputs.test.ts` (`SbomService`, dört biçim) |
+| Contract 1.1.0 (L-1, L-2, I-3, M-1) ve B-2, L-3, L-4 | `unit/f3SecurityFixes.test.ts`, `integration/f3SecurityFixes.test.ts` (aşağıdaki tablo) |
+
+64 MiB NOTICE sınırı `NoticeService({ maxBytes })` enjeksiyonuyla test edilir (gerçek
+64 MiB metin üretilmez). PDF `License` sütun içeriği sıkıştırılmış akışlar nedeniyle
+metin olarak doğrulanmaz (inceleme ile); PDF üretiminin hatasızlığı test edilir.
+
+Bilinen kırmızılar: yok. (B-1 — `singleLine` sekmeyi katlamıyordu — `f680a89` ile
+düzeltildi; `unit/sbomF3.test.ts` "AC-P16-4 / contract 9 step 3 / B-1" artık yeşil.)
+
+#### Güvenlik incelemesi düzeltmeleri → test (`docs/quality/security-reports/REQ-004-security-review.md`, contract 1.1.0, `e526d6d`)
+
+| Bulgu | Dosya / test adı öneki |
+| --- | --- |
+| B-2 (normalleştiricide `-or-later` özyinelemesi) | `unit/f3SecurityFixes.test.ts` "B-2 …" (`GPL-3.0-or-later`, `LGPL-2.1-or-later`, `*-only`, `(MIT OR GPL-3.0-or-later)`, `Apache-2.0 WITH LLVM-exception`, 5000 girdilik deterministik fuzz); `integration/f3SecurityFixes.test.ts` "B-2 / AC-P14-1" (sahte kayıt defteriyle uçtan uca tarama `completed`) |
+| L-3 (miras anahtarları) | `unit/f3SecurityFixes.test.ts` "SEC L-3" (normalleştirici, `evaluateLicenseRisk`, `isRecognizedLicense`, `canonicalSpdx`, trove sınıflandırıcı, CycloneDX kapsam haritası JSON/XML); `integration/f3SecurityFixes.test.ts` "SEC L-3" (worker politikası `unknown` bulgu açar, NOTICE `[omitted: not available]`) |
+| I-3 (U+0085/U+2028/U+2029) | `unit/f3SecurityFixes.test.ts` "SEC I-3" (katlama, kalkan, çok satırlı metin korunur, telif satırları SPDX/CycloneDX) |
+| L-1 (tag-value tek satır `<text>`) | `unit/f3SecurityFixes.test.ts` "SEC L-1" (tüm tek satırlık alanlar), `unit/sbomF3.test.ts` "AC-P16-4: </text> …" (beklenti 1.1.0'a güncellendi) |
+| L-2 (Excel kalkanı tüm sayfalar) | `unit/f3SecurityFixes.test.ts` "SEC L-2 / C-15" (sahte `Pool` → gerçek `loadReportData`/`renderContent` → `.xlsx` ExcelJS ile geri okunur; dört sayfa, sayı hücreleri sayı, formül hücresi yok) |
+| M-1 (NOTICE parti okuma) | `integration/f3SecurityFixes.test.ts` "SEC M-1" (120 girdi = 3 parti, contract'tan kurulan beklentiyle bayt eşitliği, tek REPEATABLE READ anlık görüntüsü, parti başına bir metin sorgusu, kesimden sonra metin sorgusu yok) |
+| L-4 (süreç geneli uçuştaki bayt bütçesi) | `unit/f3SecurityFixes.test.ts` "SEC L-4" (FIFO, iptal, çift serbest bırakma, büyük isteğin kırpılması, `grow`, tekil 256 MiB; `collectArchive` enjekte `inFlight` ile serileştirme, kota reddi, bütünlük hatası, iptal) |
+
+M-1 tepe bellek ölçümü (heap) otomatik testte **yok**: CI'da kararsız olur; bellek sınırı
+dolaylı olarak "parti başına bir metin sorgusu / kesimden sonra sorgu yok" ile doğrulanır.
+`ReportService` iç metotları (`loadReportData`, `renderContent`) L-2 testinde tip dönüşümüyle
+çağrılır; metot adları değişirse test güncellenmelidir.
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

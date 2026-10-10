@@ -42,22 +42,45 @@ let compiledThread = '';
 const undefinedDirs = () => [path.join(REPO_ROOT, 'undefined'), path.join(process.cwd(), 'undefined')];
 let undefinedBefore: boolean[] = [];
 
-/** Transpiles src/scanner/parsers/*.ts to CommonJS in `outDir`; `smol-toml` resolved from the repo. */
+/** Main-thread-only import of threadParser.ts (ADR-006 Karar 16; ADR-005 Karar 1 note). */
+const THREAD_BOOTSTRAP = '../../lib/threadBootstrap';
+
+/**
+ * Transpiles src/scanner/parsers/*.ts to CommonJS in `outDir` (the production
+ * layout `<out>/scanner/parsers`); `smol-toml` resolved from the repo. When
+ * threadParser.ts imports `../../lib/threadBootstrap`, that file is compiled
+ * to `<out>/lib/threadBootstrap.js`, so the relative require keeps working.
+ */
 function compileParsers(outDir: string): string {
   const srcDir = path.join(REPO_ROOT, 'src', 'scanner', 'parsers');
+  const parsersOut = path.join(outDir, 'scanner', 'parsers');
+  fs.mkdirSync(parsersOut, { recursive: true });
   const smolToml = createRequire(path.join(REPO_ROOT, 'package.json')).resolve('smol-toml');
-  for (const name of fs.readdirSync(srcDir).filter((n) => n.endsWith('.ts'))) {
-    const out = ts.transpileModule(fs.readFileSync(path.join(srcDir, name), 'utf8'), {
-      fileName: name,
+  const transpile = (file: string) =>
+    ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+      fileName: path.basename(file),
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-    });
-    const requires = [...out.outputText.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
-    const unexpected = requires.filter((r) => !r.startsWith('node:') && !r.startsWith('./') && r !== 'smol-toml');
+    }).outputText;
+  let needsBootstrap = false;
+  for (const name of fs.readdirSync(srcDir).filter((n) => n.endsWith('.ts'))) {
+    const outputText = transpile(path.join(srcDir, name));
+    const requires = [...outputText.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
+    const unexpected = requires.filter(
+      (r) => !r.startsWith('node:') && !r.startsWith('./') && r !== 'smol-toml' && !(name === 'threadParser.ts' && r === THREAD_BOOTSTRAP),
+    );
     if (unexpected.length > 0) throw new Error(`${name}: unexpected runtime import(s) ${unexpected.join(', ')}`);
-    const js = out.outputText.replace(/require\("smol-toml"\)/g, `require(${JSON.stringify(smolToml)})`);
-    fs.writeFileSync(path.join(outDir, name.replace(/\.ts$/, '.js')), js);
+    if (requires.includes(THREAD_BOOTSTRAP)) needsBootstrap = true;
+    const js = outputText.replace(/require\("smol-toml"\)/g, `require(${JSON.stringify(smolToml)})`);
+    fs.writeFileSync(path.join(parsersOut, name.replace(/\.ts$/, '.js')), js);
   }
-  return path.join(outDir, 'thread.js');
+  if (needsBootstrap) {
+    const bootstrapJs = transpile(path.join(REPO_ROOT, 'src', 'lib', 'threadBootstrap.ts'));
+    const requires = [...bootstrapJs.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
+    if (requires.some((r) => !r.startsWith('node:'))) throw new Error(`threadBootstrap.ts: unexpected runtime import(s) ${requires.join(', ')}`);
+    fs.mkdirSync(path.join(outDir, 'lib'), { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'lib', 'threadBootstrap.js'), bootstrapJs);
+  }
+  return path.join(parsersOut, 'thread.js');
 }
 
 const PROBES: Record<string, string> = {

@@ -1,0 +1,272 @@
+openapi: 3.0.3
+info:
+  title: OSS Risk Platform - REQ-004 NOTICE API Contract (F3 / P-15, D-69, D-70, D-74)
+  version: 1.0.0
+  description: |
+    Status: Accepted - Onaylandi (kullanici daimi talimati, onerilen secenek), 2026-10-10.
+    status: approved
+
+    Insan okunur contract ve tum bicim kurallari: docs/contracts/REQ-004-notice-and-outputs.md
+    (bu dosya yalniz F3'un tek yeni API yuzeyini tanimlar; NOTICE.txt biciminin tamami, durum
+    degerleri, Excel/PDF sutunlari, SBOM alan anlamlari ve arayuz baglantisi oradadir).
+    Dayanak: docs/product/REQ-004.md (AC-P15-11...15, AC-G-4), ADR-006 Karar 12.
+
+    Onay kaydi: kullanicinin REQ-004'te kayitli daimi talimati geregi onerilen secenekle karara
+    baglanmistir; kullanicinin dosyayi gozden gecirip commit etmesi kaydi kesinlestirir.
+    Implementation kapilari bu onaydan bagimsizdir: docs/ownership/REQ-004.json status=approved,
+    dis hizmet entegrasyonu onayi (registry.npmjs.org, pypi.org, files.pythonhosted.org) ve goc 006.
+
+    Genel kurallar:
+    - Geriye uyumluluk (D-74): mevcut uc noktalarin JSON yanit semalari DEGISMEZ. Tek yeni yuzey
+      GET /api/scans/{scanId}/notice'tir. Mevcut scan JSON'undaki error_message alanina en fazla
+      bir "[registry]" satiri eklenebilir (deger degisikligi, sema degisikligi degil).
+    - Kimlik, hata govdesi ve guvenlik basliklari docs/contracts/REQ-002-auth-api.md ile aynidir
+      (ErrorBody {error, message, code}; X-Content-Type-Options: nosniff, X-Frame-Options: DENY,
+      Referrer-Policy: no-referrer ve CSP tum yanitlarda, global middleware).
+    - Okuma islemidir: denetim kaydi yok; sbom_documents, reports veya diske yazim yok; ag istegi yok.
+      Govde istek aninda yalniz veritabanindan uretilir.
+    - Tarama erisim kurali SBOM uc noktasiyla AYNIDIR: proje bazinda ek yetki yok; tarama var olmali
+      ve status = 'completed' olmali. Izin reports:read (SBOM uc noktalari sbom:read kullanir; bu uc
+      nokta REQ-004/ADR-006 geregi reports:read kullanir).
+servers:
+  - url: http://127.0.0.1:3001
+    description: Varsayilan yerel bind (HOST=127.0.0.1, PORT=3001). TLS yok (kapsam disi).
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: notice
+    description: NOTICE.txt indirme (REQ-004 P-15)
+
+paths:
+  /api/scans/{scanId}/notice:
+    get:
+      tags: [notice]
+      operationId: getScanNotice
+      summary: Tamamlanmis tarama icin deterministik NOTICE.txt indir
+      description: |
+        Route -> controller -> NoticeService (SBOM indirme uc noktasiyla ayni katmanlar).
+        guard('reports:read'): once kimlik (401), sonra izin (403). Ardindan scanId dogrulamasi (400)
+        veritabanina gidilmeden yapilir; sonra tarama aranir (404).
+        Not: guard route seviyesinde oldugu icin kimliksiz istekte gecersiz scanId de 401 doner
+        (mevcut SBOM uc noktalariyla ayni sira).
+
+        Govde: docs/contracts/REQ-004-notice-and-outputs.md bolum 3 (UTF-8, BOM yok, yalniz LF,
+        uretim zamani yok, "NOTICE format: 1"). Ayni tarama icin iki istek bayt bayt ayni govdeyi ve
+        ayni X-Checksum-SHA256 degerini dondurur (onbellek tablolari degismedikce).
+
+        64 MiB siniri hata uretmez: siniri asacak metin bloklari "[text omitted: NOTICE size limit]"
+        satiriyla degistirilir, yanit yine 200'dur (413 kullanilmaz).
+
+        F3 oncesi tamamlanmis taramalar da 200 doner; ust bilgide yeniden tarama notu bulunur.
+
+        Basliklar (ozellikle Content-Disposition) yalniz govde tamamen uretildikten sonra yazilir;
+        hata yanitlari Content-Disposition tasimaz. ETag/Last-Modified contract'in parcasi degildir;
+        istemciler kosullu istege ve 304'e guvenmez. HEAD, Express GET eslemesiyle govdesiz doner.
+        Accept basligi ve sorgu parametreleri yok sayilir (406 yok).
+      parameters:
+        - name: scanId
+          in: path
+          required: true
+          description: |
+            Tarama UUID'si. SbomController ile birebir ayni dogrulama (buyuk/kucuk harfe duyarsiz).
+            Uymazsa 400 invalid_request. Yanittaki tum gosterimler veritabanindan okunan kucuk harfli
+            kanonik UUID'yi kullanir.
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+          example: 3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f
+      responses:
+        '200':
+          description: NOTICE.txt govdesi (ek olarak indirme).
+          headers:
+            Content-Type:
+              description: Tam bu deger.
+              required: true
+              schema: { type: string, enum: ['text/plain; charset=utf-8'] }
+            Content-Disposition:
+              description: |
+                attachment; filename="NOTICE-<scanId>.txt" - scanId kucuk harfli kanonik UUID; kacis
+                gerekmez; filename* yok; proje adi dosya adina girmez (D-70).
+              required: true
+              schema:
+                type: string
+                pattern: '^attachment; filename="NOTICE-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.txt"$'
+              example: 'attachment; filename="NOTICE-3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f.txt"'
+            Content-Length:
+              description: Govdenin bayt sayisi.
+              required: true
+              schema: { type: integer, minimum: 1 }
+            X-Checksum-SHA256:
+              description: Govde baytlarinin SHA-256 ozeti, 64 karakter kucuk harf hex.
+              required: true
+              schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+            Cache-Control:
+              description: Kimlik dogrulamali indirme; onbellege yazilmaz.
+              required: true
+              schema: { type: string, enum: [no-store] }
+            X-Content-Type-Options:
+              $ref: '#/components/headers/XContentTypeOptions'
+          content:
+            text/plain; charset=utf-8:
+              schema:
+                type: string
+                description: |
+                  docs/contracts/REQ-004-notice-and-outputs.md bolum 3. Ozet:
+                  - Ust bilgi (sabit sira): "THIRD-PARTY SOFTWARE NOTICES", "NOTICE format: 1",
+                    "Project: ", "Scan ID: ", "Scan completed at: ", "Packages: ",
+                    "Packages with license files: ", "Packages without license files: ",
+                    "Generated automatically; not legal advice. Review before distribution.",
+                    F3 oncesi taramada ek "Note: This scan predates license enrichment. ..." satiri.
+                  - Her runtime paket (ekosistem, ad, surum) icin tam bir girdi; siralama
+                    (ekosistem etiketi, kucuk harfli ad, ad, surum) UTF-8 bayt sirasi.
+                  - Girdi: bos satir + 80 '=' ayraci + Package/Version/Ecosystem/PURL/License/
+                    License source/Copyright/License files [+ Reason + SPDX license] + dosya bloklari
+                    (80 '-' ayraci, "File: <path>", 80 '-', metin).
+                  - Guvenilmeyen metinde ayrac ile baslayan satirin basina tek bosluk eklenir.
+              example: |
+                THIRD-PARTY SOFTWARE NOTICES
+                NOTICE format: 1
+                Project: demo-app
+                Scan ID: 3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f
+                Scan completed at: 2026-10-10T08:15:30.123Z
+                Packages: 1
+                Packages with license files: 0
+                Packages without license files: 1
+                Generated automatically; not legal advice. Review before distribution.
+
+                ================================================================================
+                Package: six
+                Version: 1.16.0
+                Ecosystem: pypi
+                PURL: pkg:pypi/six@1.16.0
+                License: MIT
+                License source: registry:pypi
+                Copyright: (none found)
+                License files: 0
+                Reason: no license file in package archive
+                SPDX license: https://spdx.org/licenses/MIT.html
+        '400':
+          description: scanId gecerli UUID degil. Veritabanina gidilmez.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+              example: { error: Bad Request, message: scanId must be a valid UUID, code: invalid_request }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            reports:read izni yok (mevcut RBAC ek alanlari required ve userRoles korunur) veya Host
+            izin listesinde degil (global).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+              examples:
+                permission:
+                  value:
+                    required: reports:read
+                    userRoles: []
+                    error: Forbidden
+                    message: Permission "reports:read" is required
+                    code: forbidden
+                host:
+                  value: { error: Forbidden, message: Host not allowed, code: host_rejected }
+        '404':
+          description: |
+            Tarama yok VEYA durumu completed degil (pending, queued, running, failed, cancelled,
+            timeout). Iki durum ayni yaniti verir. 409 KULLANILMAZ (AC-P15-11, ADR-006 Karar 12).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+              example: { error: Not Found, message: Scan not found or not yet completed, code: not_found }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: ossrisk_session
+      description: |
+        REQ-002 contract ile ayni. Bu uc nokta yalniz-cerez (K11) degildir; API anahtari da kabul edilir.
+        Arayuzdeki <a href> baglantisi ayni koken ust duzey gezinmede SameSite=Strict cerezi gonderir.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 'ossr_<P>_<S> (REQ-002 contract, ADR-001 karar 6)'
+      description: REQ-002 contract ile ayni. Yalniz Authorization basligi; query string kabul edilmez.
+
+  headers:
+    XContentTypeOptions:
+      description: Tum yanitlarda zorunlu (REQ-002 K13); global middleware.
+      required: true
+      schema: { type: string, enum: [nosniff] }
+
+  schemas:
+    ErrorBody:
+      type: object
+      description: |
+        REQ-002 contract ErrorBody ile ayni (src/lib/httpError.ts sendError). Bu contract yeni hata
+        kodu EKLEMEZ. 5xx mesaji sabittir ("Internal server error").
+      required: [error, message, code]
+      properties:
+        error: { type: string, description: HTTP durum adi, example: Not Found }
+        message: { type: string }
+        code:
+          type: string
+          enum:
+            - invalid_request
+            - unauthenticated
+            - setup_required
+            - forbidden
+            - host_rejected
+            - not_found
+            - internal_error
+          description: Bu uc noktanin donebilecegi kodlar (REQ-002 kod katalogunun alt kumesi).
+      additionalProperties: true
+
+    LicenseSource:
+      type: string
+      description: |
+        scan_dependencies.license_source saklanan degerleri (ADR-006 Karar 9 CHECK kumesi). NULL = F3
+        oncesi tarama. Ciktidaki gosterimler icin insan okunur contract bolum 4.1.
+        Bu sema bilgi amaclidir; hicbir JSON yanitinda donmez (D-74).
+      enum: ['registry:npm', 'registry:pypi', 'lockfile (unverified)', 'none']
+
+    LicenseEnrichmentStatus:
+      type: string
+      description: |
+        scan_dependencies.license_enrichment_status saklanan degerleri. NULL = F3 oncesi. NOTICE
+        "Reason:" metnine eslemesi insan okunur contract bolum 4.3. Bilgi amacli; JSON'da donmez.
+      enum: [ok, no_license, not_found, unreachable, error, disabled, version_unknown, invalid_coordinates, budget_exceeded]
+
+    NoticeStatus:
+      type: string
+      description: |
+        scan_dependencies.notice_status saklanan degerleri. NULL = F3 oncesi. Onbellege yazilanlar:
+        collected, no_license_file, unsupported_format, limit_exceeded. NOTICE "Reason:" eslemesi
+        insan okunur contract bolum 4.3. Bilgi amacli; JSON'da donmez.
+      enum: [collected, no_license_file, unsupported_format, limit_exceeded, no_candidate, integrity_failed, download_failed, processing_failed, budget_exceeded, not_attempted, not_runtime]
+
+  responses:
+    Unauthorized:
+      description: |
+        Gecerli oturum cerezi veya API anahtari yok. Parola hic belirlenmemisse code=setup_required,
+        aksi halde code=unauthenticated (REQ-002).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          examples:
+            unauthenticated:
+              value: { error: Unauthorized, message: Authentication required, code: unauthenticated }
+            setupRequired:
+              value: { error: Unauthorized, message: Initial password setup required, code: setup_required }
+    InternalError:
+      description: Beklenmeyen sunucu hatasi. Mesaj sabittir; ham hata metni, SQL veya yol donmez.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          example: { error: Internal Server Error, message: Internal server error, code: internal_error }

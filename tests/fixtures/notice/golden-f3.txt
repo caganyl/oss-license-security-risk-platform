@@ -1,0 +1,177 @@
+THIRD-PARTY SOFTWARE NOTICES
+NOTICE format: 1
+Project: golden-app
+Scan ID: 3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f
+Scan completed at: 2026-10-10T08:15:30.123Z
+Packages: 12
+Packages with license files: 2
+Packages without license files: 10
+Generated automatically; not legal advice. Review before distribution.
+
+================================================================================
+Package: org.foo:bar
+Version: 1.0.0
+Ecosystem: java
+PURL: pkg:maven/org.foo/bar@1.0.0
+License: NOASSERTION
+License source: none
+Copyright: (none found)
+License files: 0
+Reason: license enrichment not supported for this ecosystem
+
+================================================================================
+Package: Alpha
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/Alpha@1.0.0
+License: NOASSERTION
+License source: none
+Copyright: (none found)
+License files: 0
+Reason: no verifiable package archive available
+
+================================================================================
+Package: alpha
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/alpha@1.0.0
+License: MIT
+License source: registry:npm
+Copyright: Copyright (c) 2024 Alpha Authors
+Copyright: Copyright (c) 2025 Second Author
+License files: 2
+--------------------------------------------------------------------------------
+File: package/LICENSE
+--------------------------------------------------------------------------------
+Alpha License
+ ================================================================================
+Package: forged
+ -------------------------------------------------------------------------------- trailing
+  indented line
+bellhere
+--------------------------------------------------------------------------------
+File: package/LICENSE.big
+[omitted: license file exceeds 1 MiB limit]
+
+================================================================================
+Package: cleared
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/cleared@1.0.0
+License: ISC
+License source: registry:npm
+Copyright: (none found)
+License files: 0
+Reason: license file data no longer cached; rescan required
+SPDX license: https://spdx.org/licenses/ISC.html
+
+================================================================================
+Package: ms
+Version: 2.1.3
+Ecosystem: npm
+PURL: pkg:npm/ms@2.1.3
+License: MIT
+License source: registry:npm
+Copyright: Copyright (c) 2020 Vercel, Inc.
+License files: 1
+--------------------------------------------------------------------------------
+File: package/license.md
+--------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2020 Vercel, Inc.
+
+================================================================================
+Package: nover
+Version: (unknown)
+Ecosystem: npm
+PURL: pkg:npm/nover
+License: NOASSERTION
+License source: none
+Copyright: (none found)
+License files: 0
+Reason: version unknown
+
+================================================================================
+Package: nover
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/nover@1.0.0
+License: BSD-3-Clause
+License source: lockfile (unverified)
+Copyright: (none found)
+License files: 0
+Reason: license enrichment disabled
+SPDX license: https://spdx.org/licenses/BSD-3-Clause.html
+
+================================================================================
+Package: offline
+Version: 3.0.0
+Ecosystem: npm
+PURL: pkg:npm/offline@3.0.0
+License: NOASSERTION
+License source: none
+Copyright: (none found)
+License files: 0
+Reason: registry unreachable during scan
+
+================================================================================
+Package: omitall
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/omitall@1.0.0
+License: MIT
+License source: registry:npm
+Copyright: (none found)
+License files: 2
+Reason: license files exceed size limits
+SPDX license: https://spdx.org/licenses/MIT.html
+--------------------------------------------------------------------------------
+File: package/COPYING
+[omitted: not available]
+--------------------------------------------------------------------------------
+File: package/LICENSE
+[omitted: package license text limit (4 MiB) reached]
+
+================================================================================
+Package: Zeta
+Version: 1.0.0
+Ecosystem: npm
+PURL: pkg:npm/Zeta@1.0.0
+License: MIT OR Apache-2.0
+License source: lockfile (unverified)
+Copyright: (none found)
+License files: 0
+Reason: package not found in registry
+SPDX license: https://spdx.org/licenses/MIT.html
+SPDX license: https://spdx.org/licenses/Apache-2.0.html
+
+================================================================================
+Package: bigpkg
+Version: 2.0
+Ecosystem: pypi
+PURL: pkg:pypi/bigpkg@2.0
+License: GPL-3.0-only
+License source: registry:pypi
+Copyright: (none found)
+License files: 0
+Reason: archive exceeds size limit
+SPDX license: https://spdx.org/licenses/GPL-3.0-only.html
+
+================================================================================
+Package: six
+Version: 1.16.0
+Ecosystem: pypi
+PURL: pkg:pypi/six@1.16.0
+License: MIT
+License source: registry:pypi
+Copyright: (none found)
+License files: 0
+Reason: no license file in package archive
+SPDX license: https://spdx.org/licenses/MIT.html
+--------------------------------------------------------------------------------
+License text from package metadata
+--------------------------------------------------------------------------------
+MIT License
+ ================================================================================
+Permission is hereby granted.

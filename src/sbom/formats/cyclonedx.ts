@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import type { SbomScanData, SbomDependency, SbomVulnerability } from '../sbomService';
+import { outputClean, singleLine, xmlText } from '../../lib/outputText';
+import { isCompoundExpression, sbomLicenseInfo } from '../licenseInfo';
 
 const SCOPE_MAP: Record<string, string> = {
   direct:     'required',
@@ -9,29 +11,37 @@ const SCOPE_MAP: Record<string, string> = {
   optional:   'optional',
 };
 
+/** CycloneDX scope of a dependency scope; own keys only (L-3), so `constructor` & co. give none. */
+function cdxScope(scope: string | null | undefined): string | undefined {
+  return typeof scope === 'string' && Object.hasOwn(SCOPE_MAP, scope) ? SCOPE_MAP[scope] : undefined;
+}
+
 interface CdxLicenseEntry {
   license?: { id: string } | { name: string };
   expression?: string;
 }
 
-function buildCdxLicenses(dep: SbomDependency): CdxLicenseEntry[] {
-  const seen = new Set<string>();
-  const entries: CdxLicenseEntry[] = [];
+/**
+ * REQ-004 contract section 6.2 (AC-P16-5): at most **one** entry from the
+ * effective license — `expression` for a compound canonical expression,
+ * `license.id` for a single canonical id, `license.name` for an invalid
+ * value; no entry when there is no effective license. `expression` never
+ * shares the array with another entry.
+ */
+function buildCdxLicenses(dep: SbomDependency, data: SbomScanData): CdxLicenseEntry[] {
+  const info = sbomLicenseInfo(dep, data.knownLicenseIds);
+  if (info.declared === null) return [];
+  if (info.canonical === null) return [{ license: { name: singleLine(info.declared) } }];
+  if (isCompoundExpression(info.canonical)) return [{ expression: info.canonical }];
+  return [{ license: { id: info.canonical } }];
+}
 
-  for (const l of dep.licenses) {
-    const lic = l.normalizedLicense ?? l.detectedLicense;
-    if (!lic || seen.has(lic)) continue;
-    seen.add(lic);
-
-    if (/\b(AND|OR|WITH)\b/i.test(lic)) {
-      entries.push({ expression: lic });
-    } else if (/^[a-zA-Z0-9][a-zA-Z0-9.\-+]*$/.test(lic)) {
-      entries.push({ license: { id: lic } });
-    } else {
-      entries.push({ license: { name: lic } });
-    }
-  }
-  return entries;
+/** `copyright`: the extracted lines joined with `\n`, or null (field not written). */
+function buildCdxCopyright(dep: SbomDependency, data: SbomScanData): string | null {
+  const lines = sbomLicenseInfo(dep, data.knownLicenseIds).copyrightLines
+    .map((line) => singleLine(line))
+    .filter((line) => line.trim() !== '');
+  return lines.length > 0 ? lines.join('\n') : null;
 }
 
 interface CdxVulnEntry {
@@ -100,18 +110,21 @@ export function generateCycloneDxJson(data: SbomScanData): string {
     const component: Record<string, unknown> = {
       type: 'library',
       'bom-ref': dep.purl,
-      name: dep.name,
-      version: dep.version,
+      name: outputClean(dep.name),
+      version: outputClean(dep.version),
       purl: dep.purl,
     };
 
     if (dep.description) component.description = dep.description;
     if (dep.author) component.author = dep.author;
 
-    const cdxLicenses = buildCdxLicenses(dep);
+    const cdxLicenses = buildCdxLicenses(dep, data);
     if (cdxLicenses.length > 0) component.licenses = cdxLicenses;
+    const copyright = buildCdxCopyright(dep, data);
+    if (copyright !== null) component.copyright = copyright;
 
-    if (SCOPE_MAP[dep.scope]) component.scope = SCOPE_MAP[dep.scope];
+    const scope = cdxScope(dep.scope);
+    if (scope) component.scope = scope;
 
     components.push(component);
   }
@@ -146,14 +159,14 @@ export function generateCycloneDxJson(data: SbomScanData): string {
 // CycloneDX 1.5 XML
 // =============================================================================
 
+/**
+ * Element text / attribute value: cleaned, XML 1.0-invalid characters
+ * removed (lone surrogates included), then `& < > " '` escaped (REQ-004
+ * contract section 6.3, ADR-006 Karar 13).
+ */
 function xe(value: string | null | undefined): string {
   if (!value) return '';
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return xmlText(value);
 }
 
 export function generateCycloneDxXml(data: SbomScanData): string {
@@ -183,14 +196,17 @@ export function generateCycloneDxXml(data: SbomScanData): string {
     if (seen.has(dep.purl)) continue;
     seen.add(dep.purl);
 
+    // CycloneDX 1.5 XSD `component` sequence: author, name, version,
+    // description, scope, licenses, copyright, purl (contract section 6.3).
     lines.push(`    <component type="library" bom-ref="${xe(dep.purl)}">`);
+    if (dep.author) lines.push(`      <author>${xe(dep.author)}</author>`);
     lines.push(`      <name>${xe(dep.name)}</name>`);
     lines.push(`      <version>${xe(dep.version)}</version>`);
     if (dep.description) lines.push(`      <description>${xe(dep.description)}</description>`);
-    if (dep.author) lines.push(`      <author>${xe(dep.author)}</author>`);
-    lines.push(`      <purl>${xe(dep.purl)}</purl>`);
+    const scope = cdxScope(dep.scope);
+    if (scope) lines.push(`      <scope>${scope}</scope>`);
 
-    const cdxLicenses = buildCdxLicenses(dep);
+    const cdxLicenses = buildCdxLicenses(dep, data);
     if (cdxLicenses.length > 0) {
       lines.push('      <licenses>');
       for (const entry of cdxLicenses) {
@@ -208,8 +224,9 @@ export function generateCycloneDxXml(data: SbomScanData): string {
       }
       lines.push('      </licenses>');
     }
-
-    if (SCOPE_MAP[dep.scope]) lines.push(`      <scope>${SCOPE_MAP[dep.scope]}</scope>`);
+    const copyright = buildCdxCopyright(dep, data);
+    if (copyright !== null) lines.push(`      <copyright>${xe(copyright)}</copyright>`);
+    lines.push(`      <purl>${xe(dep.purl)}</purl>`);
     lines.push('    </component>');
   }
   lines.push('  </components>');

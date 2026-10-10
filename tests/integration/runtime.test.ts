@@ -43,7 +43,7 @@ import { ORPHAN_RECOVERY_MESSAGE } from '../../src/scanner/retryPolicy';
 import type { CloneRepoFn } from '../../src/scanner/workspace';
 import type { RunParserFn, SandboxScanResult } from '../../src/types/scan';
 import { useScratchDatabases, useTestDatabase, type ScratchDatabase } from '../helpers/db';
-import { applyMigrations } from '../helpers/migrations';
+import { applyMigrations, migrationVersions } from '../helpers/migrations';
 import { FIXTURES_DIR } from '../helpers/paths';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 240_000 });
@@ -364,16 +364,18 @@ describe('AC-P12-4: single instance per database (D-34)', () => {
 });
 
 describe('AC-P12-5 / D-35: migration check at start-up (never applies)', () => {
-  it('pending 005 -> exit 1 naming npm run db:migrate; nothing listens, nothing applied, lock released', async () => {
+  it('pending 005…latest -> exit 1 naming npm run db:migrate; nothing listens, nothing applied, lock released', async () => {
     const db = await newDb({ migrated: false });
     const c = await connect(db.url);
     await applyMigrations(c, { through: '004_finding_fingerprint' });
     const { runtime, port } = await harness(db);
+    const pending = migrationVersions().slice(4); // 005_scan_next_attempt, 006_registry_enrichment, …
+    expect(pending.slice(0, 2)).toEqual(['005_scan_next_attempt', '006_registry_enrichment']);
 
     const err = await runtime.start().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(RuntimeStartupError);
     expect((err as RuntimeStartupError).exitCode).toBe(1);
-    expect((err as Error).message).toMatch(/Bekleyen göç var: 005_scan_next_attempt\. Önce `npm run db:migrate` çalıştırın\./);
+    expect((err as Error).message).toContain(`Bekleyen göç var: ${pending.join(', ')}. Önce \`npm run db:migrate\` çalıştırın.`);
     expect(await canListen(port)).toBe(true);
     expect((await db.query('SELECT version FROM schema_migrations')).length).toBe(4);
     expect(await holders(db)).toEqual([]);
@@ -381,11 +383,13 @@ describe('AC-P12-5 / D-35: migration check at start-up (never applies)', () => {
 
   it('a version unknown to the code -> exit 1 (database newer than the code)', async () => {
     const db = await newDb();
-    await db.query(`INSERT INTO schema_migrations (version) VALUES ('006_from_the_future')`);
+    const latest = migrationVersions().at(-1) ?? '';
+    const future = `${String(Number(latest.slice(0, 3)) + 1).padStart(3, '0')}_from_the_future`;
+    await db.query(`INSERT INTO schema_migrations (version) VALUES ($1)`, [future]);
     const { runtime } = await harness(db);
     const err = await runtime.start().catch((e: unknown) => e);
     expect(err).toMatchObject({ exitCode: 1 });
-    expect((err as Error).message).toMatch(/bilinmeyen sürüm: 006_from_the_future/);
+    expect((err as Error).message).toContain(`bilinmeyen sürüm: ${future}`);
     expect(await holders(db)).toEqual([]);
   });
 });

@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import type { Pool } from 'pg';
 import { generateSpdxJson, generateSpdxTagValue } from './formats/spdx';
 import { generateCycloneDxJson, generateCycloneDxXml } from './formats/cyclonedx';
+import { KNOWN_SPDX_IDS } from '../analysis/licenseNormalizer';
+import { buildIdIndex } from '../lib/spdxExpression';
 
 export type SbomFormat = 'spdx_json' | 'spdx_tag_value' | 'cyclonedx_json' | 'cyclonedx_xml';
 
@@ -41,7 +43,12 @@ export interface SbomDependency {
   description: string | null;
   homepageUrl: string | null;
   author: string | null;
-  copyrightText: string | null;
+  /** Effective license (REQ-004, `scan_dependencies.license_expression`); null when none or pre-F3. */
+  licenseExpression: string | null;
+  /** `scan_dependencies.license_source`; null marks a pre-F3 scan. */
+  licenseSource: string | null;
+  /** `registry_archive_cache.copyright_lines` via `notice_archive_id` (`packages.copyright_text` is no longer read). */
+  copyrightLines: string[];
   licenses: SbomLicense[];
   vulnerabilities: SbomVulnerability[];
 }
@@ -61,6 +68,8 @@ export interface SbomScanData {
     repoUrl: string | null;
   };
   dependencies: SbomDependency[];
+  /** Known SPDX ids (`buildIdIndex` of the normalizer ids plus `licenses.spdx_id`, AC-P16-3). */
+  knownLicenseIds: ReadonlyMap<string, string>;
 }
 
 export interface SbomDocumentRecord {
@@ -214,17 +223,25 @@ export class SbomService {
     const depsResult = await this.db.query<{
       scan_dep_id: string; scope: string; manifest_file: string; manifest_path: string; depth: number;
       package_id: string; ecosystem: string; name: string; version: string; purl: string;
-      description: string | null; homepage_url: string | null; author: string | null; copyright_text: string | null;
+      description: string | null; homepage_url: string | null; author: string | null;
+      license_expression: string | null; license_source: string | null; copyright_lines: string[] | null;
     }>(
       `SELECT sd.id AS scan_dep_id, sd.scope, sd.manifest_file, sd.manifest_path, sd.depth,
               p.id AS package_id, p.ecosystem::text, p.name, p.version, p.purl,
-              p.description, p.homepage_url, p.author, p.copyright_text
+              p.description, p.homepage_url, p.author,
+              sd.license_expression, sd.license_source, rac.copyright_lines
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
+       LEFT JOIN registry_archive_cache rac ON rac.id = sd.notice_archive_id
        WHERE sd.scan_id = $1
-       ORDER BY p.name, p.version`,
+       ORDER BY p.name, p.version, sd.id`,
       [scanId],
     );
+
+    const licenseIdResult = await this.db.query<{ spdx_id: string }>(
+      'SELECT spdx_id FROM licenses WHERE spdx_id IS NOT NULL',
+    );
+    const knownLicenseIds = buildIdIndex([...KNOWN_SPDX_IDS, ...licenseIdResult.rows.map((r) => r.spdx_id)]);
 
     const licResult = await this.db.query<{
       scan_dependency_id: string;
@@ -313,10 +330,13 @@ export class SbomService {
         description: r.description,
         homepageUrl: r.homepage_url,
         author: r.author,
-        copyrightText: r.copyright_text,
+        licenseExpression: r.license_expression,
+        licenseSource: r.license_source,
+        copyrightLines: Array.isArray(r.copyright_lines) ? r.copyright_lines : [],
         licenses: licensesByDep.get(r.scan_dep_id) ?? [],
         vulnerabilities: vulnsByDep.get(r.scan_dep_id) ?? [],
       })),
+      knownLicenseIds,
     };
   }
 }

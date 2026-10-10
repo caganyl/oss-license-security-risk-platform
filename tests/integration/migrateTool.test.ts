@@ -50,7 +50,20 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 240_000 });
 const base = useTestDatabase({ scope: 'file', migrated: false });
 const newDb = useScratchDatabases(base);
 
-const ALL = ['001_initial_core_schema', '002_local_auth', '003_declared_range', '004_finding_fingerprint', '005_scan_next_attempt'];
+const ALL = [
+  '001_initial_core_schema',
+  '002_local_auth',
+  '003_declared_range',
+  '004_finding_fingerprint',
+  '005_scan_next_attempt',
+  '006_registry_enrichment', // REQ-004
+];
+/** Newest real migration (the "latest version" of the --to / compiled-CLI scenarios). */
+const LATEST = ALL[ALL.length - 1];
+/** Versions pending on the F1 database (001…004 applied). */
+const AFTER_F1 = ALL.slice(4);
+/** Applied version the code has no file for ("database newer than the code"); numbered above LATEST. */
+const FUTURE = `${String(Number(LATEST.slice(0, 3)) + 1).padStart(3, '0')}_from_the_future`;
 const LOCK_SQL = `SELECT pg_advisory_lock(${INSTANCE_LOCK_NAMESPACE}, ${INSTANCE_LOCK_ID})`;
 
 let tmpBase = '';
@@ -194,7 +207,7 @@ function urlWith(db: ScratchDatabase, change: { password?: string; port?: number
 
 // ---------------------------------------------------------------------------
 describe('AC-P11-1 / AC-P11-2 / AC-P11-3: up on a database migrated by the F1 db/migrate.sh', () => {
-  it('status shows 001…004 applied (with applied_at) and 005 pending; up applies only 005, keeps data; a second up skips everything', async () => {
+  it('status shows 001…004 applied (with applied_at) and 005…latest pending; up applies only those, keeps data; a second up skips everything', async () => {
     const db = await f1Database();
     const before = await db.query<{ version: string; applied_at: Date }>('SELECT version, applied_at FROM schema_migrations ORDER BY version');
     expect(before.map((r) => r.version)).toEqual(ALL.slice(0, 4));
@@ -205,15 +218,15 @@ describe('AC-P11-1 / AC-P11-2 / AC-P11-3: up on a database migrated by the F1 db
     for (const r of before) {
       expect(status.out.some((l) => l.startsWith('uygulanmış') && l.includes(r.version) && l.includes(r.applied_at.toISOString()))).toBe(true);
     }
-    expect(status.out.some((l) => /^bekleyen\s+005_scan_next_attempt$/.test(l))).toBe(true);
-    expect(status.out).toContain('özet: 4 uygulanmış, 1 bekleyen, 0 bilinmeyen');
+    for (const v of AFTER_F1) expect(status.out.some((l) => new RegExp(`^bekleyen\\s+${v}$`).test(l)), v).toBe(true);
+    expect(status.out).toContain(`özet: 4 uygulanmış, ${AFTER_F1.length} bekleyen, 0 bilinmeyen`);
     expect(await versions(db)).toEqual(ALL.slice(0, 4)); // status changed nothing
 
     const up = await cli([], { url: db.url }); // default command = up
     expect(up.code, up.all).toBe(MIGRATE_EXIT.ok);
     expect(up.out.slice(0, 4)).toEqual(ALL.slice(0, 4).map((v) => `atlandı ${v}`));
-    expect(up.out[4]).toMatch(/^uygulandı 005_scan_next_attempt \(\d+ ms\)$/);
-    expect(up.out).toContain('Tamam: 1 göç uygulandı, 4 atlandı.');
+    AFTER_F1.forEach((v, i) => expect(up.out[4 + i]).toMatch(new RegExp(`^uygulandı ${v} \\(\\d+ ms\\)$`)));
+    expect(up.out).toContain(`Tamam: ${AFTER_F1.length} göç uygulandı, 4 atlandı.`);
     expect(up.err).toEqual([]);
 
     const after = await db.query<{ version: string; applied_at: Date }>('SELECT version, applied_at FROM schema_migrations ORDER BY version');
@@ -225,7 +238,7 @@ describe('AC-P11-1 / AC-P11-2 / AC-P11-3: up on a database migrated by the F1 db
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code).toBe(MIGRATE_EXIT.ok);
-    expect(again.out.slice(0, 5)).toEqual(ALL.map((v) => `atlandı ${v}`));
+    expect(again.out.slice(0, ALL.length)).toEqual(ALL.map((v) => `atlandı ${v}`));
     expect(again.out).toContain('Bekleyen göç yok.');
     expect(await db.query('SELECT version, applied_at FROM schema_migrations ORDER BY version')).toEqual(after);
   });
@@ -258,20 +271,23 @@ describe('AC-P11-16: migration 005_scan_next_attempt', () => {
     expect(down).toMatch(/retry/i);
   });
 
-  it('AC-P11-7 / AC-P11-8: up -> down --to 003_declared_range (005 then 004, listed first) -> up restores the identical schema', async () => {
+  it('AC-P11-7 / AC-P11-8: up -> down --to 003_declared_range (latest … 005 then 004, listed first) -> up restores the identical schema', async () => {
     const db = await newDb({ migrated: false });
     expect((await cli(['up'], { url: db.url })).code).toBe(0);
     const full = await schemaSnapshot(db);
 
     const down = await cli(['down', '--to', '003_declared_range'], { url: db.url });
     expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
-    const listed = down.out.findIndex((l) => l === 'geri alınacak (sırayla): 005_scan_next_attempt, 004_finding_fingerprint');
-    const rev5 = down.out.findIndex((l) => /^geri alındı 005_scan_next_attempt \(\d+ ms\)$/.test(l));
-    const rev4 = down.out.findIndex((l) => /^geri alındı 004_finding_fingerprint \(\d+ ms\)$/.test(l));
+    const reverted = ALL.slice(3).reverse(); // newest first, 004 last
+    const listed = down.out.findIndex((l) => l === `geri alınacak (sırayla): ${reverted.join(', ')}`);
     expect(listed).toBeGreaterThanOrEqual(0);
-    expect(rev5).toBeGreaterThan(listed);
-    expect(rev4).toBeGreaterThan(rev5);
-    expect(down.out).toContain('Tamam: 2 göç geri alındı; son uygulanmış sürüm 003_declared_range.');
+    let previous = listed;
+    for (const v of reverted) {
+      const at = down.out.findIndex((l) => new RegExp(`^geri alındı ${v} \\(\\d+ ms\\)$`).test(l));
+      expect(at, v).toBeGreaterThan(previous); // strictly in reverse version order
+      previous = at;
+    }
+    expect(down.out).toContain(`Tamam: ${reverted.length} göç geri alındı; son uygulanmış sürüm 003_declared_range.`);
     expect(await versions(db)).toEqual(ALL.slice(0, 3));
     expect(await columnExists(db, 'scans', 'next_attempt_at')).toBe(false);
     expect(await columnExists(db, 'findings', 'fingerprint')).toBe(false);
@@ -285,11 +301,11 @@ describe('AC-P11-16: migration 005_scan_next_attempt', () => {
 });
 
 describe('AC-P11-8: --to forms and targets', () => {
-  it('--to 003 (number) equals --to 003_declared_range; --to=005 on the latest version is a no-op; --to 001 keeps 001 applied', async () => {
+  it('--to 003 (number) equals --to 003_declared_range; --to=<latest number> is a no-op; --to 001 keeps 001 applied', async () => {
     const db = await newDb({ migrated: false });
     expect((await cli(['up'], { url: db.url })).code).toBe(0);
 
-    const latest = await cli(['down', '--to=005'], { url: db.url });
+    const latest = await cli(['down', `--to=${LATEST.slice(0, 3)}`], { url: db.url });
     expect(latest.code).toBe(0);
     expect(latest.out.join('\n')).toMatch(/geri alınacak sürüm yok/);
     expect(await versions(db)).toEqual(ALL);
@@ -301,10 +317,7 @@ describe('AC-P11-8: --to forms and targets', () => {
     expect((await cli(['up'], { url: db.url })).code).toBe(0);
     const toFirst = await cli(['down', '--to', '001'], { url: db.url });
     expect(toFirst.code, toFirst.all).toBe(0);
-    expect(toFirst.out).toContain(
-      'geri alınacak (sırayla): 005_scan_next_attempt, 004_finding_fingerprint, 003_declared_range, 002_local_auth',
-    );
-    expect(await versions(db)).toEqual(['001_initial_core_schema']);
+    expect(toFirst.out).toContain(`geri alınacak (sırayla): ${ALL.slice(1).reverse().join(', ')}`);    expect(await versions(db)).toEqual(['001_initial_core_schema']);
     expect(await tableExists(db, 'projects')).toBe(true);
   });
 
@@ -516,27 +529,27 @@ describe('ADR-004 Karar 3: losing the lock connection (building block of AC-P12-
 
 describe('AC-P11-9: applied version without a file (database newer than the code)', () => {
   it('up and down -> exit 3 naming the version, nothing changed; status -> 0 and lists it as bilinmeyen; the startup check reports unknown_versions', async () => {
-    const db = await newDb(); // migrated template: 001…005
-    await db.query(`INSERT INTO schema_migrations (version) VALUES ('006_from_the_future')`);
+    const db = await newDb(); // migrated template: 001…latest
+    await db.query(`INSERT INTO schema_migrations (version) VALUES ($1)`, [FUTURE]);
     const before = await schemaSnapshot(db);
 
     const up = await cli(['up'], { url: db.url });
     expect(up.code).toBe(MIGRATE_EXIT.rejected);
-    expect(up.err.join('\n')).toMatch(/bilinmeyen sürüm: 006_from_the_future/);
+    expect(up.err.join('\n')).toContain(`bilinmeyen sürüm: ${FUTURE}`);
     const down = await cli(['down', '--to', '003'], { url: db.url });
     expect(down.code).toBe(MIGRATE_EXIT.rejected);
-    expect(down.err.join('\n')).toMatch(/006_from_the_future/);
-    expect(await versions(db)).toEqual([...ALL, '006_from_the_future']);
+    expect(down.err.join('\n')).toContain(FUTURE);
+    expect(await versions(db)).toEqual([...ALL, FUTURE]);
     expect(await schemaSnapshot(db)).toEqual(before);
 
     const status = await cli(['status'], { url: db.url });
     expect(status.code).toBe(0);
-    expect(status.out.some((l) => /^bilinmeyen\s+006_from_the_future\s/.test(l) && l.includes('(dosyası yok)'))).toBe(true);
-    expect(status.out).toContain('özet: 5 uygulanmış, 0 bekleyen, 1 bilinmeyen');
+    expect(status.out.some((l) => new RegExp(`^bilinmeyen\\s+${FUTURE}\\s`).test(l) && l.includes('(dosyası yok)'))).toBe(true);
+    expect(status.out).toContain(`özet: ${ALL.length} uygulanmış, 0 bekleyen, 1 bilinmeyen`);
 
     const c = await connect(db.url);
     try {
-      expect(await checkMigrationsForStartup(c)).toMatchObject({ ok: false, reason: 'unknown_versions', versions: ['006_from_the_future'] });
+      expect(await checkMigrationsForStartup(c)).toMatchObject({ ok: false, reason: 'unknown_versions', versions: [FUTURE] });
     } finally {
       await c.end();
     }
@@ -550,7 +563,7 @@ describe('AC-P11-5: status on an empty database', () => {
     expect(run.code).toBe(0);
     expect(run.out[0]).toBe('schema_migrations tablosu yok; tüm sürümler bekleyen.');
     for (const v of ALL) expect(run.out.some((l) => new RegExp(`^bekleyen\\s+${v}$`).test(l))).toBe(true);
-    expect(run.out).toContain('özet: 0 uygulanmış, 5 bekleyen, 0 bilinmeyen');
+    expect(run.out).toContain(`özet: 0 uygulanmış, ${ALL.length} bekleyen, 0 bilinmeyen`);
     expect(await versions(db)).toBeNull();
 
     const c = await connect(db.url);
@@ -731,7 +744,7 @@ describe('AC-P11-12: connection errors never print the password, host, port or d
 });
 
 describe('AC-P11-16: db/schema.sql reference snapshot', () => {
-  it('loaded into an empty database it yields the same tables/columns as 001…005', async () => {
+  it('loaded into an empty database it yields the same tables/columns as every migration (001…latest)', async () => {
     const migrated = await newDb({ migrated: false });
     expect((await cli(['up'], { url: migrated.url })).code).toBe(0);
     const fromSchema = await newDb({ migrated: false });
@@ -796,9 +809,12 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
     '004_finding_fingerprint.down.sql': '9708def3bd9acbfe38f9067c7244dfeb3111f60376ece06b5b766ffe03b59fdf',
     '005_scan_next_attempt.up.sql': '452d55a75895bba91675509ddb4b326681958ff170c106801afc747263e17240',
     '005_scan_next_attempt.down.sql': '4e24e0aaacf81ccc18f54ed445f61783b0c554653cc4426209705bb7a0a092b6',
+    // REQ-004 AC-G-7: frozen once REQ-004 ships (QA batch B).
+    '006_registry_enrichment.up.sql': '4fa782f6a5f01c9562bea6d533fdd24c8f3c071c9d2130bedbd6f7edd4a14a85',
+    '006_registry_enrichment.down.sql': '36b32e6e35b8ba193fef5a2221010eea3af8ce31aac5c91c8574ea8a0181ee79',
   };
 
-  it('001…005 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
+  it('AC-G-7: 001…006 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
     const actual = Object.fromEntries(
       Object.keys(FROZEN).map((name) => [
         name,
@@ -806,7 +822,8 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
       ]),
     );
     expect(actual).toEqual(FROZEN);
-    expect(migrationVersions().slice(0, 5)).toEqual(ALL);
+    expect(migrationVersions().slice(0, 6)).toEqual(ALL.slice(0, 6));
+    expect(migrationVersions()).toEqual(ALL); // ALL above lists every real migration
   });
 
   it('db/migrate.sh is gone (AC-P11-15, AC-G-6)', () => {
@@ -873,14 +890,14 @@ describe('AC-P11-1 / AC-P11-12 / AC-P11-18: the compiled CLI as a real node proc
     const db = await newDb({ migrated: false });
     const up = runNode([], { databaseUrl: db.url });
     expect(up.code, up.stderr).toBe(0);
-    expect(up.stdout).toMatch(/uygulandı 005_scan_next_attempt/);
+    for (const v of ALL) expect(up.stdout).toContain(`uygulandı ${v}`);
     expect(await versions(db)).toEqual(ALL);
 
     const cwd = fs.mkdtempSync(path.join(tmpBase, 'envcwd-'));
     fs.writeFileSync(path.join(cwd, '.env'), `DATABASE_URL=${db.url}\n`);
     const status = runNode(['status'], { cwd });
     expect(status.code, status.stderr).toBe(0);
-    expect(status.stdout).toMatch(/özet: 5 uygulanmış, 0 bekleyen, 0 bilinmeyen/);
+    expect(status.stdout).toContain(`özet: ${ALL.length} uygulanmış, 0 bekleyen, 0 bilinmeyen`);
     expect(status.stdout + status.stderr).not.toContain(db.cluster.password);
   });
 });

@@ -111,12 +111,104 @@ export interface WorkerConfig {
   // AC-P12-3); there is no worker-id environment variable any more.
 }
 
+/**
+ * Registry license enrichment (REQ-004 P-14/P-15, ADR-006 Karar 14, D-61).
+ * Only the three `REGISTRY_*` settings come from the environment; every
+ * limit is a fixed constant (`ENRICHMENT_LIMITS`).
+ */
+export interface EnrichmentConfig {
+  /** `REGISTRY_ENRICHMENT`: `on` (default) / `off`. */
+  enabled: boolean;
+  /** `REGISTRY_TIMEOUT_MS`: total time of one request attempt (1 ms – 24 h, default 15 000). */
+  timeoutMs: number;
+  /** `REGISTRY_CONCURRENCY`: process-wide request slots (1–32, default 4). */
+  concurrency: number;
+}
+
 export interface SandboxRunnerConfig {
   scan: ScanConfig;
   retry: RetryPolicy;
   cleanup: CleanupPolicy;
   worker: WorkerConfig;
   parser: ParserConfig;
+  enrichment: EnrichmentConfig;
+}
+
+/** Upper bound of `REGISTRY_CONCURRENCY`. */
+export const MAX_REGISTRY_CONCURRENCY = 32;
+
+const MiB = 1024 * 1024;
+
+/** Fixed enrichment limits (ADR-006 Karar 4, 6, 7, 14); no environment override. */
+export const ENRICHMENT_LIMITS = Object.freeze({
+  client: Object.freeze({
+    /** Metadata response (network and decompressed bytes). */
+    metadataMaxBytes: 8 * MiB,
+    /** One package archive. */
+    archiveMaxBytes: 64 * MiB,
+    /** Archive download time floor: `max(REGISTRY_TIMEOUT_MS, 60 s)`. */
+    archiveMinTimeoutMs: 60_000,
+    /** Retries after the first attempt, with these waits. */
+    maxRetries: 2,
+    retryBackoffMs: Object.freeze([1_000, 2_000]) as readonly number[],
+    /** A longer `Retry-After` gives up the package (`error`). */
+    maxRetryAfterMs: 30_000,
+    /** Same-origin metadata redirects. */
+    maxRedirects: 3,
+    /** Consecutive failed network attempts per host and scan before the host closes. */
+    failureThreshold: 5,
+  }),
+  archive: Object.freeze({
+    maxDecompressedBytes: 512 * MiB,
+    maxEntries: 100_000,
+    maxFileBytes: 1 * MiB,
+    maxPackageTextBytes: 4 * MiB,
+    maxFiles: 10,
+    maxLongNameBytes: 64 * 1024,
+    scanDownloadQuotaBytes: 2 * 1024 * MiB,
+    /**
+     * Archive bytes held in memory at once across all scans of the process
+     * (REQ-004 security review L-4): download body until its archive thread
+     * has finished. See `InFlightByteBudget` (src/enrichment/budget.ts).
+     */
+    processInFlightBytes: 256 * MiB,
+    threadTimeoutMs: 60_000,
+    maxThreads: 2,
+    maxCandidatesTried: 3,
+    maxCandidatesStored: 32,
+  }),
+  notice: Object.freeze({
+    maxBytes: 64 * MiB,
+  }),
+});
+
+/** `REGISTRY_ENRICHMENT`: `on`/`off` (case-insensitive); anything else -> default `on` and one warning naming the setting. */
+export function parseEnrichmentSwitch(raw: unknown, warn: (message: string) => void = console.warn): boolean {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return true;
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (value === 'on') return true;
+  if (value === 'off') return false;
+  warn('REGISTRY_ENRICHMENT geçersiz (on/off); varsayılan on kullanılıyor.');
+  return true;
+}
+
+/** Enrichment settings from an environment (range-checked like the queue settings, REQ-003 I-3). */
+export function enrichmentConfigFrom(source: Readonly<Record<string, string | undefined>>): EnrichmentConfig {
+  return {
+    enabled: parseEnrichmentSwitch(source.REGISTRY_ENRICHMENT),
+    timeoutMs: boundedNumber(source.REGISTRY_TIMEOUT_MS, 15_000, {
+      name: 'REGISTRY_TIMEOUT_MS',
+      min: 1,
+      max: MAX_JOB_TIMEOUT_MS,
+      integer: true,
+    }),
+    concurrency: boundedNumber(source.REGISTRY_CONCURRENCY, 4, {
+      name: 'REGISTRY_CONCURRENCY',
+      min: 1,
+      max: MAX_REGISTRY_CONCURRENCY,
+      integer: true,
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,4 +273,6 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
       stackSizeMb: 4,
     },
   },
+
+  enrichment: enrichmentConfigFrom(env),
 } as const;

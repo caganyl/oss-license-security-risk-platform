@@ -2,7 +2,7 @@
  * Main-thread side of the parser thread (REQ-003 AC-P10-14, ADR-005 Karar 5).
  *
  * One `Worker` per scan (no pool), started with `env: {}` (source mode: only
- * `DISABLE_V8_COMPILE_CACHE=1`, see `SOURCE_MODE_THREAD_ENV`), empty
+ * `DISABLE_V8_COMPILE_CACHE=1`, see `src/lib/threadBootstrap.ts`), empty
  * `argv`/`execArgv` and memory/stack `resourceLimits`. The thread has no
  * timer of its own: the caller's `AbortSignal` (scan timeout, shutdown)
  * terminates it. The thread is always terminated and that promise awaited
@@ -11,6 +11,7 @@
  */
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { threadEntry } from '../../lib/threadBootstrap';
 import type { RunParserFn, SandboxScanResult } from '../../types/scan';
 import type { ParserThreadInput, ParserThreadResponse } from './thread';
 
@@ -62,34 +63,6 @@ export class ParserCrashedError extends Error {
 export function defaultThreadScript(): string {
   return path.join(__dirname, 'thread.js');
 }
-
-/**
- * When this module runs from its `.ts` source (`ts-node` dev scripts,
- * Vitest) there is no compiled `thread.js`; the thread then registers the
- * `ts-node` dev dependency itself (no `execArgv` needed) and loads
- * `thread.ts`. Compiled builds (`dist/`) never take this path.
- */
-function sourceModeBootstrap(): string | null {
-  if (!__filename.endsWith('.ts')) return null;
-  let tsNode = 'ts-node';
-  try {
-    tsNode = require.resolve('ts-node');
-  } catch {
-    // Fall back to normal resolution from the working directory.
-  }
-  const entry = path.join(__dirname, 'thread.ts');
-  return `require(${JSON.stringify(tsNode)}).register({ transpileOnly: true });\nrequire(${JSON.stringify(entry)});`;
-}
-
-/**
- * Thread environment of the source-mode bootstrap. ts-node loads
- * `v8-compile-cache-lib`, which writes its cache under `os.tmpdir()`; with
- * `env: {}` Windows has no TEMP/TMP/SystemRoot, `os.tmpdir()` returns
- * `undefined\temp` and the cache lands in the working directory. Disabling
- * the cache is the narrowest fix: one non-secret flag, no inherited value.
- * Compiled builds keep `env: {}` (nothing there calls `os.tmpdir()`).
- */
-const SOURCE_MODE_THREAD_ENV: Readonly<Record<string, string>> = Object.freeze({ DISABLE_V8_COMPILE_CACHE: '1' });
 
 type Outcome =
   | { kind: 'message'; message: unknown }
@@ -153,12 +126,17 @@ export async function runParserInThread(
   if (signal?.aborted) throw abortReason(signal);
 
   const workerData: ParserThreadInput = { rootDir, ecosystems: [...ecosystems], scanId };
-  const bootstrap = options.threadScript ? null : sourceModeBootstrap();
-  const worker = new Worker(bootstrap ?? options.threadScript ?? defaultThreadScript(), {
-    eval: bootstrap !== null,
+  // Injected script (thread behaviour tests): started as is with `env: {}`.
+  // Otherwise the shared entry selection: compiled `thread.js`, or from `.ts`
+  // sources a ts-node bootstrap of `thread.ts` (src/lib/threadBootstrap.ts).
+  const entry = options.threadScript
+    ? { script: options.threadScript, eval: false, env: {} }
+    : threadEntry(defaultThreadScript(), path.join(__dirname, 'thread.ts'));
+  const worker = new Worker(entry.script, {
+    eval: entry.eval,
     workerData,
     resourceLimits: { ...options.resourceLimits },
-    env: bootstrap !== null ? { ...SOURCE_MODE_THREAD_ENV } : {},
+    env: entry.env,
     argv: [],
     execArgv: [],
   });

@@ -1,5 +1,7 @@
 import crypto from 'crypto';
-import type { SbomScanData, SbomLicense } from '../sbomService';
+import type { SbomScanData, SbomDependency } from '../sbomService';
+import { outputClean, singleLine, tagValueSingleLine, tagValueText } from '../../lib/outputText';
+import { sbomLicenseInfo } from '../licenseInfo';
 
 // SPDX IDs allow: letters, digits, '.', '-', '+'
 function toSpdxId(ecosystem: string, name: string, version: string, purl: string): string {
@@ -9,18 +11,32 @@ function toSpdxId(ecosystem: string, name: string, version: string, purl: string
   return `SPDXRef-${ecosystem}-${safeName}-${safeVer}-${hash}`;
 }
 
-function licenseExpression(licenses: SbomLicense[]): string {
-  const ids = Array.from(new Set(
-    licenses
-      .map(l => l.normalizedLicense || l.detectedLicense)
-      .filter((x): x is string => x != null && x.trim().length > 0),
-  ));
-  return ids.length > 0 ? ids.join(' AND ') : 'NOASSERTION';
+interface SpdxLicenseFields {
+  /** `licenseDeclared`: canonical expression or `NOASSERTION`. */
+  declared: string;
+  /** `licenseComments` lines joined with `\n`, or null (field not written). */
+  comments: string | null;
+  /** `copyrightText`: lines joined with `\n`, or null for `NOASSERTION`. */
+  copyright: string | null;
 }
 
-// Wraps multi-line values in SPDX <text>...</text> blocks
-function spdxValue(value: string): string {
-  return value.includes('\n') ? `<text>${value}</text>` : value;
+/**
+ * REQ-004 contract section 6.1: `licenseConcluded` is always `NOASSERTION`;
+ * `licenseDeclared` is the canonical effective expression or `NOASSERTION`;
+ * `licenseComments` carries (a) the invalid raw value and (b) the lockfile
+ * source; `copyrightText` the extracted copyright lines.
+ */
+function spdxLicenseFields(dep: SbomDependency, data: SbomScanData): SpdxLicenseFields {
+  const info = sbomLicenseInfo(dep, data.knownLicenseIds);
+  const comments: string[] = [];
+  if (info.invalid) comments.push(`Declared license is not a valid SPDX expression: ${singleLine(info.declared)}`);
+  if (info.lockfileSource) comments.push('License source: lockfile (unverified)');
+  const copyrightLines = info.copyrightLines.map((line) => singleLine(line)).filter((line) => line.trim() !== '');
+  return {
+    declared: info.canonical ?? 'NOASSERTION',
+    comments: comments.length > 0 ? comments.join('\n') : null,
+    copyright: copyrightLines.length > 0 ? copyrightLines.join('\n') : null,
+  };
 }
 
 export function generateSpdxJson(data: SbomScanData): string {
@@ -52,16 +68,17 @@ export function generateSpdxJson(data: SbomScanData): string {
     seen.add(dep.purl);
 
     const id = toSpdxId(dep.ecosystem, dep.name, dep.version, dep.purl);
-    const licExpr = licenseExpression(dep.licenses);
+    const lic = spdxLicenseFields(dep, data);
     const pkg: Record<string, unknown> = {
       SPDXID: id,
-      name: dep.name,
-      versionInfo: dep.version,
+      name: outputClean(dep.name),
+      versionInfo: outputClean(dep.version),
       downloadLocation: dep.homepageUrl ?? 'NOASSERTION',
       filesAnalyzed: false,
-      licenseConcluded: licExpr,
-      licenseDeclared: licExpr,
-      copyrightText: dep.copyrightText ?? 'NOASSERTION',
+      licenseConcluded: 'NOASSERTION',
+      licenseDeclared: lic.declared,
+      ...(lic.comments !== null ? { licenseComments: lic.comments } : {}),
+      copyrightText: lic.copyright ?? 'NOASSERTION',
       externalRefs: [{
         referenceCategory: 'PACKAGE-MANAGER',
         referenceType: 'purl',
@@ -104,22 +121,26 @@ export function generateSpdxTagValue(data: SbomScanData): string {
   const DOC = 'SPDXRef-DOCUMENT';
   const ROOT = 'SPDXRef-ROOT';
   const lines: string[] = [];
+  // Single-line fields never carry a line break and never a raw `<text>` /
+  // `</text>` (contract section 6.1, AC-P16-4; 1.1.0 L-1): every value that
+  // is not a `<text>` block goes through `sl`.
+  const sl = tagValueSingleLine;
 
   lines.push('SPDXVersion: SPDX-2.3');
   lines.push('DataLicense: CC0-1.0');
   lines.push(`SPDXID: ${DOC}`);
-  lines.push(`DocumentName: SBOM-${project.name}-${scan.id}`);
+  lines.push(`DocumentName: ${sl(`SBOM-${project.name}-${scan.id}`)}`);
   lines.push(`DocumentNamespace: https://platform.example.com/sbom/spdx/${scan.id}`);
   lines.push('Creator: Tool: OSS License & Security Risk Platform');
-  lines.push(`Creator: Organization: ${project.name}`);
+  lines.push(`Creator: ${sl(`Organization: ${project.name}`)}`);
   lines.push(`Created: ${new Date().toISOString()}`);
   lines.push('LicenseListVersion: 3.21');
   lines.push('');
 
-  lines.push(`PackageName: ${project.name}`);
+  lines.push(`PackageName: ${sl(project.name)}`);
   lines.push(`SPDXID: ${ROOT}`);
-  lines.push(`PackageVersion: ${scan.ref ?? 'NOASSERTION'}`);
-  lines.push(`PackageDownloadLocation: ${project.repoUrl ?? 'NOASSERTION'}`);
+  lines.push(`PackageVersion: ${sl(scan.ref ?? 'NOASSERTION')}`);
+  lines.push(`PackageDownloadLocation: ${sl(project.repoUrl ?? 'NOASSERTION')}`);
   lines.push('FilesAnalyzed: false');
   lines.push('PackageLicenseConcluded: NOASSERTION');
   lines.push('PackageLicenseDeclared: NOASSERTION');
@@ -135,21 +156,20 @@ export function generateSpdxTagValue(data: SbomScanData): string {
 
     const id = toSpdxId(dep.ecosystem, dep.name, dep.version, dep.purl);
     idByPurl.set(dep.purl, id);
+    const lic = spdxLicenseFields(dep, data);
 
-    const licExpr = licenseExpression(dep.licenses);
-    const copyright = dep.copyrightText ?? 'NOASSERTION';
-
-    lines.push(`PackageName: ${dep.name}`);
-    lines.push(`SPDXID: ${id}`);
-    lines.push(`PackageVersion: ${dep.version}`);
-    lines.push(`PackageDownloadLocation: ${dep.homepageUrl ?? 'NOASSERTION'}`);
+    lines.push(`PackageName: ${sl(dep.name)}`);
+    lines.push(`SPDXID: ${sl(id)}`);
+    lines.push(`PackageVersion: ${sl(dep.version)}`);
+    lines.push(`PackageDownloadLocation: ${sl(dep.homepageUrl ?? 'NOASSERTION')}`);
     lines.push('FilesAnalyzed: false');
-    lines.push(`PackageLicenseConcluded: ${licExpr}`);
-    lines.push(`PackageLicenseDeclared: ${licExpr}`);
-    lines.push(`PackageCopyrightText: ${spdxValue(copyright)}`);
-    lines.push(`ExternalRef: PACKAGE-MANAGER purl ${dep.purl}`);
-    if (dep.author) lines.push(`PackageSupplier: Organization: ${dep.author}`);
-    if (dep.homepageUrl) lines.push(`PackageHomePage: ${dep.homepageUrl}`);
+    lines.push('PackageLicenseConcluded: NOASSERTION');
+    lines.push(`PackageLicenseDeclared: ${sl(lic.declared)}`);
+    if (lic.comments !== null) lines.push(`PackageLicenseComments: ${tagValueText(lic.comments)}`);
+    lines.push(`PackageCopyrightText: ${lic.copyright !== null ? tagValueText(lic.copyright) : 'NOASSERTION'}`);
+    lines.push(`ExternalRef: ${sl(`PACKAGE-MANAGER purl ${dep.purl}`)}`);
+    if (dep.author) lines.push(`PackageSupplier: ${sl(`Organization: ${dep.author}`)}`);
+    if (dep.homepageUrl) lines.push(`PackageHomePage: ${sl(dep.homepageUrl)}`);
     lines.push('');
   }
 
@@ -158,7 +178,7 @@ export function generateSpdxTagValue(data: SbomScanData): string {
     const id = idByPurl.get(dep.purl);
     if (!id) continue;
     const rel = dep.depth === 0 ? 'CONTAINS' : 'DEPENDENCY_OF';
-    lines.push(`Relationship: ${ROOT} ${rel} ${id}`);
+    lines.push(`Relationship: ${ROOT} ${rel} ${sl(id)}`);
   }
 
   return lines.join('\n');

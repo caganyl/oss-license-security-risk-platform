@@ -33,6 +33,10 @@ import {
 import { isRuntimeScope, type RunParserFn, type SandboxScanResult } from '../types/scan';
 import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
+import { type DependencyEnricher, type EnrichmentResult, disabledEnrichment, enrichmentKeyOf } from '../enrichment';
+import { computeBudgetMs } from '../enrichment/budget';
+import { resolveEffectiveLicense } from '../enrichment/effectiveLicense';
+import { sanitizeText } from '../enrichment/text';
 import {
   normalizeLegacyVulnerability,
   vulnerabilityLookupService,
@@ -114,6 +118,13 @@ export interface ScanWorkerDeps {
    * `cloneRepo` is injected, since it does not run git) skips the gate.
    */
   gitVersion: GitVersionProvider | null;
+  /**
+   * Registry license enrichment (REQ-004, ADR-006 Karar 2). The runtime
+   * always passes one (`REGISTRY_ENRICHMENT=off` -> disabled mode). `null`
+   * (tests, `saveScanResults`): no enrichment step, every key `disabled`, no
+   * `[registry]` line — the result equals F2.
+   */
+  enricher: DependencyEnricher | null;
 }
 
 export { NonRetryableScanError };
@@ -126,6 +137,8 @@ interface PersistOptions {
   signal?: AbortSignal;
   /** Sanitizer context of the parse warning text (L-5). */
   errorContext?: ErrorTextContext;
+  /** Enrichment result (effective license, NOTICE fields, `[registry]` line); absent -> all `disabled`, no line. */
+  enrichment?: EnrichmentResult;
 }
 
 /** normalized_license of a runtime package whose license could not be found (AC-P06-1). */
@@ -163,6 +176,8 @@ interface ClaimedJob {
   settings: ScanQueueSettings;
   controller: AbortController;
   timer: NodeJS.Timeout | null;
+  /** Monotonic (`performance.now()`) end of the job time limit (enrichment budget, ADR-006 Karar 2). */
+  deadlineMs: number;
   /** Resolves when the job has finished (never rejects). */
   done: Promise<void>;
   resolveDone: () => void;
@@ -208,6 +223,7 @@ export class ScanWorker {
       logger: deps.logger ?? console,
       runId: deps.runId ?? createRunId(),
       gitVersion: deps.gitVersion !== undefined ? deps.gitVersion : deps.cloneRepo ? null : getGitVersion,
+      enricher: deps.enricher ?? null,
     };
   }
 
@@ -539,7 +555,17 @@ export class ScanWorker {
       resolveDone = resolve;
     });
     const controller = new AbortController();
-    const job: ClaimedJob = { scanRow, settings, controller, timer: null, done, resolveDone, secrets: [], workspaceDirs: [] };
+    const job: ClaimedJob = {
+      scanRow,
+      settings,
+      controller,
+      timer: null,
+      deadlineMs: performance.now() + settings.timeoutMinutes * 60_000,
+      done,
+      resolveDone,
+      secrets: [],
+      workspaceDirs: [],
+    };
     // Job time limit (D-42, AC-P13-6): covers clone, parse, OSV and the result write.
     job.timer = setTimeout(() => {
       if (!controller.signal.aborted) controller.abort(new ScanAbortError('timeout'));
@@ -615,11 +641,14 @@ export class ScanWorker {
         // Permanent (D-41): the same input fails the same way.
         throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
+      // Registry enrichment: after parsing, before OSV and the result transaction (ADR-006 Karar 2).
+      const enrichment = await this.enrichDependencies(job, result);
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
       const stored = await this.persistResults(scanId, scanRow.project_id, result, {
         runId: this.runId,
         signal,
         errorContext: this.errorContext(job),
+        enrichment,
       });
       if (stored) this.logger.log(`Scan ${scanId} results stored.`);
     } catch (err) {
@@ -630,6 +659,28 @@ export class ScanWorker {
       // Removed only after the last write succeeded or was given up (ADR-004 Karar 9).
       this.activeJobs.delete(scanId);
       job.resolveDone();
+    }
+  }
+
+  /**
+   * Runs the injected enricher within the budget
+   * `min(T/2, remaining - T/4)` (AC-P14-14). A job abort is rethrown as is
+   * (ADR-004 Karar 8 classification); every other error is logged by class
+   * and the scan continues with `error` outcomes — enrichment never reaches
+   * `handleScanFailure` and never causes a retry (AC-P14-13).
+   */
+  private async enrichDependencies(job: ClaimedJob, result: SandboxScanResult): Promise<EnrichmentResult | undefined> {
+    const enricher = this.deps.enricher;
+    if (!enricher) return undefined;
+    const signal = job.controller.signal;
+    const timeoutMs = job.settings.timeoutMinutes * 60_000;
+    const budgetMs = computeBudgetMs(timeoutMs, job.deadlineMs - performance.now());
+    try {
+      return await enricher.enrich(result.dependencies, { signal, budgetMs });
+    } catch (err) {
+      if (signal.aborted) throw signal.reason ?? err;
+      this.logger.warn(`Scan ${job.scanRow.id}: registry enrichment failed (${errorCode(err)}); continuing without it.`);
+      return enricher.failed(result.dependencies);
     }
   }
 
@@ -676,6 +727,8 @@ export class ScanWorker {
     options: PersistOptions,
   ): Promise<boolean> {
     const { runId, signal, errorContext = this.errorContext() } = options;
+    // No enricher (tests, saveScanResults): every key `disabled`, no `[registry]` line (D-82).
+    const enrichment = options.enrichment ?? disabledEnrichment(result.dependencies, false);
     const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies, signal);
     signal?.throwIfAborted();
     const client = await this.db.connect();
@@ -730,6 +783,23 @@ export class ScanWorker {
         // packages.version holds only an exact version; unknown -> NULL (ADR-003 a).
         const version = dep.version === null || dep.version === undefined || dep.version === '' ? null : dep.version;
 
+        // L-6 effective license (ADR-006 Karar 11). The policy loop below is
+        // unchanged and runs on `policyInput` (fingerprint formula unchanged,
+        // D-73); a `disabled` key with a lock hint gives exactly `dep.licenses` (F2).
+        const enrichKey = enrichmentKeyOf(dep);
+        const enriched = enrichKey === null ? undefined : enrichment.outcomes.get(enrichKey);
+        const effective = enriched
+          ? resolveEffectiveLicense({
+              status: enriched.status,
+              ecosystem: enriched.registry,
+              declaredLicense: enriched.declaredLicense,
+              lockLicenses: dep.licenses ?? [],
+              normalize: (raw) => normalizeLicense(raw).normalized,
+              sanitize: sanitizeText,
+            })
+          : null;
+        const policyInput: string[] = effective ? effective.policyInput : [...(dep.licenses ?? [])];
+
         // Insert package (deduplicated). purl is a deterministic function of
         // (ecosystem, normalised name, version), so it is the conflict target;
         // this also covers the versionless partial unique index.
@@ -748,12 +818,28 @@ export class ScanWorker {
         // Insert scan dependency; the declared range is a per-manifest fact.
         const depResult = await client.query(
           `
-          INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range)
-          VALUES ($1, $2, $3, $4, $5, 0, $6)
+          INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range,
+                                         license_expression, license_source, license_lock_hint, license_hint_differs,
+                                         license_enrichment_status, notice_status, notice_archive_id)
+          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (scan_id, package_id, manifest_path, scope) DO NOTHING
           RETURNING id
           `,
-          [scanId, packageId, scope, dep.manifest_file, dep.manifest_path, dep.declared_range ?? null]
+          [
+            scanId,
+            packageId,
+            scope,
+            dep.manifest_file,
+            dep.manifest_path,
+            dep.declared_range ?? null,
+            effective?.licenseExpression ?? null,
+            effective?.licenseSource ?? null,
+            effective?.lockHint ?? null,
+            effective?.hintDiffers ?? null,
+            enriched?.status ?? null,
+            enriched?.noticeStatus ?? null,
+            enriched?.noticeArchiveId ?? null,
+          ]
         );
 
         let scanDepId: string;
@@ -774,7 +860,7 @@ export class ScanWorker {
         // a dev package stays in the inventory but is never a violation.
         const runtime = isRuntimeScope(scope);
 
-        if (runtime && (!dep.licenses || dep.licenses.length === 0)) {
+        if (runtime && policyInput.length === 0) {
           // No license found for a runtime package -> "unknown" finding (AC-P06-1).
           const opened = await openFinding({
             findingType: 'license',
@@ -795,8 +881,8 @@ export class ScanWorker {
         }
 
         // Process licenses and evaluate policy risk
-        if (runtime && dep.licenses && dep.licenses.length > 0) {
-          for (const rawLicense of dep.licenses) {
+        if (runtime && policyInput.length > 0) {
+          for (const rawLicense of policyInput) {
             const norm = normalizeLicense(rawLicense);
 
             // Look up by canonical SPDX ID first; fall back to raw string for unlisted licenses
@@ -929,12 +1015,12 @@ export class ScanWorker {
       }
 
       // Handle warnings from parse errors if any
+      // The single `[registry]` line goes after the parse warnings (contract section 8).
       let warningMsg: string | null = null;
-      if (result.parse_errors && result.parse_errors.length > 0) {
-        warningMsg = scanErrorText(
-          result.parse_errors.map((pe) => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`).join('\n'),
-          errorContext,
-        );
+      const warningLines = (result.parse_errors ?? []).map((pe) => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`);
+      if (enrichment.summaryLine !== null) warningLines.push(enrichment.summaryLine);
+      if (warningLines.length > 0) {
+        warningMsg = scanErrorText(warningLines.join('\n'), errorContext);
       }
 
       signal?.throwIfAborted();

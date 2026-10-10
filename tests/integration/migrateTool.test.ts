@@ -809,9 +809,12 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
     '004_finding_fingerprint.down.sql': '9708def3bd9acbfe38f9067c7244dfeb3111f60376ece06b5b766ffe03b59fdf',
     '005_scan_next_attempt.up.sql': '452d55a75895bba91675509ddb4b326681958ff170c106801afc747263e17240',
     '005_scan_next_attempt.down.sql': '4e24e0aaacf81ccc18f54ed445f61783b0c554653cc4426209705bb7a0a092b6',
+    // REQ-004 AC-G-7: frozen once REQ-004 ships (QA batch B).
+    '006_registry_enrichment.up.sql': '4fa782f6a5f01c9562bea6d533fdd24c8f3c071c9d2130bedbd6f7edd4a14a85',
+    '006_registry_enrichment.down.sql': '36b32e6e35b8ba193fef5a2221010eea3af8ce31aac5c91c8574ea8a0181ee79',
   };
 
-  it('001…005 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
+  it('AC-G-7: 001…006 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
     const actual = Object.fromEntries(
       Object.keys(FROZEN).map((name) => [
         name,
@@ -819,7 +822,7 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
       ]),
     );
     expect(actual).toEqual(FROZEN);
-    expect(migrationVersions().slice(0, 5)).toEqual(ALL.slice(0, 5));
+    expect(migrationVersions().slice(0, 6)).toEqual(ALL.slice(0, 6));
     expect(migrationVersions()).toEqual(ALL); // ALL above lists every real migration
   });
 

@@ -1133,6 +1133,23 @@ tanımlı yedek veya uygulama sırasında teyit adımı vardır (Karar 3, 5, 13)
 >   seçenek), contract 1.1.0 ile aynı dayanak. ADR durumu `Accepted` kalır;
 >   kayıt kullanıcının commit'iyle kesinleşir.
 
+## ADR-007 notu (2026-10-10)
+
+> **ADR-007 ile kısmen superseded (2026-10-10).** REQ-005 (F4) için
+> `registryClient.ts`'teki güvenli HTTP çekirdeği `src/lib/http/safeHttpClient.ts`'e
+> çıkarılır; `proxy.ts` `src/lib/http/proxy.ts`'e taşınır ve
+> `src/enrichment/proxy.ts` onu yeniden dışa aktarır. Karar 1'deki
+> "`src/enrichment/` içinde ağ erişimi yalnız `registryClient.ts`'tedir" kuralı
+> "`src/` içinde ağ bağlantısı açan tek modül `src/lib/http/safeHttpClient.ts`'tir;
+> `registryClient.ts` onun üzerinde ince adaptördür" olarak okunur. Karar 4–5'in
+> kuralları (izin listesi, yönlendirme, sınırlar, deneme, devre kesici, vekil,
+> TLS) ve `registryClient.ts`'in dışa aktarılan API'si **değişmez**; kayıt
+> defteri istemcisi çekirdeğin ayrı bir örneğidir (kendi semaforu). F3 testleri
+> değiştirilmeden yeşil kalmalıdır. L-5 (yukarıdaki notta F4'e bırakılan takip)
+> ADR-007 Karar 12 ile kapatılır; N-1 ADR-007 Karar 13 ile. Ayrıntı:
+> `docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md`
+> Karar 1–2, 12–13.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

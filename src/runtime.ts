@@ -39,6 +39,9 @@ import { describeGitVersion, getGitVersion, type GitVersionProvider } from './sc
 import { ScanWorker, type ScanWorkerDeps } from './scanner/worker';
 import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
 import { createDependencyEnricher, type DependencyEnricher } from './enrichment';
+import { createVulnerabilityClient, type VulnerabilityClient } from './vulnerability/client';
+import { warnRemovedVulnerabilitySettings } from './vulnerability/endpoints';
+import { createVulnerabilityLookup, type VulnerabilityLookup } from './vulnerability/lookup';
 
 export type RuntimeLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 export type ExitFn = (code: number) => void;
@@ -144,6 +147,8 @@ class Runtime implements RuntimeHandle {
   lock: InstanceLock<LockClient> | null = null;
   /** Registry enricher created by the runtime (ADR-006 Karar 14); null when injected or not started. */
   private enricher: DependencyEnricher | null = null;
+  /** Vulnerability (OSV/NVD) client created by the runtime (ADR-007 Karar 11); null when injected or not started. */
+  private vulnerabilityClient: VulnerabilityClient | null = null;
 
   private readonly env: NodeJS.ProcessEnv;
   private readonly logger: RuntimeLogger;
@@ -201,6 +206,8 @@ class Runtime implements RuntimeHandle {
           throw new RuntimeStartupError(INVALID_PORT_MESSAGE);
         }
       }
+      // Removed settings (D-88): one warning per name, the value is never logged.
+      warnRemovedVulnerabilitySettings(this.env, (message) => this.logger.warn(message));
       const connectionString = this.env.DATABASE_URL as string;
 
       // 2. Database and the single-instance lock (D-34, AC-P12-4).
@@ -271,9 +278,21 @@ class Runtime implements RuntimeHandle {
       if (this.options.scanWorker?.enricher === undefined) {
         this.enricher = createDependencyEnricher({ config: sandboxRunnerConfig.enrichment, db: pool, logger: this.logger });
       }
+      // Vulnerability lookup (ADR-007 Karar 11): always created unless injected
+      // (tests); with VULNERABILITY_LOOKUP=off the client opens no connection
+      // and scans get `disabled`. Production never passes `endpoints`.
+      let vulnerabilityLookup: VulnerabilityLookup | null = null;
+      if (this.options.scanWorker?.vulnerabilityLookup === undefined) {
+        this.vulnerabilityClient = createVulnerabilityClient({
+          config: sandboxRunnerConfig.vulnerability,
+          warn: (message) => this.logger.warn(message),
+        });
+        vulnerabilityLookup = createVulnerabilityLookup({ client: this.vulnerabilityClient, db: pool, logger: this.logger });
+      }
       this.scanWorker = new ScanWorker({
         ...this.options.scanWorker,
         ...(this.enricher ? { enricher: this.enricher } : {}),
+        ...(vulnerabilityLookup ? { vulnerabilityLookup } : {}),
         logger: this.options.scanWorker?.logger ?? this.logger,
         tmpRoot: this.options.scanWorker?.tmpRoot ?? this.options.tmpRoot,
         ...(this.options.gitVersion && this.options.scanWorker?.gitVersion === undefined
@@ -304,8 +323,16 @@ class Runtime implements RuntimeHandle {
     }
   }
 
-  /** Destroys the enricher's pooled sockets (after the scans are aborted). */
+  /** Destroys the enricher's and the vulnerability client's pooled sockets (after the scans are aborted). */
   private closeEnricher(): void {
+    if (this.vulnerabilityClient) {
+      try {
+        this.vulnerabilityClient.close();
+      } catch (err) {
+        this.logger.warn(`Güvenlik açığı istemcisi kapatılamadı (${errorCode(err)}).`);
+      }
+      this.vulnerabilityClient = null;
+    }
     if (!this.enricher) return;
     try {
       this.enricher.close();

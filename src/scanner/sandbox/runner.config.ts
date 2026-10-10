@@ -132,6 +132,7 @@ export interface SandboxRunnerConfig {
   worker: WorkerConfig;
   parser: ParserConfig;
   enrichment: EnrichmentConfig;
+  vulnerability: VulnerabilityConfig;
 }
 
 /** Upper bound of `REGISTRY_CONCURRENCY`. */
@@ -211,6 +212,124 @@ export function enrichmentConfigFrom(source: Readonly<Record<string, string | un
   };
 }
 
+/**
+ * Vulnerability lookup and recheck (REQ-005 P-17/P-18, ADR-007 Karar 11,
+ * D-88, D-91, D-98). `NVD_API_KEY` is deliberately **not** part of this
+ * (loggable) object: only `src/vulnerability/client.ts` reads it, once.
+ * `OSV_API_URL` / `NVD_API_URL` are not read anywhere (D-88).
+ */
+export interface VulnerabilityConfig {
+  /** `VULNERABILITY_LOOKUP`: `on` (default) / `off`. */
+  lookupEnabled: boolean;
+  /** `VULNERABILITY_RECHECK`: `on` (default) / `off`. */
+  recheckEnabled: boolean;
+  /** `VULNERABILITY_RECHECK_INTERVAL_HOURS`: integer 1–168 (default 24). */
+  intervalHours: number;
+  /** `OSV_TIMEOUT_MS`: total time of one OSV/NVD attempt (1 ms – 24 h, default 15 000). */
+  timeoutMs: number;
+  /** `OSV_CONCURRENCY`: OSV detail request slots (1–32, default 4). */
+  concurrency: number;
+  /** `NVD_ENABLED`: only `false` disables NVD (OSV continues). */
+  nvdEnabled: boolean;
+}
+
+/** Fixed vulnerability lookup limits (ADR-007 Karar 3, 4, 6, 7, 8, 9, 11); no environment override. */
+export const VULNERABILITY_LIMITS = Object.freeze({
+  /** Queries per OSV querybatch request (sequential batches). */
+  osvBatchMax: 1000,
+  /** Pages per package (initial result included). */
+  osvMaxPages: 10,
+  /** Vulnerability ids per package result; more -> package unchecked (first ones processed). */
+  osvMaxVulnsPerResult: 1000,
+  client: Object.freeze({
+    querybatchMaxBytes: 16 * MiB,
+    detailMaxBytes: 8 * MiB,
+    nvdMaxBytes: 2 * MiB,
+    maxRetries: 2,
+    retryBackoffMs: Object.freeze([1_000, 2_000]) as readonly number[],
+    maxRetryAfterMs: 30_000,
+    failureThreshold: 5,
+  }),
+  nvd: Object.freeze({
+    windowMs: 30_000,
+    requestsWithoutKey: 5,
+    requestsWithKey: 50,
+    foundTtlMs: 7 * 24 * 60 * 60_000,
+    noCvssTtlMs: 24 * 60 * 60_000,
+  }),
+  recheck: Object.freeze({
+    maxPackages: 10_000,
+    runTimeoutMs: 30 * 60_000,
+    tickIntervalMs: 10 * 60_000,
+    firstCheckDelayMs: 60_000,
+    failureBackoffMs: 60 * 60_000,
+  }),
+  expiry: Object.freeze({
+    intervalMs: 60 * 60_000,
+    batchSize: 500,
+  }),
+  /** Trimming of stored OSV records (ADR-007 Karar 4). */
+  record: Object.freeze({
+    maxAliases: 64,
+    summaryCodePoints: 1000,
+    detailsBytes: 64 * 1024,
+    maxSeverity: 8,
+    severityFieldChars: 256,
+    maxAffected: 256,
+    maxRanges: 16,
+    maxEvents: 64,
+    maxVersions: 1000,
+    maxReferences: 64,
+    referenceUrlChars: 2048,
+  }),
+});
+
+/** Upper bound of `OSV_CONCURRENCY`. */
+export const MAX_OSV_CONCURRENCY = 32;
+
+/** `on`/`off` switch (case-insensitive); anything else -> default `on` and one warning naming the setting only. */
+export function parseOnOffSwitch(name: string, raw: unknown, warn: (message: string) => void = console.warn): boolean {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return true;
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (value === 'on') return true;
+  if (value === 'off') return false;
+  warn(`${name} geçersiz (on/off); varsayılan on kullanılıyor.`);
+  return true;
+}
+
+/** Vulnerability settings from an environment (range-checked; invalid -> default + one warning naming the setting). */
+export function vulnerabilityConfigFrom(
+  source: Readonly<Record<string, string | undefined>>,
+  warn: (message: string) => void = console.warn,
+): VulnerabilityConfig {
+  return {
+    lookupEnabled: parseOnOffSwitch('VULNERABILITY_LOOKUP', source.VULNERABILITY_LOOKUP, warn),
+    recheckEnabled: parseOnOffSwitch('VULNERABILITY_RECHECK', source.VULNERABILITY_RECHECK, warn),
+    intervalHours: boundedNumber(source.VULNERABILITY_RECHECK_INTERVAL_HOURS, 24, {
+      name: 'VULNERABILITY_RECHECK_INTERVAL_HOURS',
+      warn,
+      min: 1,
+      max: 168,
+      integer: true,
+    }),
+    timeoutMs: boundedNumber(source.OSV_TIMEOUT_MS, 15_000, {
+      name: 'OSV_TIMEOUT_MS',
+      warn,
+      min: 1,
+      max: MAX_JOB_TIMEOUT_MS,
+      integer: true,
+    }),
+    concurrency: boundedNumber(source.OSV_CONCURRENCY, 4, {
+      name: 'OSV_CONCURRENCY',
+      warn,
+      min: 1,
+      max: MAX_OSV_CONCURRENCY,
+      integer: true,
+    }),
+    nvdEnabled: source.NVD_ENABLED !== 'false',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Default configuration
 // ---------------------------------------------------------------------------
@@ -275,4 +394,6 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
   },
 
   enrichment: enrichmentConfigFrom(env),
+
+  vulnerability: vulnerabilityConfigFrom(env),
 } as const;

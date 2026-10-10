@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-004",
+  "title": "REQ-004: F3 — Lisans ve NOTICE (P-14…P-16, L-6)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (açık onay: \"REQ-004 manifestini yaz ve onayla\"; kapsam: dış kayıt defteri erişimi (registry.npmjs.org, pypi.org, files.pythonhosted.org; yalnız okuma) ve göç 006; Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-10T12:30:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-004.md",
+    "acceptance_criteria": "docs/product/REQ-004.md",
+    "contracts": [
+      "docs/contracts/REQ-004-notice-and-outputs.md",
+      "docs/contracts/REQ-004-notice-api.openapi.yaml"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md",
+      "docs/architecture/adr/ADR-005-typescript-ayristiricilar.md",
+      "docs/architecture/adr/ADR-004-tek-surec-calisma-zamani-ve-goc-araci.md",
+      "docs/architecture/adr/ADR-003-bulgu-parmak-izi-ve-beyan-edilen-aralik.md"
+    ]
+  },
+  "owners": [
+    { "agent": "database-engineer", "write_paths": ["db", "src/db"] },
+    { "agent": "backend-engineer",  "write_paths": ["src/app.ts", "src/main.ts", "src/runtime.ts", "src/config", "src/lib", "src/middleware", "src/controllers", "src/routes", "src/scanner", "src/reports", "src/types", "src/analysis", "src/sbom", "src/enrichment", "src/notice", "README.md", "package.json"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json"] }
+  ]
+}

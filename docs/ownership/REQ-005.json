@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-005",
+  "title": "REQ-005: F4 — Güvenlik açıkları (P-17…P-19, güvenli OSV/NVD istemcisi, L-5, N-1)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (açık onay: \"Yaz ve onayla (Önerilen)\"; kapsam: kullanıcı eylemi olmadan günlük OSV/NVD erişimi (yalnız okuma), yeniden kontrolde yeni bulguların otomatik açılması, süresi dolan risk kabullerinin otomatik open'a dönmesi, göç 007; Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-10T18:00:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-005.md",
+    "acceptance_criteria": "docs/product/REQ-005.md",
+    "contracts": [
+      "docs/contracts/REQ-005-vulnerability-data.md",
+      "docs/contracts/REQ-005-vulnerability-api.openapi.yaml",
+      "docs/contracts/REQ-004-notice-and-outputs.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md",
+      "docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md",
+      "docs/architecture/adr/ADR-004-tek-surec-calisma-zamani-ve-goc-araci.md",
+      "docs/architecture/adr/ADR-003-bulgu-parmak-izi-ve-beyan-edilen-aralik.md"
+    ]
+  },
+  "owners": [
+    { "agent": "database-engineer", "write_paths": ["db", "src/db"] },
+    { "agent": "backend-engineer",  "write_paths": ["src/app.ts", "src/main.ts", "src/runtime.ts", "src/config", "src/lib", "src/middleware", "src/controllers", "src/routes", "src/scanner", "src/reports", "src/types", "src/analysis", "src/sbom", "src/enrichment", "src/notice", "src/vulnerability", "README.md"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json"] }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-007",
+  "title": "REQ-007: F6 — CLI ve raporlar (P-22, P-23, P-24, API anahtarı ekranı)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (gece talimatı: \"ben yatıyorum sen çalışmaya devam et, bana soru sorma önerilen seçeneklerle devam et yapmaya. sabaha bitmiş olmasını istiyorum\"; kapsam: GitHub Actions iş akışlarının bu repoya eklenip push ile çalıştırılması (secret yok, contents: read, online kip yalnız elle), oss-risk CLI ve bootstrap; Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-11T05:00:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-007.md",
+    "acceptance_criteria": "docs/product/REQ-007.md",
+    "contracts": [
+      "docs/contracts/REQ-007-cli-and-exports.md",
+      "docs/contracts/REQ-007-exports-api.openapi.yaml",
+      "docs/contracts/REQ-004-notice-and-outputs.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-009-cli-ci-ve-tek-tik-ciktilar.md",
+      "docs/architecture/adr/ADR-001-yerel-kimlik-dogrulama.md",
+      "docs/architecture/adr/ADR-004-tek-surec-calisma-zamani-ve-goc-araci.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src/app.ts", "src/main.ts", "src/runtime.ts", "src/cli", "src/config", "src/lib", "src/middleware", "src/controllers", "src/routes", "src/scanner", "src/reports", "src/types", "src/analysis", "src/sbom", "src/enrichment", "src/notice", "src/vulnerability", "README.md", "package.json", ".github/workflows"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json"] }
+  ]
+}

@@ -284,6 +284,7 @@
         <button class="nav-item" type="button" data-view="projects"><i data-lucide="folder-git-2"></i>Projects</button>
         <button class="nav-item" type="button" data-view="sbom"><i data-lucide="scroll"></i>SBOM Center</button>
         <button class="nav-item" type="button" data-view="users"><i data-lucide="users"></i>Users &amp; Roles</button>
+        <button class="nav-item" type="button" data-view="api-keys"><i data-lucide="key-round"></i>API Keys</button>
       </nav>
       <div class="sidebar-footer">
         <div class="user-box">
@@ -567,6 +568,45 @@
                 </tr>
               </thead>
               <tbody id="users-list-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- View: API Keys (REQ-007 AC-AK-1…4, contract section 9). Rows and the one-time key panel are built by app.js. -->
+      <div id="view-api-keys" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">API Keys</h2>
+          </div>
+          <p id="api-keys-cli-hint" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; line-height: 1.5;">Use the key with the CLI: set OSS_RISK_API_KEY (or OSS_RISK_API_KEY_FILE) and run oss-risk scan --project &lt;name&gt;. Only one key is active at a time.</p>
+          <form id="api-key-create-form" novalidate style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 240px;">
+              <label for="api-key-name" style="display:block; color:var(--text-muted); font-size:0.85rem; margin-bottom:0.4rem;">Key name (optional)</label>
+              <input type="text" id="api-key-name" name="api-key-name" class="form-control" maxlength="100" autocomplete="off">
+            </div>
+            <button class="btn" type="submit" id="api-key-create-btn"><i data-lucide="plus"></i> Create API key</button>
+          </form>
+          <div id="api-key-reveal-slot"></div>
+          <div id="api-keys-body" data-state="loading" style="margin-top: 1.5rem;">
+            <div id="api-keys-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+              <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
+              <p>Loading API keys...</p>
+            </div>
+            <div id="api-keys-error" role="alert" hidden style="text-align:center; padding: 2rem; color: var(--danger);">Could not load API keys.</div>
+            <div id="api-keys-empty" class="empty-state" hidden style="padding: 2rem;">No API keys yet.</div>
+            <table id="api-keys-table" hidden>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Prefix</th>
+                  <th>Created</th>
+                  <th>Last Used</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="api-keys-tbody"></tbody>
             </table>
           </div>
         </div>

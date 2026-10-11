@@ -113,7 +113,7 @@ Clone yalıtımı nedeniyle git'in kendi `http.proxy`, `http.sslCAInfo` ve `http
       -d '{"name":"ci"}'
     ```
 
-    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Anahtar yönetimi için arayüz ekranı F6'da gelecektir (D-22).
+    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Arayüzden de yönetilebilir (REQ-007 F6): anahtarlar kenar çubuğundaki **API Keys** görünümünden oluşturulur ve iptal edilir; anahtar orada da yalnız oluşturma anında bir kez gösterilir.
 
 **Tarama (Docker'sız, REQ-002 P-03/P-04)**
 
@@ -235,7 +235,7 @@ Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz
 
 REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama
 geçmişi) sırasıyla `PDF`, `Excel`, `CSV`, `NOTICE` ve `SBOM` bağlantıları vardır; ilk dördü
-dosyayı ara ekran olmadan doğrudan indirir. Çıktılar istek anında yalnız veritabanından üretilir:
+dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>` bağlantıları). Çıktılar istek anında yalnız veritabanından üretilir:
 `reports` satırı, dosya, denetim satırı veya ağ isteği oluşmaz (Raporlar ekranındaki asenkron
 raporlar aynen sürer).
 
@@ -375,7 +375,7 @@ REQ-007 (F6) P-23 / ADR-009 Karar 11. Repoda iki iş akışı vardır:
 
 | Dosya | Çalıştırıcı | Amaç |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | `windows-latest` | Bu reponun CI'ı: `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` → `npm run build`. Testler kendi `embedded-postgres` kümelerini başlatır (`--locale=C`); harici PostgreSQL hizmeti yoktur, ağ koruması (`tests/setup/networkGuard.ts`) CI'da da etkindir. |
+| `.github/workflows/ci.yml` | `ubuntu-latest` | Bu reponun CI'ı: `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` → `npm run build`. Testler kendi `embedded-postgres` kümelerini başlatır (`--locale=C`); harici PostgreSQL hizmeti yoktur, ağ koruması (`tests/setup/networkGuard.ts`) CI'da da etkindir. |
 | `.github/workflows/oss-risk-example.yml` | `ubuntu-latest` | Kendi repoların için örnek kalite kapısı: `postgres:17` servis kapsayıcısı → `npm ci` → `npm run build` → `npm run db:migrate` → `npm start` (arka planda, `HOST=127.0.0.1`, `PORT=3001`, log `$RUNNER_TEMP/server.log`'a) → `/health` en fazla 60 sn beklenir → `bootstrap --new-database` → `scan --fail-on critical` → sunucu logunun son 200 satırı (her durumda). |
 
 Örnekteki CLI çağrıları:
@@ -386,6 +386,12 @@ node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-ris
 OSS_RISK_API_KEY_FILE="$RUNNER_TEMP/oss-risk.key" node dist/cli/index.js scan \
   --project oss-risk-self --fail-on critical
 ```
+
+**CI neden Linux'ta (D-202).** Yerel geliştirme Windows'ta sürer; ancak GitHub'ın
+`windows-latest` çalıştırıcısı yönetici hesabıyla çalışır ve `embedded-postgres` orada
+"Execution of PostgreSQL by a user with administrative permissions is not permitted" hatasıyla
+açılmaz. `ubuntu-latest` çalıştırıcısının kullanıcısı root değildir; bu yüzden `ci.yml` Linux'ta
+koşar (örnek iş akışı da aynı commit'te Linux'ta uçtan uca geçmiştir).
 
 **Tetikleyiciler ve güvenlik.** Her iki iş akışı `push` (tüm branch'ler), `pull_request` (branch
 süzgeci yok; yığılı PR'larda da çalışır) ve `workflow_dispatch` ile tetiklenir; aynı ref'teki eski

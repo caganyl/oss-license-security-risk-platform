@@ -399,6 +399,51 @@ yalnız `env:` üzerinden aktarılır. Sekme karakteri yok. `timeout-minutes`
   `node dist/cli/index.js`'e dayanır; `npx` README'de kolaylık olarak yer alır
   ve bir alt süreç testiyle doğrulanır, başarısızsa README'den çıkarılır.
 
+> **REQ-007 ilk GitHub çalıştırması, D-202 (2026-10-11).** Yukarıdaki "İlk
+> Linux çalıştırma riski ve yedek" maddesinin tersi gerçekleşti: Linux yeşil,
+> Windows kırmızı. Olgular (commit `2d42488`):
+>
+> - `oss-risk-example.yml` (`ubuntu-latest`, servis `postgres:17`) ilk Linux
+>   çalıştırmasında **yeşil** (run `38122856860`, 50 sn): `bootstrap` →
+>   `scan`, 456 bağımlılık, güvenlik bulgusu 0, lisans bulgusu high=2,
+>   `Vulnerability data: disabled` (çevrimdışı kip), `--fail-on critical` →
+>   `Result: PASS`.
+> - `ci.yml` (`windows-latest`) **kırmızı** (run `38122856862`): çalıştırıcı
+>   yönetici hesabıyla (`runneradmin`) çalışır; `embedded-postgres`
+>   `postgres.exe`'yi doğrudan başlattığı için PostgreSQL "Execution of
+>   PostgreSQL by a user with administrative permissions is not permitted"
+>   ile reddeder (`initdb` başarılı, başlatma başarısız). `pg_ctl` kısıtlı
+>   token ile başlatabilirdi, ancak bu `tests/helpers/pgCluster.ts`'te yeni
+>   kod demektir.
+>
+> **Karar (D-202):** `ci.yml` işi `ubuntu-latest`'e taşınır; adım sırası
+> (checkout → setup-node → `npm ci` → lint → typecheck → test → build) ve
+> bu bölümdeki ortak sertleştirme kurallarının tümü (izinler, SHA sabitleme,
+> `persist-credentials: false`, `concurrency`, `timeout-minutes`, ağ
+> koruması, `env:` aktarımı) aynen geçerlidir. Yukarıdaki `ci.yml`
+> maddesindeki `windows-latest` ifadesi bu notla geçersizdir; maddenin
+> geri kalanı değişmez.
+>
+> **Gerekçe:** Linux çalıştırıcısı root değildir, `embedded-postgres` orada
+> sorunsuz başlar; uygulamanın Linux'ta çalıştığı örnek iş akışıyla
+> kanıtlanmıştır; test yardımcısında değişiklik gerekmez.
+>
+> **Bedel:** CI artık Windows'a özgü yolları (yol ayırıcıları, Türkçe yerel
+> ayar, `--locale=C` bayrağının Windows davranışı) sınamaz. Yerel geliştirme
+> Windows'ta sürdüğü için bu kapsam yerel test koşularıyla sağlanır;
+> handoff'ta Windows yerel test sonucu kanıt olarak yer almalıdır.
+>
+> **Takip işleri (bu ADR kapsamı dışında, ayrı iş olarak):**
+>
+> 1. İsteğe bağlı ikinci CI işi: `windows-latest` üzerinde testler — ya
+>    `pg_ctl` ile kısıtlı token başlatma (test yardımcısında yeni kod), ya da
+>    çalıştırıcıda önceden kurulu PostgreSQL servisi (`PGBIN`/`PGDATA`).
+>    Eklenirse yeni D-xx ve tarihli not gerekir.
+> 2. `actions/checkout@v4.2.2` ve `actions/setup-node@v4.4.0` node20
+>    hedefler; GitHub bunları Node 24'te zorla çalıştırıp uyarı verir. v5
+>    sürümlerine geçiş (yeni SHA'ların ana oturumca `git ls-remote` ile
+>    doğrulanması dahil) takip işidir.
+
 ### 12. Yol sahipliği
 
 | Agent | Yol | İş |

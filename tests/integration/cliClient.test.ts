@@ -215,11 +215,15 @@ describe('AC-P22-1 / ADR-009 Karar 1: entry point and import boundary (static)',
     expect(all.filter((f) => !graph.files.includes(f))).toEqual([]);
   });
 
-  it('AC-P22-1: the CLI sources do not use fetch, the global agent or NODE_TLS_REJECT_UNAUTHORIZED', () => {
+  it('AC-P22-1: the CLI sources do not use fetch, the global agent or NODE_TLS_REJECT_UNAUTHORIZED; TLS verification is pinned on', () => {
     for (const rel of cliModuleGraph().files) {
       const text = codeOnly(fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8'));
-      expect(text, rel).not.toMatch(/\bfetch\(|globalAgent|rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED|dotenv/);
+      expect(text, rel).not.toMatch(/\bfetch\(|globalAgent|rejectUnauthorized\s*:(?!\s*true\b)|NODE_TLS_REJECT_UNAUTHORIZED|dotenv/);
     }
+    // Security review L-1: an explicit `true` overrides an inherited
+    // NODE_TLS_REJECT_UNAUTHORIZED=0 for every https request.
+    const client = codeOnly(fs.readFileSync(path.join(REPO_ROOT, 'src/cli/client.ts'), 'utf8'));
+    expect(client).toMatch(/rejectUnauthorized:\s*true\b/);
   });
 });
 

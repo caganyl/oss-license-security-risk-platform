@@ -209,6 +209,11 @@ describe('AC-P23-2…4: oss-risk-example.yml content (contract section 10)', () 
     expect(text).toMatch(/--health-cmd "pg_isready/);
   });
 
+  it('AC-P23-2 (security review L-4): the postgres port is published on 127.0.0.1 only', () => {
+    const ports = lines.filter((l) => /^\s+- [\d.:]*5432:5432\s*$/.test(l)).map((l) => l.trim());
+    expect(ports).toEqual(['- 127.0.0.1:5432:5432']);
+  });
+
   it('AC-P23-2: steps in order: build, migrate, start (HOST=127.0.0.1, log file), /health wait, bootstrap, scan, log tail', () => {
     const at = (needle: string) => {
       const i = scripts.findIndex((s) => s.includes(needle));

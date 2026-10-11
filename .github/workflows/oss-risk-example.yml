@@ -72,7 +72,7 @@ jobs:
           # real secret: never put a real database password in a workflow file.
           POSTGRES_PASSWORD: example-ci-test-only
         ports:
-          - 5432:5432
+          - 127.0.0.1:5432:5432
         options: >-
           --health-cmd "pg_isready -U ossrisk -d ossrisk"
           --health-interval 5s

@@ -67,8 +67,11 @@ export const nodeRequest: RequestFn = (target, spec) => {
     };
     const headers: Record<string, string> = { ...spec.headers };
     if (spec.body !== null) headers['Content-Length'] = String(Buffer.byteLength(spec.body));
+    // Explicit `true` so an inherited NODE_TLS_REJECT_UNAUTHORIZED=0 cannot turn
+    // certificate verification off (contract 2.1; REQ-007 security review L-1).
+    const tls = target.protocol === 'https:' ? { rejectUnauthorized: true } : {};
     const req = mod.request(
-      { protocol: target.protocol, hostname: target.connectHost, port: target.port, method: spec.method, path: spec.path, headers, agent },
+      { protocol: target.protocol, hostname: target.connectHost, port: target.port, method: spec.method, path: spec.path, headers, agent, ...tls },
       (res) => {
         const declared = Number(res.headers['content-length']);
         if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {

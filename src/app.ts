@@ -20,7 +20,9 @@ import { createAuthRouter, createPublicAuthRouter } from './routes/authRoutes';
 import createUserRouter from './routes/userRoutes';
 import createSbomRouter from './routes/sbomRoutes';
 import createNoticeRouter from './routes/noticeRoutes';
+import createExportRouter from './routes/exportRoutes';
 import createReportRouter from './routes/reportRoutes';
+import { ExportLimiter } from './reports/exportLimiter';
 import createWorkflowRouter from './routes/workflowRoutes';
 import createProjectRouter from './routes/projectRoutes';
 import createScanRouter from './routes/scanRoutes';
@@ -47,6 +49,12 @@ export interface AppDeps {
   vulnerabilityScheduler?: () => VulnerabilitySchedulerView | null;
   /** Injected application clock of the status endpoint (default: system clock). */
   clock?: AppClock;
+  /**
+   * Cap of the one-click exports (REQ-007 AC-P24-7). Default: a new
+   * `ExportLimiter` per `createApp` (no module-level state); tests may inject
+   * one to hold slots deterministically.
+   */
+  exportLimiter?: ExportLimiter;
 }
 
 const PUBLIC_DIR = path.join(__dirname, '../public');
@@ -56,7 +64,8 @@ const JSON_BODY_LIMIT = '1mb';
  * Builds the Express app without listening. Middleware order follows
  * ADR-001 karar 8 (security headers, K13, come first): Host -> static and /health -> login/setup -> cookie/Bearer
  * authentication -> CSRF (Origin) -> routers and RBAC -> /api 404 -> JSON
- * error handler. All in-memory state (login throttle) belongs to this instance.
+ * error handler. All in-memory state (login throttle, export limiter) belongs
+ * to this instance.
  */
 export function createApp(deps: AppDeps): express.Express {
   const { db } = deps;
@@ -65,6 +74,7 @@ export function createApp(deps: AppDeps): express.Express {
   const allowed = buildAllowedOrigins(resolvePort(deps.port), resolveHost(deps.host));
   const jsonBody = express.json({ limit: JSON_BODY_LIMIT });
   const authController = new AuthController(db, new LoginThrottle());
+  const exportLimiter = deps.exportLimiter ?? new ExportLimiter();
 
   const app = express();
   app.disable('x-powered-by');
@@ -106,6 +116,7 @@ export function createApp(deps: AppDeps): express.Express {
   api.use('/users', createUserRouter(db));
   api.use(createSbomRouter(db));
   api.use(createNoticeRouter(db));
+  api.use(createExportRouter(db, exportLimiter));
   api.use(createReportRouter(db));
   api.use('/findings', createWorkflowRouter(db));
   api.use(createProjectRouter(db, scanRoots));

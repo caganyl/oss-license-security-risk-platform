@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { scanErrorText } from '../../src/scanner/errorMessage';
 import { MAX_MANIFEST_BYTES, SKIP_DIRS, parseManifests } from '../../src/scanner/parsers';
 import type { SandboxScanResult } from '../../src/types/scan';
 import { FORMATS_DIR, errorTextProblems } from '../helpers/parserGolden';
@@ -367,7 +368,21 @@ describe('AC-P10-12 / AC-P10-13 / AC-P10-15: per-file errors without absolute pa
     write(root, 'healthy/requirements.txt', 'requests==2.31.0\n');
 
     const r = parse(root);
-    expectHealthyShape(r, root);
+    expect(r.status).toBe('completed');
+    expect(r.total_deps).toBe(r.dependencies.length);
+    // V8 quotes a ~10 character window of the JSON source in its error text
+    // ("{"p": /tmp/ossr-"...). The content here quotes the root, so on POSIX
+    // the short `os.tmpdir()` (`/tmp`) fits in that window, on Windows the long
+    // `%TEMP%` never does. By design (src/scanner/parsers/common.ts `scrubRoot`,
+    // ADR-005 Karar 7) the parser thread only replaces the full scan root;
+    // `%TEMP%` and the profile are masked by the single main-thread funnel
+    // (`scanErrorText` -> `sanitizeErrorText`) before `scans.error_message`.
+    // So: thread level = no full root; after the funnel = no absolute path.
+    const funnelled: SandboxScanResult = {
+      ...r,
+      parse_errors: r.parse_errors.map((e) => ({ ...e, error: scanErrorText(e.error, { scanRoots: [root] }) })),
+    };
+    expect(errorTextProblems(funnelled, root)).toEqual([]);
     expect(errorsOf(r)).toEqual([
       'nodejs:bad-json-fwd/package.json',
       'nodejs:bad-json/package.json',
@@ -379,6 +394,10 @@ describe('AC-P10-12 / AC-P10-13 / AC-P10-15: per-file errors without absolute pa
     expect(namesOf(r)).toEqual(['healthy-dep', 'requests']);
     expect(filesOf(r)).toContain('bad-lock/package-lock.json'); // lock record stays, error is on package.json (ADR-005 Karar 2)
     for (const e of r.parse_errors) {
+      expect(e.error.toLowerCase()).not.toContain(root.toLowerCase());
+      expect(e.error.toLowerCase()).not.toContain(forward.toLowerCase());
+    }
+    for (const e of funnelled.parse_errors) {
       expect(e.error.toLowerCase()).not.toContain(root.toLowerCase());
       expect(e.error.toLowerCase()).not.toContain(forward.toLowerCase());
       expect(e.error.toLowerCase()).not.toContain(os.tmpdir().toLowerCase());

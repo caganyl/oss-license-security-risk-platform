@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "OSS License & Security Risk Platform Backend",
   "main": "dist/main.js",
+  "bin": {
+    "oss-risk": "dist/cli/index.js"
+  },
   "engines": {
     "node": "^22.21.0 || >=24.5.0"
   },

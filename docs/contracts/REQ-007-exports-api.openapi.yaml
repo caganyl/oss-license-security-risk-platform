@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: OSS Risk Platform - REQ-007 One-Click Exports API Contract (F6 / P-24, D-182...D-185)
+  version: 1.0.0
+  description: |
+    Status: Accepted - Onaylandi (kullanici daimi talimati, onerilen secenek), 2026-10-11.
+    status: approved
+
+    Insan okunur contract: docs/contracts/REQ-007-cli-and-exports.md (bolum 6 uc noktalar, bolum 7
+    CSV bicimi; CLI kurallari ve CLI JSON semasi bolum 2-5'te, bu dosyada degil).
+    Dayanak: docs/product/REQ-007.md r1 (AC-P24-1, -2, -7, -12), ADR-009 Karar 7-8, N-6.
+
+    Onay kaydi: kullanicinin 2026-10-11 daimi talimati geregi onerilen secenekle karara baglanmistir;
+    kullanicinin dosyayi gozden gecirip commit etmesi kaydi kesinlestirir. Implementation kapisi:
+    docs/ownership/REQ-007.json status=approved olmadan backend/frontend/test baslamaz.
+
+    Genel kurallar:
+    - Bu dosya F6'nin tek yeni sunucu yuzeyini tanimlar: uc GET uc noktasi. Mevcut uc noktalarin
+      JSON semalari ve durum kodlari DEGISMEZ (AC-G-4). Tek yeni hata kodu export_busy'dir.
+    - Kimlik, hata govdesi ve guvenlik basliklari docs/contracts/REQ-002-auth-api.md ile aynidir.
+    - Yan etkisiz okuma: reports satiri, dosya, audit_logs satiri ve ag istegi YOK (NOTICE emsali).
+    - Tarama erisimi NOTICE ile ayni: proje bazinda ek yetki yok; tarama var ve completed olmali.
+    - Degerlendirme sirasi: Host (403 host_rejected) -> kimlik (401) -> izin (403 forbidden) ->
+      scanId UUID (400) -> eszamanlilik yuvasi (429 export_busy) -> tarama aramasi (404) ->
+      uretim (200/500). Mesgulken var olmayan tarama icin de 429 doner (bilincli).
+    - Eszamanli uretim ust siniri: uc uc nokta toplaminda 2 (uygulama ornegine ait ExportLimiter).
+      NOTICE bu sinira girmez. Uretim suresi EXPORT_WORKER_TIMEOUT_MS (varsayilan 600000 ms);
+      asilirsa 500 internal_error. Yeni boyut siniri yok.
+    - Basliklar yalniz govde tamamen uretildikten sonra yazilir; hata yanitlari Content-Disposition
+      tasimaz. CSV bayt bayt belirlenimcidir; PDF/XLSX uretim zamani icerdigi icin istekten istege
+      bayt ve X-Checksum-SHA256 degisebilir.
+servers:
+  - url: http://127.0.0.1:3001
+    description: Varsayilan yerel bind (HOST=127.0.0.1, PORT=3001). TLS yok (kapsam disi).
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: exports
+    description: Tek tikla PDF / XLSX / CSV ciktilari (REQ-007 P-24)
+
+paths:
+  /api/scans/{scanId}/exports/project-report.pdf:
+    get:
+      tags: [exports]
+      operationId: exportProjectReportPdf
+      summary: Tamamlanmis tarama icin proje PDF raporunu eszamanli uret ve indir
+      description: |
+        Govde mevcut project_report PDF olusturucusunun ciktisidir (REQ-004 contract 1.5.0 bolum
+        5.3 V-12 satiri ve 5.4 kesinti notlari dahil). Asenkron project_report PDF'i ile metin
+        icerigi esittir (uretim zamani satiri haric).
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: PDF govdesi (ek olarak indirme).
+          headers:
+            Content-Type:
+              required: true
+              schema: { type: string, enum: [application/pdf] }
+            Content-Disposition:
+              required: true
+              description: scanId kucuk harfli kanonik UUID; filename* yok; proje adi yok.
+              schema:
+                type: string
+                pattern: '^attachment; filename="project-report-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf"$'
+              example: 'attachment; filename="project-report-3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f.pdf"'
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            X-Checksum-SHA256: { $ref: '#/components/headers/Checksum' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/XContentTypeOptions' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadScanId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ScanNotReady' }
+        '429': { $ref: '#/components/responses/ExportBusy' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/scans/{scanId}/exports/license-inventory.xlsx:
+    get:
+      tags: [exports]
+      operationId: exportLicenseInventoryXlsx
+      summary: Tamamlanmis tarama icin lisans envanteri Excel'ini eszamanli uret ve indir
+      description: |
+        Govde mevcut license_inventory Excel olusturucusunun ciktisidir: dort sayfa (Summary,
+        Dependencies, Licenses, Vulnerabilities), ayni sutunlar, formul kalkani, Summary sonunda
+        "Vulnerability Data Status" satiri (REQ-004 contract 1.5.0 bolum 5.3). Hucre degerleri
+        asenkron raporla esittir (uretim zamani haric).
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: XLSX govdesi (ek olarak indirme).
+          headers:
+            Content-Type:
+              required: true
+              schema: { type: string, enum: [application/vnd.openxmlformats-officedocument.spreadsheetml.sheet] }
+            Content-Disposition:
+              required: true
+              schema:
+                type: string
+                pattern: '^attachment; filename="license-inventory-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.xlsx"$'
+              example: 'attachment; filename="license-inventory-3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f.xlsx"'
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            X-Checksum-SHA256: { $ref: '#/components/headers/Checksum' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/XContentTypeOptions' }
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadScanId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ScanNotReady' }
+        '429': { $ref: '#/components/responses/ExportBusy' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/scans/{scanId}/exports/license-inventory.csv:
+    get:
+      tags: [exports]
+      operationId: exportLicenseInventoryCsv
+      summary: Tamamlanmis tarama icin lisans envanteri CSV'sini eszamanli uret ve indir
+      description: |
+        Excel Dependencies sayfasinin tek tablo izdusumu (ortak satir kurucusu). Bicim (insan okunur
+        contract bolum 7): UTF-8 + BOM (EF BB BF); ayirici virgul; satir sonu CRLF, son satir da
+        CRLF; ilk satir baslik; RFC 4180 tirnaklama (virgul, cift tirnak, CR, LF iceren veya
+        basinda/sonunda U+0020/U+0009 olan alan cift tirnakta, icteki " -> ""); formul korumasi
+        (=, +, -, @, TAB, CR ile baslayan metne ' oneki, tirnaklamadan once); Depth duz tam sayi
+        metni. Belirlenimci; zaman damgasi yok.
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: CSV govdesi (ek olarak indirme).
+          headers:
+            Content-Type:
+              required: true
+              schema: { type: string, enum: ['text/csv; charset=utf-8'] }
+            Content-Disposition:
+              required: true
+              schema:
+                type: string
+                pattern: '^attachment; filename="license-inventory-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.csv"$'
+              example: 'attachment; filename="license-inventory-3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f.csv"'
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            X-Checksum-SHA256: { $ref: '#/components/headers/Checksum' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/XContentTypeOptions' }
+          content:
+            text/csv; charset=utf-8:
+              schema:
+                type: string
+                description: |
+                  Baslik satiri (birebir): Name,Version,Ecosystem,Scope,Manifest,Depth,PURL,License,License Source
+              example: "﻿Name,Version,Ecosystem,Scope,Manifest,Depth,PURL,License,License Source\r\nleft-pad,1.3.0,nodejs,runtime,package-lock.json,1,pkg:npm/left-pad@1.3.0,WTFPL,registry:npm\r\n"
+        '400': { $ref: '#/components/responses/BadScanId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ScanNotReady' }
+        '429': { $ref: '#/components/responses/ExportBusy' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: ossrisk_session
+      description: |
+        REQ-002 contract ile ayni. Yalniz-cerez (K11) degildir. Arayuzdeki <a href download>
+        baglantisi ayni koken gezinmede SameSite=Strict cerezi gonderir.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 'ossr_<P>_<S> (REQ-002 contract, ADR-001 karar 6)'
+      description: REQ-002 contract ile ayni. Yalniz Authorization basligi; query string kabul edilmez.
+
+  parameters:
+    ScanId:
+      name: scanId
+      in: path
+      required: true
+      description: |
+        Tarama UUID'si. NOTICE/SBOM controller ile birebir ayni dogrulama (buyuk/kucuk harfe
+        duyarsiz). Uymazsa 400 invalid_request (veritabanina gidilmez). Dosya adindaki gosterim
+        veritabanindan okunan kucuk harfli kanonik UUID'dir.
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+      example: 3f2b8c1e-5d4a-4b6f-9c2d-1a2b3c4d5e6f
+
+  headers:
+    ContentLength:
+      description: Govdenin bayt sayisi.
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Checksum:
+      description: Govde baytlarinin SHA-256 ozeti, 64 karakter kucuk harf hex.
+      required: true
+      schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+    NoStore:
+      description: Kimlik dogrulamali indirme; onbellege yazilmaz.
+      required: true
+      schema: { type: string, enum: [no-store] }
+    XContentTypeOptions:
+      description: Tum yanitlarda zorunlu (REQ-002 K13); global middleware.
+      required: true
+      schema: { type: string, enum: [nosniff] }
+    RetryAfter:
+      description: Saniye cinsinden sabit deger.
+      required: true
+      schema: { type: string, enum: ['5'] }
+
+  schemas:
+    ErrorBody:
+      type: object
+      description: |
+        REQ-002 contract ErrorBody ile ayni (src/lib/httpError.ts sendError). 5xx mesaji sabittir.
+        Bu contract tek yeni kod ekler: export_busy (ErrorCode birlesimine ADDITIVE).
+      required: [error, message, code]
+      properties:
+        error: { type: string, description: HTTP durum adi, example: Too Many Requests }
+        message: { type: string }
+        code:
+          type: string
+          enum:
+            - invalid_request
+            - unauthenticated
+            - setup_required
+            - forbidden
+            - host_rejected
+            - not_found
+            - export_busy
+            - internal_error
+      additionalProperties: true
+
+  responses:
+    BadScanId:
+      description: scanId gecerli UUID degil. Veritabanina gidilmez; yuva tuketilmez.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          example: { error: Bad Request, message: scanId must be a valid UUID, code: invalid_request }
+    Unauthorized:
+      description: Gecerli oturum cerezi veya API anahtari yok (REQ-002).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          examples:
+            unauthenticated:
+              value: { error: Unauthorized, message: Authentication required, code: unauthenticated }
+            setupRequired:
+              value: { error: Unauthorized, message: Initial password setup required, code: setup_required }
+    Forbidden:
+      description: reports:read izni yok (RBAC ek alanlari required ve userRoles korunur) veya Host reddi.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          examples:
+            permission:
+              value:
+                required: reports:read
+                userRoles: []
+                error: Forbidden
+                message: Permission "reports:read" is required
+                code: forbidden
+            host:
+              value: { error: Forbidden, message: Host not allowed, code: host_rejected }
+    ScanNotReady:
+      description: Tarama yok VEYA completed degil. Iki durum ayni yaniti verir. 409 kullanilmaz.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          example: { error: Not Found, message: Scan not found or not yet completed, code: not_found }
+    ExportBusy:
+      description: |
+        Surec genelinde 2 PDF/XLSX/CSV uretimi suruyor. 404 kontrolunden ONCE doner. NOTICE etkilenmez.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          example: { error: Too Many Requests, message: Too many exports in progress; retry shortly, code: export_busy }
+    InternalError:
+      description: Beklenmeyen hata veya uretim suresi asimi. Mesaj sabit; ham hata metni donmez.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+          example: { error: Internal Server Error, message: Internal server error, code: internal_error }

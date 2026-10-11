@@ -313,21 +313,32 @@ function scanActions(row) {
       el('div', { className: 'progress-bar', style: `width: ${row.status === 'running' ? '65' : '15'}%;` }));
   }
   if (row.status === 'completed') {
+    // One-click exports (REQ-007 AC-P24-8, contract section 8): plain same-origin
+    // <a download> links, no fetch/Blob and no waiting screen. An empty `download`
+    // value lets the browser use the server's Content-Disposition file name.
+    // On 429 export_busy / 404 the browser reports the download as failed; the
+    // README tells the user to retry after a few seconds (accepted limitation).
+    const linkStyle = 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;';
+    const downloadLink = (href, label, text) => el('a', {
+      className: 'btn btn-sm',
+      href,
+      download: true,
+      'aria-label': label,
+      style: linkStyle,
+    }, icon('download', 'width:12px;height:12px;'), ' ' + text);
+    const pdfLink = downloadLink(apiPath('scans', row.id, 'exports', 'project-report.pdf'), 'Download project PDF report', 'PDF');
+    const excelLink = downloadLink(apiPath('scans', row.id, 'exports', 'license-inventory.xlsx'), 'Download license inventory (Excel)', 'Excel');
+    const csvLink = downloadLink(apiPath('scans', row.id, 'exports', 'license-inventory.csv'), 'Download license inventory (CSV)', 'CSV');
+    const noticeLink = downloadLink(apiPath('scans', row.id, 'notice'), 'Download NOTICE file', 'NOTICE');
     const sbomLink = el('a', {
       className: 'btn btn-sm',
       href: apiPath('scans', row.id, 'sbom', 'download'),
       target: '_blank',
       rel: 'noopener',
-      style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
+      style: linkStyle,
     }, icon('download', 'width:12px;height:12px;'), ' SBOM');
-    const noticeLink = el('a', {
-      className: 'btn btn-sm',
-      href: apiPath('scans', row.id, 'notice'),
-      target: '_blank',
-      rel: 'noopener',
-      style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
-    }, icon('download', 'width:12px;height:12px;'), ' NOTICE');
-    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem;' }, sbomLink, noticeLink);
+    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem; flex-wrap:wrap;' },
+      pdfLink, excelLink, csvLink, noticeLink, sbomLink);
   }
   return el('span', { style: 'color: var(--text-muted); font-size:0.8rem;' }, '—');
 }
@@ -1001,6 +1012,183 @@ async function loadUsersList() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════
+// API Keys view (REQ-007 AC-AK-1…4, contract section 9; REQ-002 D-22).
+// One-time reveal rule: the plain key lives only in the local variable of the
+// function that handles the POST response and in the `value` property of
+// #api-key-value. It is never assigned to a module-level variable, written to
+// localStorage/sessionStorage/URL/console, or put into an error/toast text.
+// The reveal panel is removed on Done, view switch, pagehide and session end.
+// ════════════════════════════════════════════════════════════════════
+
+/** Metadata only: true/false once the list has loaded, null while unknown. */
+let apiKeysHasActive = null;
+let apiKeysLoadSeq = 0;
+
+function removeApiKeyReveal() {
+  const panel = byId('api-key-reveal');
+  if (!panel) return;
+  const field = byId('api-key-value');
+  if (field) field.value = '';
+  panel.remove();
+}
+
+function setApiKeysState(state) {
+  const body = byId('api-keys-body');
+  if (!body) return;
+  body.dataset.state = state;
+  const parts = { loading: 'api-keys-loading', error: 'api-keys-error', empty: 'api-keys-empty', ready: 'api-keys-table' };
+  for (const [name, id] of Object.entries(parts)) {
+    const node = byId(id);
+    if (node) node.hidden = name !== state;
+  }
+}
+
+function renderApiKeyRow(row) {
+  const prefix = String(row.keyPrefix ?? '');
+  const active = row.revokedAt === null || row.revokedAt === undefined;
+  let action = null;
+  if (active) {
+    action = el('button', {
+      type: 'button',
+      className: 'btn btn-sm',
+      'aria-label': `Revoke API key ${prefix}`,
+    }, 'Revoke');
+    action.addEventListener('click', fire(() => revokeApiKey(row.id, prefix, action)));
+  }
+  return el('tr', null,
+    el('td', null, row.name ? String(row.name) : '—'),
+    el('td', null, el('code', null, prefix)),
+    el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, formatDate(row.createdAt)),
+    el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, row.lastUsedAt ? formatDate(row.lastUsedAt) : 'Never'),
+    el('td', null, active
+      ? el('span', { className: 'status-badge status-healthy' }, 'Active')
+      : el('span', { className: 'status-badge status-pending' }, `Revoked ${formatDate(row.revokedAt)}`)),
+    el('td', null, action));
+}
+
+async function loadApiKeys() {
+  const seq = ++apiKeysLoadSeq;
+  setApiKeysState('loading');
+  try {
+    const { data } = await api('/api/auth/api-keys');
+    if (seq !== apiKeysLoadSeq) return;
+    const rows = Array.isArray(data) ? data.filter((r) => r && typeof r === 'object') : [];
+    apiKeysHasActive = rows.some((r) => r.revokedAt === null || r.revokedAt === undefined);
+    const tbody = clear(byId('api-keys-tbody'));
+    for (const r of rows) tbody.appendChild(renderApiKeyRow(r));
+    setApiKeysState(rows.length ? 'ready' : 'empty');
+    refreshIcons();
+  } catch (e) {
+    if (seq !== apiKeysLoadSeq) return;
+    apiKeysHasActive = null;
+    setApiKeysState('error');
+    reportError(e, 'Could not load API keys');
+  }
+}
+
+/** Builds the one-time reveal panel. `keyValue` is only held by this call and the input's value property. */
+function showApiKeyReveal(keyId, keyValue) {
+  removeApiKeyReveal();
+  const slot = byId('api-key-reveal-slot');
+  if (!slot) return;
+
+  const field = el('input', {
+    type: 'text',
+    id: 'api-key-value',
+    className: 'form-control',
+    readonly: true,
+    autocomplete: 'off',
+    spellcheck: 'false',
+    'aria-label': 'New API key',
+    style: 'flex:1; min-width:240px; font-family:monospace;',
+  });
+  // Property, not attribute: the key does not appear in serialised markup.
+  field.value = keyValue;
+
+  const status = el('span', { id: 'api-key-copy-status', 'aria-live': 'polite', style: 'color:var(--text-muted); font-size:0.85rem;' });
+  const copyBtn = el('button', { type: 'button', id: 'api-key-copy-btn', className: 'btn btn-sm' }, icon('copy', 'width:12px;height:12px;'), ' Copy');
+  const doneBtn = el('button', { type: 'button', id: 'api-key-dismiss-btn', className: 'btn btn-sm btn-ghost' }, 'Done');
+
+  copyBtn.addEventListener('click', fire(async () => {
+    const current = byId('api-key-value');
+    if (!current) return;
+    try {
+      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(current.value);
+      status.textContent = 'Copied to clipboard';
+    } catch {
+      current.focus();
+      current.select();
+      status.textContent = 'Press Ctrl+C to copy';
+    }
+  }));
+  doneBtn.addEventListener('click', () => {
+    removeApiKeyReveal();
+    const createBtn = byId('api-key-create-btn');
+    if (createBtn) createBtn.focus();
+  });
+
+  const panel = el('div', {
+    id: 'api-key-reveal',
+    dataset: { keyId: String(keyId ?? '') },
+    style: 'background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35); border-radius:14px; padding:1rem 1.25rem; margin-top:1rem;',
+  },
+    el('p', { style: 'margin-bottom:0.75rem; font-weight:600;' }, 'Copy this key now. It will not be shown again.'),
+    el('div', { style: 'display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;' }, field, copyBtn, doneBtn),
+    el('div', { style: 'margin-top:0.5rem; min-height:1.2rem;' }, status));
+  slot.appendChild(panel);
+  refreshIcons();
+  field.focus();
+  field.select();
+}
+
+async function createApiKey() {
+  const btn = byId('api-key-create-btn');
+  const nameInput = byId('api-key-name');
+  if (!btn || !nameInput || btn.disabled) return;
+  const name = nameInput.value.trim();
+  // Unknown list state (still loading or failed) is treated as "may have an active key".
+  if (apiKeysHasActive !== false
+    && !window.confirm('Creating a new key revokes the current active key. Continue?')) return;
+
+  btn.disabled = true;
+  const viewAtStart = currentActiveView;
+  try {
+    const { data } = await api('/api/auth/api-keys', { method: 'POST', body: name ? { name } : {} });
+    const valid = data && typeof data.key === 'string' && data.key !== '';
+    if (!valid) throw new Error('Unexpected response from the server');
+    nameInput.value = '';
+    if (!currentUser || currentActiveView !== 'api-keys' || viewAtStart !== 'api-keys') {
+      // The view was left (or the session ended) while the request was in flight:
+      // the key is not rendered into a hidden view.
+      showToast('A new API key was created but not shown because the page changed. Create another key to see it.', 'error');
+    } else {
+      showApiKeyReveal(data.id, data.key);
+    }
+    await loadApiKeys();
+  } catch (e) {
+    reportError(e, 'Could not create API key');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function revokeApiKey(id, prefix, button) {
+  if (!window.confirm(`Revoke API key ${prefix}? Clients using it will stop working.`)) return;
+  if (button) button.disabled = true;
+  try {
+    await api(apiPath('auth', 'api-keys', id), { method: 'DELETE' });
+    const panel = byId('api-key-reveal');
+    if (panel && panel.dataset.keyId === String(id)) removeApiKeyReveal();
+    showToast('API key revoked');
+    await loadApiKeys();
+  } catch (e) {
+    if (button && button.isConnected) button.disabled = false;
+    reportError(e, 'Could not revoke API key');
+  }
+}
+
 // ── Modal Handlers
 function openModal() {
   byId('scanModal').classList.add('open');
@@ -1085,11 +1273,20 @@ const VIEWS = {
     load: () => loadUsersList(),
     refresh: () => loadUsersList(),
   },
+  'api-keys': {
+    title: 'API Keys',
+    subtitle: 'Personal API key for the oss-risk CLI and CI',
+    // refreshAll only reloads the list; it never removes or rebuilds the reveal panel.
+    load: () => loadApiKeys(),
+    refresh: () => loadApiKeys(),
+  },
 };
 
 async function switchView(targetView) {
   if (!Object.prototype.hasOwnProperty.call(VIEWS, targetView)) return;
   const cfg = VIEWS[targetView];
+  // A freshly created API key is shown only while the API Keys view stays open.
+  if (!(targetView === 'api-keys' && currentActiveView === 'api-keys')) removeApiKeyReveal();
 
   document.querySelectorAll('#sidebar-nav .nav-item').forEach((b) => {
     const active = b.dataset.view === targetView;
@@ -1139,7 +1336,10 @@ function setAuthMessage(text, kind) {
 
 /** Clears data rendered for the previous session so it does not linger in the DOM. */
 function clearAppData() {
-  ['scans-tbody', 'scans-list-tbody', 'projects-list-tbody', 'users-list-tbody', 'sbom-documents-tbody'].forEach((id) => clear(byId(id)));
+  ['scans-tbody', 'scans-list-tbody', 'projects-list-tbody', 'users-list-tbody', 'sbom-documents-tbody', 'api-keys-tbody'].forEach((id) => clear(byId(id)));
+  apiKeysHasActive = null;
+  const keyName = byId('api-key-name');
+  if (keyName) keyName.value = '';
   ['findings-scan-select', 'sbom-scan-select'].forEach((id) => clear(byId(id)));
   const findings = byId('findings-container');
   if (findings) clear(findings).appendChild(emptyState('alert-triangle', 'No scan selected', 'Select a completed scan above to view its dependency findings.'));
@@ -1153,6 +1353,8 @@ function showAuth(mode, notice) {
   currentUser = null;
   stopAllPolling();
   closeModal();
+  // Session ended (logout or 401 redirect): drop any one-time API key display.
+  removeApiKeyReveal();
   if (wasInApp) clearAppData();
 
   const appRoot = byId('app-root');
@@ -1326,6 +1528,12 @@ function bindHandlers() {
   byId('logout-btn').addEventListener('click', fire(logout));
   byId('findings-scan-select').addEventListener('change', fire(loadScanFindings));
   byId('sbom-scan-select').addEventListener('change', fire(loadScanSboms));
+  // No native form submission (REQ-002: a null Origin would be rejected); fetch only.
+  byId('api-key-create-form').addEventListener('submit', fire((e) => {
+    e.preventDefault();
+    return createApiKey();
+  }));
+  window.addEventListener('pagehide', removeApiKeyReveal);
 
   byId('scanModal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();

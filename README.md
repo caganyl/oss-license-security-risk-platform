@@ -113,7 +113,7 @@ Clone yalıtımı nedeniyle git'in kendi `http.proxy`, `http.sslCAInfo` ve `http
       -d '{"name":"ci"}'
     ```
 
-    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Anahtar yönetimi için arayüz ekranı F6'da gelecektir (D-22).
+    Yanıttaki `data.key` (`ossr_` ile başlar) yalnız bu yanıtta bir kez gösterilir, sonradan tekrar alınamaz. Yeni anahtar oluşturmak önceki aktif anahtarı otomatik iptal eder (D-16). Anahtarı CLI/CI isteklerinde `Authorization: Bearer <api-anahtari>` başlığıyla gönderin. Bir anahtarı iptal etmek için yanıttaki `data.id` ile, aynı çerez ve `Origin` başlığıyla `DELETE /api/auth/api-keys/{id}` çağırın. Arayüzden de yönetilebilir (REQ-007 F6): anahtarlar kenar çubuğundaki **API Keys** görünümünden oluşturulur ve iptal edilir; anahtar orada da yalnız oluşturma anında bir kez gösterilir.
 
 **Tarama (Docker'sız, REQ-002 P-03/P-04)**
 
@@ -230,5 +230,216 @@ Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını her
 - **Durum uç noktası ve Dashboard paneli:** `GET /api/vulnerability-data/status` (`scans:read` izni, oturum çerezi veya `Authorization: Bearer <api-anahtari>`) ayarları, zamanlayıcının bir sonraki kontrol zamanını, son yeniden kontrol çalıştırmasını, projelerin son taramalarının güvenlik açığı verisi durumunu (en fazla 500 proje, sayımlar tüm projeler üzerinden) ve son 7 günde süresi dolup yeniden açılan risk kabulü sayısını salt okunur olarak döner (`Cache-Control: no-store`). Hiçbir şey yazmaz, ağ isteği yapmaz. Dashboard'daki güvenlik açığı verisi paneli bu uç noktayı kullanır.
 
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
+
+## Tek tıkla çıktılar (PDF, Excel, CSV, NOTICE)
+
+REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama
+geçmişi) sırasıyla `PDF`, `Excel`, `CSV`, `NOTICE` ve `SBOM` bağlantıları vardır; ilk dördü
+dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>` bağlantıları). Çıktılar istek anında yalnız veritabanından üretilir:
+`reports` satırı, dosya, denetim satırı veya ağ isteği oluşmaz (Raporlar ekranındaki asenkron
+raporlar aynen sürer).
+
+| Uç nokta (`reports:read`, oturum çerezi veya `Authorization: Bearer <api-anahtari>`) | İçerik | Dosya adı |
+| --- | --- | --- |
+| `GET /api/scans/{scanId}/exports/project-report.pdf` | `project_report` PDF'i | `project-report-<scanId>.pdf` |
+| `GET /api/scans/{scanId}/exports/license-inventory.xlsx` | `license_inventory` Excel'i (dört sayfa) | `license-inventory-<scanId>.xlsx` |
+| `GET /api/scans/{scanId}/exports/license-inventory.csv` | Excel `Dependencies` sayfasının CSV'si | `license-inventory-<scanId>.csv` |
+| `GET /api/scans/{scanId}/notice` (değişmedi) | NOTICE metni | `NOTICE-<scanId>.txt` |
+
+- **Yanıt:** `Content-Disposition: attachment`, `Content-Length`, `X-Checksum-SHA256` (gövdenin
+  SHA-256'sı) ve `Cache-Control: no-store`. Dosya adında proje adı yoktur. Geçersiz `scanId` →
+  `400`; olmayan veya tamamlanmamış tarama → `404` ("Scan not found or not yet completed").
+- **Eşzamanlı üretim sınırı:** Sunucu aynı anda en fazla **2** PDF/Excel/CSV üretir (üç uç nokta
+  toplamı; NOTICE sınır dışıdır). Fazlası `429` (`code: export_busy`, `Retry-After: 5`) alır; bu
+  durumda tarayıcı indirmeyi başarısız gösterir — **birkaç saniye sonra tekrar deneyin.** Sınır
+  doluyken var olmayan bir tarama için de `429` döner. Tek üretim `EXPORT_WORKER_TIMEOUT_MS`
+  (varsayılan 10 dakika) ile sınırlıdır; aşılırsa `500`.
+- **CSV biçimi:** UTF-8 + BOM, ayırıcı virgül (yerel ayardan bağımsız), satır sonu CRLF (son satır
+  dahil), ilk satır `Name,Version,Ecosystem,Scope,Manifest,Depth,PURL,License,License Source`.
+  Virgül, çift tırnak veya satır sonu içeren ya da başında/sonunda boşluk/sekme olan alan çift
+  tırnağa alınır (içteki `"` → `""`). Hücre metinleri Excel `Dependencies` sayfasıyla aynıdır;
+  `=`, `+`, `-`, `@`, sekme veya satır başı ile başlayan değerlerin başında Excel'deki gibi `'`
+  bulunur (formül enjeksiyonu kalkanı). Aynı tarama için CSV bayt bayt aynıdır; PDF ve Excel üretim
+  zamanını içerdiği için istekten isteğe özet değişebilir. Türkçe yerel ayarlı Excel'de (ayırıcı
+  `;`) `.xlsx` çıktısını kullanın.
+- **Güvenlik açığı verisi satırı (V-12):** Excel ve PDF raporlarının `Summary` bölümünün sonunda
+  `Vulnerability Data Status` satırı bulunur: `complete`, `partial (some packages could not be
+  checked)`, `unavailable (vulnerability source unreachable)`, `disabled (lookup turned off)`
+  veya (F4 öncesi taramalar) `not checked`. Asenkron raporlarda da aynıdır.
+- **PDF kesinti notu:** PDF'teki `Security Findings` (40 satır), `License Findings` (40) ve
+  `Dependency Inventory` (50) tabloları kesildiğinde tablonun altına
+  `Showing first <n> of <toplam>; see the Excel or CSV export for the full list.` yazılır. Tam
+  liste Excel/CSV'dedir.
+
+## Komut satırı istemcisi (`oss-risk` CLI)
+
+REQ-007 (F6) / ADR-009. CLI, çalışan bir sunucuya karşı mevcut bir projenin taramasını başlatır,
+bitmesini bekler ve `--fail-on` eşiğine göre çıkış kodu döner; CI'da kalite kapısı olarak
+kullanılır. Yalnız Node yerleşik modüllerini kullanır (yeni bağımlılık yok), `.env` okumaz,
+sunucu modüllerini içe aktarmaz.
+
+**Desteklenen çağrı:** `npm run build` sonrası `node dist/cli/index.js <komut> …`
+(`package.json` `bin` alanı `oss-risk` adını tanımlar; `npx oss-risk` repo içinde bir
+kolaylıktır ve doğrulanması gerekir). `--help`/`-h` ve `--version`/`-V` ağ isteği yapmaz.
+
+```bash
+# Tarama (anahtar yalnız ortam değişkeninden)
+OSS_RISK_API_KEY_FILE=~/.config/oss-risk.key \
+  node dist/cli/index.js scan --project my-service --fail-on high
+node dist/cli/index.js scan --project 0b6e2f1a-1c2d-4e5f-8a9b-0c1d2e3f4a5b --format json
+
+# Geçici CI veritabanında ilk kurulum + API anahtarı (yalnız YENİ veritabanı!)
+node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-risk.key" \
+  --project-name my-service --project-path .
+```
+
+`scan` seçenekleri: `--project <uuid|ad>` (zorunlu; UUID değilse birebir ad eşleşmesi),
+`--url <adres>`, `--fail-on none|low|medium|high|critical` (varsayılan `high`),
+`--format text|json` (varsayılan `text`), `--timeout <saniye>` (10–86400, varsayılan 1800),
+`--allow-incomplete`. `bootstrap` seçenekleri: `--new-database` (zorunlu), `--key-file <yol>`
+(zorunlu, dosya var olmamalı), `--url`, `--project-name` + `--project-path` (birlikte).
+
+**Ortam değişkenleri**
+
+| Değişken | Anlam |
+| --- | --- |
+| `OSS_RISK_API_KEY` | API anahtarı değeri (`scan`). |
+| `OSS_RISK_API_KEY_FILE` | API anahtarını içeren dosyanın yolu (en fazla 1 KiB, baştaki/sondaki boşluk atılır). İkisinden **tam olarak biri** verilmelidir. |
+| `OSS_RISK_URL` | Sunucu adresi; `--url` önce gelir; varsayılan `http://127.0.0.1:3001`. |
+
+Anahtar komut satırından **verilemez**: `--api-key`, `--key`, `--token` çıkış 2 ile reddedilir.
+Anahtar yalnız `Authorization: Bearer` başlığıyla gönderilir; çıktıya, log'a veya hata metnine
+yazılmaz. `bootstrap` anahtar ortam değişkenlerini okumaz.
+
+**Adres kuralları:** `http(s)://host[:port]` (kullanıcı bilgisi, yol, sorgu, parça yok).
+Loopback (`127.0.0.1`, `localhost`, `[::1]`) dışındaki adresler `https` olmalıdır; loopback dışı
+`http` hiç bağlantı kurmadan 2 ile reddedilir. CLI loopback isteklerinde `Host: <host>:<port>`
+başlığını açıkça gönderir. **Loopback dışı `https` sınırı:** sunucu yalnız kendi Host izin
+listesini kabul eder; loopback dışı `https` ancak TLS sonlandıran bir ara katman `Host`'u izin
+listesine uygun iletirse çalışır, aksi halde `403 host_rejected` → çıkış 2. Vekil sunucu
+(`HTTP(S)_PROXY`) kullanılmaz, yönlendirmeler izlenmez (çıkış 3), TLS doğrulaması kapatılamaz.
+
+**Çıkış kodları**
+
+| Kod | Anlam |
+| --- | --- |
+| `0` | Tarama tamamlandı; eşik aşılmadı ve veri tamlığı sağlandı (veya `--fail-on none`, `disabled`, `--allow-incomplete`). `--help`, `--version`, başarılı `bootstrap`. |
+| `1` | Tarama tamamlandı; `--fail-on` eşiği aşıldı. |
+| `2` | Kullanım/yapılandırma: argüman, `--api-key` ailesi, adres, anahtar kaynağı/biçimi, `--new-database` yok, proje bulunamadı/belirsiz/reddedildi, anahtar dosyası zaten var, `403 host_rejected`/`origin_rejected`. |
+| `3` | Tarama `failed`/`cancelled`/`timeout`, bekleme süresi doldu, bağlantı hatası/istek zaman aşımı (GET'lerde art arda 3), `3xx`, `429`, `5xx`, beklenmeyen yanıt, gövde > 32 MiB. |
+| `4` | Kimlik/yetki: `401`, diğer `403`; `bootstrap`'ta veritabanı zaten kurulmuş (`409`). |
+| `5` | Tarama tamamlandı, eşik aşılmadı ama güvenlik açığı verisi eksik (`partial`, `unavailable`, `not_checked`, `unknown`) ve `--allow-incomplete` yok. |
+
+Öncelik: 2/3/4 → 1 → 5 → 0. `--fail-on none` iken 1 ve 5 üretilmez.
+
+**`--fail-on` eşlemesi.** Yalnız `open`/`in_review` durumundaki `security` ve `license`
+bulguları sayılır. Etkin seviye ≥ eşik olan en az bir bulgu varsa eşik aşılır
+(`low < medium < high < critical`).
+
+| Tür | Girdi | Etkin seviye |
+| --- | --- | --- |
+| security | `severity` = `low`/`medium`/`high`/`critical` | aynen |
+| security | `severity` = `none` | yok (eşik tetiklenmez) |
+| security | `severity` boş veya tanınmayan | `high` |
+| license | `risk_level` = `safe` | yok (politika tabanı yoksa) |
+| license | `risk_level` = `low`/`medium`/`high`/`critical` | aynen |
+| license | `risk_level` = `unknown`, boş veya tanınmayan | `high` |
+| license | `applied_policy` = `prohibited` / `restricted` / `review_required` | taban `critical` / `high` / `medium` |
+| license | birleşim | max(risk seviyesi, politika tabanı) |
+
+**Veri tamlığı.** Tamamlanan taramada `GET /api/vulnerability-data/status` her zaman okunur;
+durum `complete` değilse uyarı yazılır. Bilinen sınırlar: durum listesi en fazla 500 proje
+döndürür (sonrakiler eşleşmez) ve aynı projenin daha yeni bir taraması okumadan önce biterse
+eşleşme kaybolur; her iki durumda sonuç `unknown` → 5'tir. Çözüm yeniden çalıştırmak veya
+bilinçli olarak `--allow-incomplete` kullanmaktır.
+
+**Çıktı.** `text`: özet stdout'a, ilerleme/uyarı/hata stderr'e. `json`: stdout'a tek JSON nesnesi
+(`schemaVersion: 1`; şema `docs/contracts/REQ-007-cli-and-exports.md` bölüm 5.6), stderr boş.
+Uzak kaynaklı tüm metinler tek satıra indirilir, kontrol karakterleri (ANSI dahil) silinir ve
+200 kod noktasıyla kesilir.
+
+**`bootstrap` uyarısı (ADR-001 Karar 12).** `bootstrap`, parolası olmayan bir veritabanına
+**bilinmeyen rastgele bir admin parolası** koyar ve API anahtarını `--key-file`'a (`wx`, POSIX'te
+0600; Windows'ta klasör ACL'i devralınır) yazar. Yalnız **yeni, boş, geçici** (CI) bir
+veritabanında çalıştırın; bu yüzden `--new-database` beyanı zorunludur. Sunucu setup'ı, parolası
+kurtarma için boşaltılmış (ADR-001 Karar 12 kurtarma durumundaki) bir veritabanında da kabul eder
+ve istemci bu iki durumu ayıramaz: gerçek veriye sahip, kurtarma durumundaki bir veritabanına karşı
+`bootstrap` çalıştırmak admin parolasını bilinmeyen bir değere ayarlar. Bu olursa kurtarma yeniden
+`db/README.md`'deki Karar 12 adımıyla yapılır. Veritabanı zaten kuruluysa `bootstrap` 4 ile
+çıkar; anahtar dosyası varsa hiç istek yapmadan 2 ile çıkar. Anahtar dosyasını kullanıcıya ait
+bir klasörde tutun.
+
+## GitHub Actions
+
+REQ-007 (F6) P-23 / ADR-009 Karar 11. Repoda iki iş akışı vardır:
+
+| Dosya | Çalıştırıcı | Amaç |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | `ubuntu-latest` | Bu reponun CI'ı: `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` → `npm run build`. Testler kendi `embedded-postgres` kümelerini başlatır (`--locale=C`); harici PostgreSQL hizmeti yoktur, ağ koruması (`tests/setup/networkGuard.ts`) CI'da da etkindir. |
+| `.github/workflows/oss-risk-example.yml` | `ubuntu-latest` | Kendi repoların için örnek kalite kapısı: `postgres:17` servis kapsayıcısı → `npm ci` → `npm run build` → `npm run db:migrate` → `npm start` (arka planda, `HOST=127.0.0.1`, `PORT=3001`, log `$RUNNER_TEMP/server.log`'a) → `/health` en fazla 60 sn beklenir → `bootstrap --new-database` → `scan --fail-on critical` → sunucu logunun son 200 satırı (her durumda). |
+
+Örnekteki CLI çağrıları:
+
+```bash
+node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-risk.key" \
+  --project-name oss-risk-self --project-path "$RUNNER_TEMP/oss-risk-target"
+OSS_RISK_API_KEY_FILE="$RUNNER_TEMP/oss-risk.key" node dist/cli/index.js scan \
+  --project oss-risk-self --fail-on critical
+```
+
+**CI neden Linux'ta (D-202).** Yerel geliştirme Windows'ta sürer; ancak GitHub'ın
+`windows-latest` çalıştırıcısı yönetici hesabıyla çalışır ve `embedded-postgres` orada
+"Execution of PostgreSQL by a user with administrative permissions is not permitted" hatasıyla
+açılmaz. `ubuntu-latest` çalıştırıcısının kullanıcısı root değildir; bu yüzden `ci.yml` Linux'ta
+koşar (örnek iş akışı da aynı commit'te Linux'ta uçtan uca geçmiştir).
+
+**Tetikleyiciler ve güvenlik.** Her iki iş akışı `push` (tüm branch'ler), `pull_request` (branch
+süzgeci yok; yığılı PR'larda da çalışır) ve `workflow_dispatch` ile tetiklenir; aynı ref'teki eski
+çalıştırma `concurrency` ile iptal edilir. İzinler iş akışı düzeyinde yalnız `contents: read`'dir;
+hiçbir GitHub secret'ı gerekmez. Yalnız GitHub'ın birinci taraf `actions/checkout` ve
+`actions/setup-node` eylemleri kullanılır, her biri tam 40 karakterlik commit SHA'sına sabitlidir
+(yanında sürüm yorumu); `actions/checkout` `persist-credentials: false` ile çalışır. Ayrıcalıklı PR
+tetikleyicisi (`pull_request_target`) yoktur. İş akışı girdileri betiklere yalnız `env:` üzerinden
+aktarılır. Eylemleri güncellerken yeni SHA'yı etiketten doğrulayın:
+`git ls-remote https://github.com/actions/checkout refs/tags/<etiket>` (açıklamalı etikette `^{}`
+satırındaki commit).
+
+**Test parolası.** Örnekteki `POSTGRES_PASSWORD`/`PGPASSWORD` değeri (`example-ci-test-only`)
+gerçek bir sır değildir: yalnız iş süresince yaşayan, yalnız çalıştırıcıdan erişilen ve iş bitince
+silinen geçici kapsayıcıya aittir. Gerçek bir veritabanı parolasını iş akışı dosyasına yazmayın.
+`postgres:17` sabit majör etikettir; daha sıkı tedarik zinciri denetimi için imajı digest ile
+sabitleyebilirsiniz (`postgres:17@sha256:…`).
+
+**Tarama hedefi.** Bu repoda örnek yalnız kök `package.json` + `package-lock.json` kopyasını
+(`$RUNNER_TEMP/oss-risk-target`) tarar; `tests/fixtures` altındaki bilerek riskli manifestler
+taranmaz.
+
+**Kendi reponuza uyarlama.**
+
+1. Platformu ve kendi kodunuzu çekin: ikinci bir `actions/checkout` adımıyla (`repository:
+   <sahip>/<oss-risk-reposu>`, `path: oss-risk`, `persist-credentials: false`) platformu alt
+   klasöre çekin; `npm ci`, `npm run build`, `npm run db:migrate`, `npm start` ve
+   `node dist/cli/index.js …` adımlarını `working-directory: oss-risk` ile çalıştırın.
+2. "Prepare scan target" kopyalama adımını silin; `SCAN_ROOTS` ve `--project-path` değerini
+   `$GITHUB_WORKSPACE`'e (veya taranacak repoyu ayrı bir `actions/checkout` ile çektiğiniz
+   klasöre) verin.
+3. **Eşik:** örnek `--fail-on critical` ile yalnız kritik bulguda kırmızı olur. Kapıyı
+   sıkılaştırmak için `--fail-on high` kullanın (CLI varsayılanı); çıkış kodları ve
+   `--fail-on` eşlemesi için yukarıdaki CLI bölümüne bakın.
+
+**Ağ kipi ve gizlilik.** `push` ve `pull_request` çalıştırmaları çevrimdışıdır:
+`REGISTRY_ENRICHMENT=off`, `VULNERABILITY_LOOKUP=off`, `VULNERABILITY_RECHECK=off`. CLI `disabled`
+uyarısını yazar, çıkış kodu etkilenmez; sonuç dış hizmet kesintisine veya günlük yeni CVE'lere
+bağlı değildir. GitHub arayüzünde **Actions → oss-risk example → Run workflow** ile `online`
+girdisi işaretlenerek elle başlatılan çalıştırmada kayıt defteri zenginleştirmesi ve OSV/NVD
+güvenlik açığı sorgusu açılır; bu durumda **paket adları ve sürümleri** `registry.npmjs.org`,
+`pypi.org`, `files.pythonhosted.org`, `api.nuget.org` ve `api.osv.dev`'e, CVE kimlikleri
+`services.nvd.nist.gov`'a gider (yukarıdaki "Dışarı giden bağlantıların tam listesi"). `online`
+kipte `--allow-incomplete` verilmez: güvenlik açığı verisi `partial`/`unavailable` ise iş 5 ile
+kırmızı biter. `workflow_dispatch` düğmesi yalnız iş akışı dosyası varsayılan branch'te
+(`main`) olduğunda görünür.
+
+**İlk Linux çalıştırması.** Uygulama şimdiye dek Windows'ta geliştirildi; örnek iş akışı onu
+ilk kez Linux'ta çalıştırır. Kırmızı biterse önce "Server log (last 200 lines)" adımına bakın.
 
 _Agentic Development Orchestrator ile oluşturuldu._

@@ -497,6 +497,38 @@ Yardımcılar: `helpers/f4Seed.ts` (paket upsert'li tarama/bulgu/inceleme tohuml
 sorgu motoru). Testler `VULNERABILITY_RECHECK=off` test varsayılanıyla çalışır; durum uç noktasındaki
 `next_check_earliest_at` beklentisi etkin `recheck_enabled` değerine göre kurulur.
 
+## REQ-006 (F5 — NuGet) QA batch B: zenginleştirme, çıktılar, OSV NuGet
+
+Yardımcı: `helpers/fakeNuget.ts` — sahte kayıt defterinde flat container
+(`/v3-flatcontainer/{id}/{ver}/{id}.nuspec`, `{id}.{ver}.nupkg`) rotaları, `.nuspec`
+kurucusu, test anında üretilen imzalı biçimli/imzasız `.nupkg`, bağımsız içerik özeti
+kâhini (`.signature.p7s` olmadan aynı girdilerin deterministik zip'i) ve
+`packages.lock.json` üreticisi. Gerçek nuget.org `contentHash` değerleri
+(Newtonsoft.Json 13.0.3/13.0.1) yalnız belge sabitidir; indirilmez.
+
+| AC | Test |
+| --- | --- |
+| AC-P21-2 | `unit/nugetEnrichmentPure` (URL biçimi); `integration/nugetEnrichment` (yalnız flat container istekleri, `.nuspec` aynı köken yönlendirmesi izlenir, `.nupkg` yönlendirmesi reddedilir) |
+| AC-P21-4 | `unit/nugetEnrichmentPure` (`BAD_NUSPEC`: kök, `metadata`, id; bozuk XML; DOCTYPE; 1 MiB → `TOO_LARGE`); `integration/nugetEnrichment` (`BAD_NUSPEC` → `error`, önbelleğe yazılmaz, ikinci taramada yeniden istenir) |
+| AC-P21-5 | `unit/nugetEnrichmentPure` (öncelik, bilinmeyen `type`, `../LICENSE` eşleşmez); `integration/nugetEnrichment` (`no_license`/`none`/`license_unclassified='file'`, EULA metni NOTICE'te, iç içe `lib/net8.0/LICENSE` toplanmaz) |
+| AC-P21-6 | `unit/nugetEnrichmentPure` (URL tablosu, `licenses.nuget.org`, aka.ms, spdx.org); `integration/nugetEnrichment` (`licenseUrl` hiç istenmez, `url` sınıfı) |
+| AC-P21-7 | `integration/nugetEnrichment` (contract 1.4.0 §5.1 C-29: `License` ifade veya boş, `License Source` hiç boş değil, `Licenses` sayfasında `NOASSERTION`) |
+| AC-P21-8 | `integration/nugetEnrichment` (ikinci taramada `.nuspec` isteği sıfır, `canonical_name` saklanır) |
+| AC-P21-9 | `unit/nugetEnrichmentPure` (`nugetSignedContentHash` = kâhin, imza başta/ortada/sonda; imzasız/çift imza/ZIP64/kesik → null; bozuk bayt → farklı özet); `integration/nugetEnrichment` (içerik özeti `match`; ham özet `match`; farklı özet → fail-safe, önbelleğe yazılmaz, yeniden indirilir; özet yok → istek yok `no_candidate`/`not_comparable`; iki farklı özet → indirmeden `mismatch`; önbellek isabeti `match`) |
+| AC-P21-11 | `integration/nugetEnrichment` (NOTICE `nuget` girdileri, satır 7a, satır 15, "not supported" nedeni yok, sınıflandırılmamış öneki) |
+| AC-P21-14 | `integration/nugetEnrichment` (`[registry]` satırında NuGet `error`/uyuşmazlık sayıları, paket adı yok) |
+| AC-P21-15 | `unit/nugetEnrichmentPure` (ifadede kontrol karakteri saklanmaz) |
+| AC-P20-18 | `integration/nugetEnrichment` (NOTICE sırası `npm < nuget < pypi`, harf farkı tek girdi; Excel PURL; SBOM `pkg:nuget/<id>@<sürüm>` ve `NOASSERTION`) |
+| AC-NV-1 | `unit/nugetEnrichmentPure` (`NuGet` ekosistemi, `<id>`/ilk görülen yazım, dotnet→PyPI yok); `integration/nugetEnrichment` (querybatch gövdesi) |
+| AC-NV-2 | `unit/nugetEnrichmentPure` (harf duyarsız `affected` seçimi; npm F4 zinciri); `integration/nugetEnrichment` (`acme.expr` kaydı → 1 zafiyet) |
+| AC-NV-3 | `integration/nugetEnrichment` (yeniden kontrol `dotnet`→`NuGet`, `canonical_name`) |
+| AC-NV-4 | `unit/nugetEnrichmentPure` (npm/PyPI sorguları kanonik ad haritasından etkilenmez, F4 biçimi) |
+| AC-G-4 | `integration/nugetEnrichment` (`license_unclassified` yalnız worker/enrichment/NOTICE/rapor üreticilerinde; API yanıtına girmez) |
+
+Bilinen kırmızı: yok. Gözlem: `bestAffected` ilk adımı (ekosistemden bağımsız birebir ad
+eşleşmesi) F4'ten korunmuştur; aynı kayıtta aynı adlı npm ve NuGet girdisi olursa npm
+girdisi seçilebilir (pratikte OSV kayıtları ekosistem başınadır).
+
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının
 `textContent` ile gösterilmesi, migration testi).

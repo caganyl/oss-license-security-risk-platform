@@ -3,7 +3,9 @@
  * (helpers/fakeRegistry; ADR-008 "Test stratejisi"; AC-P21-2/4/9, AC-G-2).
  *
  * - `nuspecXml(...)` builds a `.nuspec` body (license expression / file /
- *   licenseUrl variants, custom root or id for `BAD_NUSPEC` cases).
+ *   licenseUrl variants, custom root, id or version — or no `<version>` — for
+ *   `BAD_NUSPEC` cases). The registry nuspec must carry the requested version
+ *   (security review L-3), so registry routes pass `version` explicitly.
  * - `buildNupkg(...)` builds a `.nupkg` (zip) at test time; `signed: true`
  *   inserts a `.signature.p7s` entry (anywhere, default last, like nuget.org).
  * - `independentContentHash(...)` is the test oracle of the NuGet signed
@@ -34,7 +36,8 @@ export const REAL_SIGNED_CONTENT_HASHES = {
 
 export interface NuspecSpec {
   id: string;
-  version?: string;
+  /** `<version>` text (default `1.0.0`); `null` omits the element (L-3: BAD_NUSPEC). */
+  version?: string | null;
   /** `<license type="expression">` value. */
   expression?: string;
   /** `<license type="file">` value. */
@@ -56,7 +59,9 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 
 export function nuspecXml(spec: NuspecSpec): string {
   const root = spec.root ?? 'package';
-  const parts: string[] = [`<id>${esc(spec.id)}</id>`, `<version>${esc(spec.version ?? '1.0.0')}</version>`, '<authors>QA</authors>'];
+  const parts: string[] = [`<id>${esc(spec.id)}</id>`];
+  if (spec.version !== null) parts.push(`<version>${esc(spec.version ?? '1.0.0')}</version>`);
+  parts.push('<authors>QA</authors>');
   if (spec.expression !== undefined) parts.push(`<license type="expression">${esc(spec.expression)}</license>`);
   if (spec.file !== undefined) parts.push(`<license type="file">${esc(spec.file)}</license>`);
   if (spec.licenseType !== undefined) parts.push(`<license type="${spec.licenseType}">MIT</license>`);

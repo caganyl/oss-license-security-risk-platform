@@ -12,7 +12,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseManifests } from '../../src/scanner/parsers';
-import { LINK_NOT_FOLLOWED_MESSAGE, NUGET_MESSAGES, walkTree } from '../../src/scanner/parsers/common';
+import {
+  LINK_NOT_FOLLOWED_MESSAGE,
+  NUGET_MAX_DEPENDENCIES_PER_FOLDER,
+  NUGET_MAX_DEPENDENCIES_PER_SCAN,
+  NUGET_MESSAGES,
+  walkTree,
+} from '../../src/scanner/parsers/common';
 import { IntegrityCollector } from '../../src/scanner/parsers/lockIntegrityValue';
 import type { SandboxScanResult } from '../../src/types/scan';
 import {
@@ -347,6 +353,133 @@ describe('AC-P20-14: dependency limit per project folder', () => {
     const over = parseDotnet(tmpTree('limit-over', { 'packages.lock.json': lockWith(20_001), 'a.csproj': proj }), 's');
     expect(over.parse_errors).toEqual([{ ecosystem: 'dotnet', file: 'packages.lock.json', error: NUGET_MESSAGES.limit }]);
     expect(over.dependencies.map((d) => d.name)).toEqual(['Fallback']);
+  });
+});
+
+describe('REQ-006 security review L-1: total .NET dependency limit per scan (100 000)', () => {
+  const HASH = `${'ABCDEFGHIJ'.repeat(8)}KLMNOP==`;
+  // One 20 000-entry lock body shared by every folder (same ids per folder are fine: dedupe is per folder).
+  let lock20k = '';
+  const lock = () => {
+    if (!lock20k) {
+      const entries: Record<string, unknown> = {};
+      for (let i = 0; i < NUGET_MAX_DEPENDENCIES_PER_FOLDER; i++) entries[`P${i}`] = { type: 'Transitive', resolved: '1.0.0', contentHash: HASH };
+      lock20k = JSON.stringify({ version: 2, dependencies: { 'net8.0': entries } });
+    }
+    return lock20k;
+  };
+
+  it('L-1: limit constants (20 000 per folder, 100 000 per scan) and a fixed, path-free message', () => {
+    expect(NUGET_MAX_DEPENDENCIES_PER_FOLDER).toBe(20_000);
+    expect(NUGET_MAX_DEPENDENCIES_PER_SCAN).toBe(100_000);
+    expect(NUGET_MESSAGES.scanLimit).toBe('Tarama .NET bağımlılık sınırını aşıyor (100 000); kalan proje klasörleri atlandı.');
+  });
+
+  it('L-1: 6 folders x 20 000 lock entries -> exactly 100 000 records, one file:"" record, the 6th folder has no scan_files or hashes', () => {
+    const files: Record<string, string> = {};
+    for (let i = 1; i <= 6; i++) files[`d${i}/packages.lock.json`] = lock();
+    const root = tmpTree('scan-limit-locks', files);
+    const collector = new IntegrityCollector();
+    const r = parseManifests(root, ['dotnet'], 's', { integrityCollector: collector });
+
+    expect(r.dependencies).toHaveLength(NUGET_MAX_DEPENDENCIES_PER_SCAN);
+    expect(r.total_deps).toBe(NUGET_MAX_DEPENDENCIES_PER_SCAN);
+    expect(r.parse_errors).toEqual([{ ecosystem: 'dotnet', file: '', error: NUGET_MESSAGES.scanLimit }]);
+    const perFolder = new Map<string, number>();
+    for (const d of r.dependencies) perFolder.set(d.manifest_path, (perFolder.get(d.manifest_path) ?? 0) + 1);
+    expect([...perFolder]).toEqual([['d1', 20_000], ['d2', 20_000], ['d3', 20_000], ['d4', 20_000], ['d5', 20_000]]);
+    expect(r.scan_files.map((f) => f.file_path)).toEqual(['d1/packages.lock.json', 'd2/packages.lock.json', 'd3/packages.lock.json', 'd4/packages.lock.json', 'd5/packages.lock.json']);
+    expect(collector.nugetRecords).toHaveLength(NUGET_MAX_DEPENDENCIES_PER_SCAN);
+    expect(collector.nugetRecords.some((x) => x.manifestPath === 'd6')).toBe(false);
+  });
+
+  it('L-1: exactly 100 000 is accepted; a project-file folder over the limit keeps its file-level records but adds no scan_files, and later folders are skipped', () => {
+    const files: Record<string, string> = {};
+    for (let i = 1; i <= 5; i++) files[`d${i}/packages.lock.json`] = lock();
+    // e: one valid reference and one invalid id (file-level issue record stays); f: never read (after the cap).
+    files['e/e.csproj'] = '<Project><ItemGroup><PackageReference Include="Over.Cap" Version="1.0.0" /><PackageReference Include="Bad Id" Version="1.0.0" /></ItemGroup></Project>';
+    files['f/packages.lock.json'] = '{';
+    const r = parseDotnet(tmpTree('scan-limit-project', files), 's');
+
+    expect(r.dependencies).toHaveLength(NUGET_MAX_DEPENDENCIES_PER_SCAN);
+    expect(r.dependencies.some((d) => d.name === 'Over.Cap' || d.manifest_path === 'e' || d.manifest_path === 'f')).toBe(false);
+    expect(r.scan_files.map((f) => f.file_path)).not.toContain('e/e.csproj');
+    expect(r.scan_files).toHaveLength(5);
+    expect(r.parse_errors).toEqual([
+      { ecosystem: 'dotnet', file: 'e/e.csproj', error: NUGET_MESSAGES.invalidId },
+      { ecosystem: 'dotnet', file: '', error: NUGET_MESSAGES.scanLimit },
+    ]);
+  });
+
+  it('L-1: 100 000 records in five folders -> no scan limit record (boundary is inclusive)', () => {
+    const files: Record<string, string> = {};
+    for (let i = 1; i <= 5; i++) files[`d${i}/packages.lock.json`] = lock();
+    const r = parseDotnet(tmpTree('scan-limit-boundary', files), 's');
+    expect(r.dependencies).toHaveLength(NUGET_MAX_DEPENDENCIES_PER_SCAN);
+    expect(r.parse_errors).toEqual([]);
+  });
+});
+
+describe('REQ-006 security review I-8: "__proto__" / "constructor" keys in .NET lock and assets files', () => {
+  const HASH = `${'ABCDEFGHIJ'.repeat(8)}KLMNOP==`;
+  // Raw JSON text: JSON.parse makes "__proto__" an own data property (never the prototype setter).
+  const lockText =
+    '{"version":2,"dependencies":{' +
+    '"__proto__":{"Tfm.Proto.Pkg":{"type":"Direct","requested":"[1.0.0, )","resolved":"1.0.0"}},' +
+    '"net8.0":{' +
+    `"__proto__":{"type":"Direct","requested":"[1.0.0, )","resolved":"1.0.0","contentHash":"${HASH}","polluted":"yes"},` +
+    '"constructor":{"type":"Transitive","resolved":"2.0.0"},' +
+    '"hasOwnProperty":{"type":"Transitive","resolved":"3.0.0"},' +
+    '"Good.Pkg":{"type":"Direct","requested":"[4.0.0, )","resolved":"4.0.0"}}}}';
+  const assetsText =
+    '{"version":3,"libraries":{' +
+    `"__proto__/1.0.0":{"type":"package","sha512":"${HASH}"},` +
+    '"constructor/2.0.0":{"type":"package"},' +
+    '"__proto__":{"type":"package"},' +
+    '"Good.Pkg/4.0.0":{"type":"package"}},' +
+    '"project":{"frameworks":{"__proto__":{"dependencies":{"__proto__":{"version":"[1.0.0, )"}}},' +
+    '"net8.0":{"dependencies":{"Good.Pkg":{"version":"[4.0.0, )"},"constructor":{"version":"[2.0.0, )"}}}}}}';
+
+  const clean = () => {
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, 'polluted')).toBe(false);
+    expect(typeof ({} as { hasOwnProperty: unknown }).hasOwnProperty).toBe('function');
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  };
+
+  it('I-8: lock — "__proto__"/"constructor"/"hasOwnProperty" ids and a "__proto__" TFM key are ordinary keys; no prototype is touched', () => {
+    const collector = new IntegrityCollector();
+    const r = parseManifests(tmpTree('proto-lock', { 'packages.lock.json': lockText }), ['dotnet'], 's', { integrityCollector: collector });
+    clean();
+    expect(r.parse_errors).toEqual([]);
+    expect(r.dependencies.map((d) => [d.name, d.version, d.scope, d.declared_range])).toEqual([
+      ['__proto__', '1.0.0', 'direct', '[1.0.0, )'],
+      ['constructor', '2.0.0', 'transitive', null],
+      ['Good.Pkg', '4.0.0', 'direct', '[4.0.0, )'],
+      ['hasOwnProperty', '3.0.0', 'transitive', null],
+      ['Tfm.Proto.Pkg', '1.0.0', 'direct', '[1.0.0, )'],
+    ]);
+    for (const d of r.dependencies) {
+      expect(Object.getPrototypeOf(d)).toBe(Object.prototype);
+      expect(Object.keys(d)).toEqual(['ecosystem', 'name', 'version', 'purl', 'scope', 'licenses', 'manifest_file', 'manifest_path', 'declared_range']);
+    }
+    expect(r.dependencies.find((d) => d.name === '__proto__')?.purl).toBe('pkg:nuget/__proto__@1.0.0');
+    expect(JSON.stringify(r)).not.toContain('polluted');
+    expect(collector.nugetRecords).toEqual([{ manifestPath: '.', name: '__proto__', version: '1.0.0', integrity: `sha512-${HASH}` }]);
+  });
+
+  it('I-8: assets — "__proto__/1.0.0" and "constructor/2.0.0" libraries and "__proto__" framework/dependency keys are ordinary keys', () => {
+    const collector = new IntegrityCollector();
+    const r = parseManifests(tmpTree('proto-assets', { 'obj/project.assets.json': assetsText }), ['dotnet'], 's', { integrityCollector: collector });
+    clean();
+    expect(r.dependencies.map((d) => [d.name, d.version, d.scope, d.declared_range, d.manifest_file])).toEqual([
+      ['__proto__', '1.0.0', 'direct', '[1.0.0, )', 'project.assets.json'],
+      ['constructor', '2.0.0', 'direct', '[2.0.0, )', 'project.assets.json'],
+      ['Good.Pkg', '4.0.0', 'direct', '[4.0.0, )', 'project.assets.json'],
+    ]);
+    // "__proto__" without a "/version" part is an invalid entry (one fixed-text record).
+    expect(r.parse_errors).toEqual([{ ecosystem: 'dotnet', file: 'obj/project.assets.json', error: NUGET_MESSAGES.invalidEntry }]);
+    expect(collector.nugetRecords).toEqual([{ manifestPath: '.', name: '__proto__', version: '1.0.0', integrity: `sha512-${HASH}` }]);
   });
 });
 

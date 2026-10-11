@@ -529,6 +529,22 @@ Bilinen kırmızı: yok. Gözlem: `bestAffected` ilk adımı (ekosistemden bağ�
 eşleşmesi) F4'ten korunmuştur; aynı kayıtta aynı adlı npm ve NuGet girdisi olursa npm
 girdisi seçilebilir (pratikte OSV kayıtları ekosistem başınadır).
 
+## REQ-006 güvenlik incelemesi takipleri (L-1, L-3, I-7, I-8)
+
+`docs/quality/security-reports/` REQ-006 raporundaki düzeltmelerin (commit `b6bf7f6`)
+ve I-8 test kapsamı önerisinin testleri:
+
+| Bulgu | Test |
+| --- | --- |
+| L-3 (`.nuspec` `<version>` istenen sürüm olmalı) | `unit/nugetEnrichmentPure` "L-3": NuGet normalleştirmesiyle eşleşenler (`1.0`↔`1.0.0`, `1.0.0.0`, `01.00.000`, `+build` metadata, `1.0.0-BETA`↔`1.0.0-beta`, boşluk) → `found`; başka sürüm/ön sürüm, aralık, yüzen sürüm, `$(…)`, boş veya eksik `<version>` → `BAD_NUSPEC`. `integration/nugetEnrichment` "L-3": aynı köken yönlendirmesi başka sürümün nuspec'ine → `error`, hiçbir sürümle önbelleğe yazılmaz, ikinci taramada yeniden istenir; `<version>` yok → `error`; `4.0.0.0` ve `5.0.0-BETA+build.7` → `ok`, istenen (normal) sürümle önbellekte |
+| L-1 (tarama başına 100 000 .NET bağımlılık sınırı) | `unit/nugetGolden` "L-1": 6 klasör × 20 000 lock girdisi → tam 100 000 kayıt, tek `{file:'', error: NUGET_MESSAGES.scanLimit}` kaydı, 6. klasörün `scan_files`'ı ve özet (collector) kaydı yok; proje dosyası klasörü sınırı aşınca dosya düzeyi kaydı (`invalidId`) kalır, `scan_files`'a girmez, sonraki klasörler okunmaz; tam 100 000 → kayıt yok (sınır dahil). ~1 s |
+| I-7 (PyPI yeniden kontrol anahtarı `COLLATE "C"`) | `integration/vulnRecheck` "I-7": kapsam SQL'i kaynak metinden okunur (dışa aktarılmıyor) ve aynen çalıştırılır; test veritabanı `--locale=C` olduğundan `packages.name` sütununa ICU `tr-TR-x-icu` harmanlaması konur (`lower('I')` = `ı` olduğu önce doğrulanır); `Ixml_Pkg`/`IXML.pkg`/`ixml-pkg` tek `pypi|ixml-pkg` satırı, `Ion.Core`/`ION.CORE` tek NuGet satırı; mutasyon kontrolü: `COLLATE "C"` olmayan eski ifade anahtarı ikiye böler; koşucu tek PyPI ve tek NuGet sorgusu gönderir. ICU Türkçe harmanlaması yoksa test bilerek kırmızıdır (boş geçmez) |
+| I-8 (`__proto__` anahtarları) | `unit/nugetGolden` "I-8": lock'ta `__proto__`/`constructor`/`hasOwnProperty` paket id'si ve `__proto__` TFM anahtarı, assets'te `__proto__/1.0.0` kütüphanesi ve `__proto__` framework/bağımlılık anahtarı sıradan anahtar olarak işlenir (geçerli NuGet id'leri olduğundan kayıt olurlar); `Object.prototype` kirlenmez, kayıt şekli değişmez, özet yan kanalı doğru |
+| I-8 (`.signature.p7s` lisans dosyası beyanı) | `integration/nugetEnrichment` "I-8": `<license type="file">` `.signature.p7s` / `.SIGNATURE.P7S` / `./.signature.p7s` → arşiv içerik özetiyle doğrulanır (`match`), `license_files` boş, NOTICE'te imza baytları ve dosya adı yok, `License files: 0` |
+
+`helpers/fakeNuget` `nuspecXml({ version: null })` `<version>` öğesini atlar; kayıt
+defteri rotaları artık `version`'ı açıkça verir (L-3).
+
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının
 `textContent` ile gösterilmesi, migration testi).

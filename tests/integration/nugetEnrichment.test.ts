@@ -97,43 +97,43 @@ function setupFixture(): void {
   const exprNupkg = buildZip(exprEntries);
   const exprHash = independentContentHash(exprEntries);
   expect(sha512b64(exprNupkg)).not.toBe(exprHash);
-  addNugetPackage(reg, P.expr.id, P.expr.version, { nuspec: nuspecXml({ id: P.expr.id, expression: 'MIT' }), nupkg: exprNupkg });
+  addNugetPackage(reg, P.expr.id, P.expr.version, { nuspec: nuspecXml({ id: P.expr.id, version: P.expr.version, expression: 'MIT' }), nupkg: exprNupkg });
 
   // Acme.FileLic: unsigned package; lock value = raw SHA-512; type="file" -> docs/EULA.md.
   const fileNupkg = buildZip(
     nupkgEntries(P.file.id, {
       entries: [
-        { name: `${P.file.id}.nuspec`, data: nuspecXml({ id: P.file.id, file: 'docs/EULA.md' }) },
+        { name: `${P.file.id}.nuspec`, data: nuspecXml({ id: P.file.id, version: P.file.version, file: 'docs/EULA.md' }) },
         { name: 'docs/EULA.md', data: EULA },
         { name: 'lib/net8.0/LICENSE', data: 'NESTED LICENSE MUST NOT BE COLLECTED\n' },
       ],
     }),
   );
-  addNugetPackage(reg, P.file.id, P.file.version, { nuspec: nuspecXml({ id: P.file.id, file: 'docs/EULA.md', licenseUrl: 'https://licenses.nuget.org/MIT' }), nupkg: fileNupkg });
+  addNugetPackage(reg, P.file.id, P.file.version, { nuspec: nuspecXml({ id: P.file.id, version: P.file.version, file: 'docs/EULA.md', licenseUrl: 'https://licenses.nuget.org/MIT' }), nupkg: fileNupkg });
 
   // Acme.Bad: lock value differs from both hashes of the served archive -> L-5 fail-safe.
-  addNugetPackage(reg, P.bad.id, P.bad.version, { nuspec: nuspecXml({ id: P.bad.id, expression: 'MIT' }), nupkg: buildZip(nupkgEntries(P.bad.id, { signed: true })) });
+  addNugetPackage(reg, P.bad.id, P.bad.version, { nuspec: nuspecXml({ id: P.bad.id, version: P.bad.version, expression: 'MIT' }), nupkg: buildZip(nupkgEntries(P.bad.id, { signed: true })) });
   const badHash = sha512b64(Buffer.from('tampered'));
 
   // Acme.UrlLic: unknown licenseUrl on the fake origin (must never be requested); no lock value.
-  addNugetPackage(reg, P.url.id, P.url.version, { nuspec: nuspecXml({ id: P.url.id, licenseUrl: `${reg.origin}/license/eula` }) });
+  addNugetPackage(reg, P.url.id, P.url.version, { nuspec: nuspecXml({ id: P.url.id, version: P.url.version, licenseUrl: `${reg.origin}/license/eula` }) });
   reg.route('/license/eula', { body: 'EULA' });
 
   // Acme.Multi: two distinct lock values for the same key -> mismatch without download.
-  addNugetPackage(reg, P.multi.id, P.multi.version, { nuspec: nuspecXml({ id: P.multi.id, licenseUrl: 'https://licenses.nuget.org/Apache-2.0' }), nupkg: buildZip(nupkgEntries(P.multi.id)) });
+  addNugetPackage(reg, P.multi.id, P.multi.version, { nuspec: nuspecXml({ id: P.multi.id, version: P.multi.version, licenseUrl: 'https://licenses.nuget.org/Apache-2.0' }), nupkg: buildZip(nupkgEntries(P.multi.id)) });
 
   // Acme.Deprecated: nuspec <id> casing differs from the lock; aka.ms placeholder only.
-  addNugetPackage(reg, P.depr.id, P.depr.version, { nuspec: nuspecXml({ id: 'ACME.Deprecated', licenseUrl: 'https://aka.ms/deprecateLicenseUrl' }) });
+  addNugetPackage(reg, P.depr.id, P.depr.version, { nuspec: nuspecXml({ id: 'ACME.Deprecated', version: P.depr.version, licenseUrl: 'https://aka.ms/deprecateLicenseUrl' }) });
 
   // Acme.Redir: nuspec same-origin redirect (allowed), nupkg redirect (not allowed).
   const redir = nugetPaths(P.redir.id, P.redir.version);
   reg.route(redir.nuspecPath, { status: 302, headers: { location: `${reg.origin}/v3-flatcontainer/_moved/acme.redir.nuspec` } });
-  reg.route('/v3-flatcontainer/_moved/acme.redir.nuspec', { body: nuspecXml({ id: P.redir.id, expression: 'Apache-2.0' }), headers: { 'content-type': 'application/xml' } });
+  reg.route('/v3-flatcontainer/_moved/acme.redir.nuspec', { body: nuspecXml({ id: P.redir.id, version: P.redir.version, expression: 'Apache-2.0' }), headers: { 'content-type': 'application/xml' } });
   reg.route(redir.nupkgPath, { status: 302, headers: { location: `${reg.origin}/v3-flatcontainer/_moved/acme.redir.nupkg` } });
   reg.route('/v3-flatcontainer/_moved/acme.redir.nupkg', { body: buildZip(nupkgEntries(P.redir.id)) });
 
   // Acme.WrongId: nuspec for another id -> BAD_NUSPEC (status error, not cached).
-  addNugetPackage(reg, P.wrong.id, P.wrong.version, { nuspec: nuspecXml({ id: 'Other.Id', expression: 'MIT' }) });
+  addNugetPackage(reg, P.wrong.id, P.wrong.version, { nuspec: nuspecXml({ id: 'Other.Id', version: P.wrong.version, expression: 'MIT' }) });
 
   const app = path.join(root, 'src', 'App');
   const lib = path.join(root, 'src', 'Lib');
@@ -364,6 +364,116 @@ describe('AC-P21-5…10 / AC-P21-14: NuGet enrichment end to end', () => {
     for (const [name, row] of x) if (name.startsWith('Acme.')) expect(String(row[8] ?? ''), name).not.toBe('');
     const licenses = await excelRows(projectId, scanId, 'Licenses');
     for (const n of noLicense) expect((licenses.get(n) ?? []).map(String), n).toContain('NOASSERTION');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// security review follow-ups (L-3, I-8) through the real worker and enricher
+// ---------------------------------------------------------------------------
+function writeLock(entries: Array<{ id: string; version: string; hash: string | null }>): void {
+  const app = path.join(root, 'src', 'App');
+  fs.mkdirSync(app, { recursive: true });
+  fs.writeFileSync(path.join(app, 'packages.lock.json'), packagesLockJson(entries));
+}
+
+describe('REQ-006 security review L-3: a redirect to another version\'s .nuspec never supplies this version\'s license', () => {
+  it('L-3: redirect to the 1.0.0 nuspec for 2.0.0 and a nuspec without <version> -> error, not cached, requested again; normalized versions match', async () => {
+    // Acme.Moved 2.0.0: same-origin redirect (allowed by the client) to the 1.0.0 nuspec of the same id.
+    const moved = nugetPaths('Acme.Moved', '2.0.0');
+    const old = nugetPaths('Acme.Moved', '1.0.0');
+    reg.route(moved.nuspecPath, { status: 302, headers: { location: `${reg.origin}${old.nuspecPath}` } });
+    reg.route(old.nuspecPath, { body: nuspecXml({ id: 'Acme.Moved', version: '1.0.0', expression: 'MIT' }), headers: { 'content-type': 'application/xml' } });
+    // Acme.NoVer 3.0.0: no <version> element at all.
+    const noVer = addNugetPackage(reg, 'Acme.NoVer', '3.0.0', { nuspec: nuspecXml({ id: 'Acme.NoVer', version: null, expression: 'MIT' }) });
+    // Acme.FourPart 4.0.0: nuspec says 4.0.0.0 (NuGet-normalized equal).
+    const four = addNugetPackage(reg, 'Acme.FourPart', '4.0.0', { nuspec: nuspecXml({ id: 'Acme.FourPart', version: '4.0.0.0', expression: 'Apache-2.0' }) });
+    // Acme.Pre 5.0.0-beta: nuspec says 5.0.0-BETA+build.7 (case-insensitive, build metadata ignored).
+    const pre = addNugetPackage(reg, 'Acme.Pre', '5.0.0-beta', { nuspec: nuspecXml({ id: 'Acme.Pre', version: '5.0.0-BETA+build.7', expression: 'BSD-3-Clause' }) });
+    writeLock([
+      { id: 'Acme.Moved', version: '2.0.0', hash: null },
+      { id: 'Acme.NoVer', version: '3.0.0', hash: null },
+      { id: 'Acme.FourPart', version: '4.0.0', hash: null },
+      { id: 'Acme.Pre', version: '5.0.0-beta', hash: null },
+    ]);
+
+    const projectId = await insertProject();
+    const scanId = await scan(projectId, enricher());
+    const r = await rows(scanId);
+    for (const n of ['Acme.Moved', 'Acme.NoVer']) {
+      expect([r.get(n)?.license_enrichment_status, r.get(n)?.license_source, r.get(n)?.license_expression], n).toEqual(['error', 'none', null]);
+    }
+    expect([r.get('Acme.FourPart')?.license_enrichment_status, r.get('Acme.FourPart')?.license_source, r.get('Acme.FourPart')?.license_expression]).toEqual(['ok', 'registry:nuget', 'Apache-2.0']);
+    expect([r.get('Acme.Pre')?.license_enrichment_status, r.get('Acme.Pre')?.license_source, r.get('Acme.Pre')?.license_expression]).toEqual(['ok', 'registry:nuget', 'BSD-3-Clause']);
+    // The redirect was followed (the check is on the body, not on the redirect).
+    expect([reg.count(moved.nuspecPath), reg.count(old.nuspecPath)]).toEqual([1, 1]);
+
+    // Not cached under any version; the matching ones are cached under the requested (normalized) version.
+    const cache = await db.query<{ name: string; version: string; outcome: string }>(`SELECT name, version, outcome FROM registry_package_cache WHERE ecosystem = 'nuget' ORDER BY name, version`);
+    expect(cache.map((c) => [c.name, c.version, c.outcome])).toEqual([
+      ['acme.fourpart', '4.0.0', 'found'],
+      ['acme.pre', '5.0.0-beta', 'found'],
+    ]);
+    const [s] = await db.query<{ error_message: string | null }>(`SELECT error_message FROM scans WHERE id = $1`, [scanId]);
+    const line = (s.error_message ?? '').split('\n').find((l) => l.startsWith('[registry]')) ?? '';
+    expect(line).toMatch(/error: 2/);
+    expect(line).not.toMatch(/Acme/i);
+
+    // Second scan: the BAD_NUSPEC keys are requested again, the cached ones are not.
+    reg.resetCounts();
+    const r2 = await rows(await scan(projectId, enricher()));
+    expect([reg.count(moved.nuspecPath), reg.count(old.nuspecPath), reg.count(noVer.nuspecPath), reg.count(four.nuspecPath), reg.count(pre.nuspecPath)]).toEqual([1, 1, 1, 0, 0]);
+    expect(r2.get('Acme.Moved')?.license_enrichment_status).toBe('error');
+    expect(r2.get('Acme.FourPart')?.license_expression).toBe('Apache-2.0');
+  });
+});
+
+describe('REQ-006 security review I-8: a nuspec declaring .signature.p7s as its license file', () => {
+  it('I-8: the signature entry is never a license file (any casing): archive verified, nothing collected, NOTICE has no signature bytes', async () => {
+    const signedEntries = (id: string, version: string, declared: string) =>
+      nupkgEntries(id, {
+        signed: true,
+        entries: [
+          { name: `${id}.nuspec`, data: nuspecXml({ id, version, file: declared }) },
+          { name: 'lib/net8.0/x.dll', data: Buffer.alloc(64, 7) },
+        ],
+      });
+    const pkgs = [
+      { id: 'Acme.SigLic', version: '6.0.0', declared: '.signature.p7s' },
+      { id: 'Acme.SigCase', version: '7.0.0', declared: '.SIGNATURE.P7S' },
+      { id: 'Acme.SigDot', version: '8.0.0', declared: './.signature.p7s' },
+    ];
+    const lock: Array<{ id: string; version: string; hash: string }> = [];
+    for (const p of pkgs) {
+      const entries = signedEntries(p.id, p.version, p.declared);
+      addNugetPackage(reg, p.id, p.version, { nuspec: nuspecXml({ id: p.id, version: p.version, file: p.declared }), nupkg: buildZip(entries) });
+      lock.push({ id: p.id, version: p.version, hash: independentContentHash(entries) });
+    }
+    writeLock(lock);
+
+    const projectId = await insertProject();
+    const scanId = await scan(projectId, enricher());
+    const r = await rows(scanId);
+    for (const p of pkgs) {
+      const row = r.get(p.id);
+      // The archive itself is verified (content hash match) and the declaration is kept as "file, not classified".
+      expect([row?.license_enrichment_status, row?.license_source, row?.license_expression, row?.lock_integrity, row?.license_unclassified], p.id).toEqual(['no_license', 'none', null, 'match', 'file']);
+      expect(row?.notice_status, p.id).not.toBe('collected');
+    }
+    const archives = await db.query<{ name: string; license_files: unknown[] }>(`SELECT name, license_files FROM registry_archive_cache WHERE ecosystem = 'nuget' ORDER BY name`);
+    expect(archives.map((a) => a.name)).toEqual(['acme.sigcase', 'acme.sigdot', 'acme.siglic']);
+    for (const a of archives) expect(a.license_files, a.name).toEqual([]);
+
+    const text = (await new NoticeService(db.pool).generate(scanId)).body.toString('utf8');
+    expect(text).not.toContain('3082fake-pkcs7-signature-bytes');
+    expect(text).not.toContain('.signature.p7s');
+    for (const p of pkgs) {
+      const start = text.indexOf(`Package: ${p.id}\n`);
+      expect(start, p.id).toBeGreaterThanOrEqual(0);
+      const next = text.indexOf('\nPackage: ', start + 1);
+      const block = text.slice(start, next === -1 ? undefined : next);
+      expect(block, p.id).toContain('License files: 0');
+      expect(block, p.id).toContain('License: NOASSERTION');
+    }
   });
 });
 

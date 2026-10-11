@@ -75,7 +75,8 @@ describe('AC-P21-2: flat container URLs (lower-case id and version, one segment 
 });
 
 describe('AC-P21-5 / AC-P21-4: .nuspec extraction', () => {
-  const extract = (xml: string, lowerId = 'acme.pkg') => extractNuspecMetadata(utf8(xml), lowerId);
+  // nuspecXml's default <version> is 1.0.0 (L-3: the nuspec version must equal the requested one).
+  const extract = (xml: string, lowerId = 'acme.pkg') => extractNuspecMetadata(utf8(xml), lowerId, '1.0.0');
 
   it('AC-P21-5: type="expression" -> declared license; canonical <id> keeps its casing', () => {
     const out = extract(nuspecXml({ id: 'Acme.Pkg', expression: 'MIT OR Apache-2.0', licenseUrl: 'https://licenses.nuget.org/ISC' }));
@@ -127,6 +128,52 @@ describe('AC-P21-5 / AC-P21-4: .nuspec extraction', () => {
     expect(out.kind).toBe('found');
     const declared = (out as { metadata: { declaredLicense: string | null } }).metadata.declaredLicense ?? '';
     expect([...declared].some((c) => c.charCodeAt(0) < 0x20 || c === '‮')).toBe(false);
+  });
+});
+
+describe('REQ-006 security review L-3: the .nuspec <version> must be the requested version', () => {
+  const bad = { kind: 'error', code: 'BAD_NUSPEC' };
+  const found = { kind: 'found', metadata: expect.objectContaining({ declaredLicense: 'MIT', canonicalName: 'Acme.Pkg' }) };
+  const withVersion = (version: string | null, lowerVersion: string) => extractNuspecMetadata(utf8(nuspecXml({ id: 'Acme.Pkg', version, expression: 'MIT' })), 'acme.pkg', lowerVersion);
+
+  it.each([
+    ['1.0.0', '1.0.0'],
+    ['1.0', '1.0.0'],
+    ['1.0.0.0', '1.0.0'],
+    ['01.00.000', '1.0.0'],
+    ['1.0.0+build.5', '1.0.0'],
+    ['  1.0.0  ', '1.0.0'],
+    ['1.0.0-BETA', '1.0.0-beta'],
+    ['1.0.0-beta', '1.0.0-beta'],
+    ['1.0.0-Beta.1+sha.abc', '1.0.0-beta.1'],
+    ['1.2.3.4', '1.2.3.4'],
+  ])('L-3: nuspec <version>%s</version> equals the requested %s after NuGet normalization -> found', (version, lowerVersion) => {
+    expect(withVersion(version, lowerVersion)).toEqual(found);
+  });
+
+  it.each([
+    ['1.0.1', '1.0.0'],
+    ['2.0.0', '1.0.0'],
+    ['1.0.0.1', '1.0.0'],
+    ['1.0.0-beta', '1.0.0'],
+    ['1.0.0', '1.0.0-beta'],
+    ['1.0.0-beta.2', '1.0.0-beta.1'],
+    ['1.0.*', '1.0.0'],
+    ['[1.0.0,2.0.0)', '1.0.0'],
+    ['$(Version)', '1.0.0'],
+    ['', '1.0.0'],
+    ['   ', '1.0.0'],
+    ['not-a-version', '1.0.0'],
+  ])('L-3: nuspec <version>%s</version> for requested %s -> BAD_NUSPEC', (version, lowerVersion) => {
+    expect(withVersion(version, lowerVersion)).toEqual(bad);
+  });
+
+  it('L-3: a nuspec without a <version> element -> BAD_NUSPEC', () => {
+    expect(withVersion(null, '1.0.0')).toEqual(bad);
+  });
+
+  it('L-3: the id rule still applies first (right version, other id -> BAD_NUSPEC)', () => {
+    expect(extractNuspecMetadata(utf8(nuspecXml({ id: 'Other.Pkg', version: '1.0.0', expression: 'MIT' })), 'acme.pkg', '1.0.0')).toEqual(bad);
   });
 });
 

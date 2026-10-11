@@ -768,10 +768,18 @@ export const NUGET_MESSAGES = Object.freeze({
   unknownType: 'Bilinmeyen bağımlılık türü içeren girdiler atlandı.',
   invalidEntry: 'Geçersiz paket girdileri atlandı.',
   limit: 'Proje klasörü bağımlılık sınırını aşıyor (20 000).',
+  scanLimit: 'Tarama .NET bağımlılık sınırını aşıyor (100 000); kalan proje klasörleri atlandı.',
 });
 
 /** Dependency limit per project folder (ADR-008 Karar 7). */
 export const NUGET_MAX_DEPENDENCIES_PER_FOLDER = 20_000;
+
+/**
+ * Total .NET dependency limit of one scan across all project folders
+ * (REQ-006 security review L-1): bounds the worker result, the result write
+ * and the enrichment queue when many folders each stay under the folder limit.
+ */
+export const NUGET_MAX_DEPENDENCIES_PER_SCAN = 100_000;
 
 /** Maximum `declared_range` length in code points (ADR-008 Karar 5.2, 5.4). */
 export const NUGET_DECLARED_RANGE_MAX = 200;

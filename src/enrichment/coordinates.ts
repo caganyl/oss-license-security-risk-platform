@@ -17,7 +17,7 @@
  */
 import { asciiLower, classifyNugetVersion, isValidNugetId } from '../scanner/parsers/nugetIdentity';
 
-export { asciiLower, isValidNugetId } from '../scanner/parsers/nugetIdentity';
+export { asciiLower, classifyNugetVersion, isValidNugetId } from '../scanner/parsers/nugetIdentity';
 
 export type RegistryEcosystem = 'npm' | 'pypi' | 'nuget';
 

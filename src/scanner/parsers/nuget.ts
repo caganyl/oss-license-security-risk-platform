@@ -15,6 +15,12 @@
  * Only sources that were actually used (and used CPM files) enter
  * `scan_files`. NuGet has no dev scope (all records are runtime).
  *
+ * Scan limit (security review L-1): a folder whose records would take the
+ * scan total over `NUGET_MAX_DEPENDENCIES_PER_SCAN` is not added (no records,
+ * `scan_files` or hashes; its file-level records stay), the remaining folders
+ * are skipped, and one
+ * `parse_errors` record with a fixed text and an empty `file` is written.
+ *
  * The lock `contentHash` / assets `sha512` values go to the optional
  * `IntegrityCollector` (`addNuget`), never into the result (ADR-008 Karar 6).
  *
@@ -25,6 +31,7 @@ import {
   LINK_NOT_FOLLOWED_MESSAGE,
   ManifestReadError,
   NUGET_MAX_DEPENDENCIES_PER_FOLDER,
+  NUGET_MAX_DEPENDENCIES_PER_SCAN,
   NUGET_MESSAGES,
   NugetFileError,
   compareCodePoints,
@@ -77,6 +84,8 @@ class NugetRun {
   readonly dependencies: ScannedDependency[] = [];
   private readonly scanFiles = new Map<string, ScannedFile>();
   private readonly cpmCache = new Map<string, CpmState>();
+  /** True once a folder was dropped by the scan limit; no folder is processed afterwards. */
+  capped = false;
 
   constructor(
     private readonly dotnetByDir: Map<string, Map<string, WalkedFile>>,
@@ -146,6 +155,18 @@ class NugetRun {
     return null;
   }
 
+  /**
+   * Scan limit check for one folder's `count` records: false (and the one
+   * fixed-text, path-free record) when the scan total would exceed the limit.
+   */
+  fitsScanLimit(count: number): boolean {
+    if (this.capped) return false;
+    if (this.dependencies.length + count <= NUGET_MAX_DEPENDENCIES_PER_SCAN) return true;
+    this.capped = true;
+    this.errors.push({ ecosystem: ECOSYSTEM, file: '', error: NUGET_MESSAGES.scanLimit });
+    return false;
+  }
+
   emit(folder: ProjectFolder, entries: Iterable<NugetEntry>): void {
     for (const entry of entries) {
       this.dependencies.push({
@@ -167,6 +188,8 @@ class NugetRun {
     const read = this.read(file, parse);
     if (!read) return false;
     this.issueErrors(file, read.value.issues);
+    // A folder over the scan limit still counts as "used": the next source of the same folder is not tried.
+    if (!this.fitsScanLimit(read.value.entries.length)) return true;
     this.addScanFile(read.record);
     this.emit(folder, read.value.entries);
     if (this.collector) {
@@ -178,6 +201,8 @@ class NugetRun {
   /** Step 3: project files, `packages.config` and CPM `GlobalPackageReference`s merged (first source wins). */
   projectSources(folder: ProjectFolder): void {
     const merged = new Map<string, NugetEntry>();
+    // scan_files of the used files wait for the scan limit check of the whole folder (issues keep their order).
+    const used: ScannedFile[] = [];
     let cpm: CpmState | null | undefined;
     let projectUsed = false;
 
@@ -193,7 +218,7 @@ class NugetRun {
         return false;
       }
       this.issueErrors(file, issues);
-      this.addScanFile(record);
+      used.push(record);
       for (const [key, entry] of fresh) merged.set(key, entry);
       return true;
     };
@@ -218,6 +243,9 @@ class NugetRun {
       const globals = cpm.table.globals.map((g) => directEntry(g.id, g.explicitVersion, CPM_FILE_NAME));
       mergeFile(cpm.file, globals, [], cpm.record);
     }
+
+    if (!this.fitsScanLimit(merged.size)) return;
+    for (const record of used) this.addScanFile(record);
     if (projectUsed && cpm && cpm.ok) this.addScanFile(cpm.record);
 
     this.emit(folder, merged.values());
@@ -275,7 +303,10 @@ export function parse(walk: TreeWalk, collector?: IntegrityCollector): ParseResu
   for (const link of links) result.parse_errors.push({ ecosystem: ECOSYSTEM, file: link.relPath, error: LINK_NOT_FOLLOWED_MESSAGE });
 
   const run = new NugetRun(dotnetByDir, collector);
-  for (const folder of projectFolders(dotnetByDir)) run.run(folder);
+  for (const folder of projectFolders(dotnetByDir)) {
+    if (run.capped) break;
+    run.run(folder);
+  }
 
   result.dependencies.push(...run.dependencies.sort(compareDependencies));
   result.scan_files.push(...run.sortedScanFiles());

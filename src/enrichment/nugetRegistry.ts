@@ -5,8 +5,9 @@
  * `GET <nuget>/v3-flatcontainer/<id>/<ver>/<id>.nuspec` (lower-case id and
  * version, `metadata-nuget`: <= 3 same-origin redirects, 1 MiB). The body is
  * parsed on the main thread with the safe XML reader (no DTD, no entities).
- * Root `package`, child `metadata`, and `asciiLower(metadata/id)` equal to the
- * requested id, else `BAD_NUSPEC` (not cached).
+ * Root `package`, child `metadata`, `asciiLower(metadata/id)` equal to the
+ * requested id and the NuGet-normalized `metadata/version` equal to the
+ * requested version (ASCII case-insensitive), else `BAD_NUSPEC` (not cached).
  *
  * License precedence: `<license type="expression">` > `<license
  * type="file">` (no expression, `licenseUnclassified = 'file'`) >
@@ -19,7 +20,7 @@
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
 import { type XmlElement, parseXml } from '../scanner/parsers/xmlReader';
 import { normalizeArchivePath } from './archive/licenseFiles';
-import { asciiLower, coordinateKey, isValidNugetId } from './coordinates';
+import { asciiLower, classifyNugetVersion, coordinateKey, isValidNugetId } from './coordinates';
 import { classifyLicenseUrl } from './nugetLicenseUrls';
 import type { RegistrySession } from './registryClient';
 import { cleanDeclaredLicense } from './text';
@@ -81,8 +82,18 @@ export function nuspecLicenseFields(metadata: XmlElement): Pick<RegistryMetadata
   return { declaredLicense: null, licenseUnclassified: null, licenseFilePath: null };
 }
 
-/** Metadata of one `.nuspec` body; `BAD_NUSPEC` for XML errors, a wrong root/shape or another id. */
-export function extractNuspecMetadata(body: Uint8Array, lowerId: string): MetadataOutcome {
+/**
+ * True when the nuspec `<version>` is the requested version: NuGet-normalized
+ * (same rule as `checkCoordinates`) and ASCII case-insensitive. A redirect to
+ * another version's nuspec must not supply this version's license (L-3).
+ */
+function sameNuspecVersion(metadata: XmlElement, lowerVersion: string): boolean {
+  const classified = classifyNugetVersion(child(metadata, 'version')?.text ?? '');
+  return classified.kind === 'exact' && asciiLower(classified.version) === lowerVersion;
+}
+
+/** Metadata of one `.nuspec` body; `BAD_NUSPEC` for XML errors, a wrong root/shape, another id or another version. */
+export function extractNuspecMetadata(body: Uint8Array, lowerId: string, lowerVersion: string): MetadataOutcome {
   if (body.length > ENRICHMENT_LIMITS.client.nuspecMaxBytes) return { kind: 'error', code: 'TOO_LARGE' };
   let root: XmlElement;
   try {
@@ -95,6 +106,7 @@ export function extractNuspecMetadata(body: Uint8Array, lowerId: string): Metada
   if (metadata === undefined) return { kind: 'error', code: 'BAD_NUSPEC' };
   const id = child(metadata, 'id')?.text.trim() ?? '';
   if (asciiLower(id) !== lowerId) return { kind: 'error', code: 'BAD_NUSPEC' };
+  if (!sameNuspecVersion(metadata, lowerVersion)) return { kind: 'error', code: 'BAD_NUSPEC' };
   return {
     kind: 'found',
     metadata: {
@@ -111,5 +123,5 @@ export async function fetchNugetMetadata(session: RegistrySession, lowerId: stri
   const url = nuspecUrl(session.endpoints.nuget, lowerId, lowerVersion);
   const result = await session.getText(url, 'metadata-nuget', { signal, dedupeKey: coordinateKey('nuget', lowerId, lowerVersion) });
   if (result.kind !== 'ok') return result;
-  return extractNuspecMetadata(result.body, lowerId);
+  return extractNuspecMetadata(result.body, lowerId, lowerVersion);
 }

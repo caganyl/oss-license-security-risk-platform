@@ -22,6 +22,8 @@ export type ErrorCode =
   | 'conflict'
   | 'payload_too_large'
   | 'too_many_attempts'
+  /** REQ-007 contract 6.5: 429 when the export slots are all in use (additive). */
+  | 'export_busy'
   | 'internal_error'
   | 'setup_state_invalid';
 

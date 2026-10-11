@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 import type { Pool } from 'pg';
 import { sanitizeErrorText } from '../lib/errorText';
 import { excelSafeText, singleLine } from '../lib/outputText';
+import { toCsv } from './csv';
 
 export type ReportType =
   | 'executive_summary'
@@ -54,7 +55,7 @@ interface ReportSecurityFinding {
   publishedAt: Date | null;
 }
 
-interface ReportDependency {
+export interface ReportDependency {
   id: string;
   ecosystem: string;
   name: string;
@@ -93,6 +94,8 @@ interface ReportData {
     mediumVulns: number;
     lowVulns: number;
     licenseViolations: number;
+    /** `scans.vulnerability_data_status` (REQ-004 contract 1.5.0 §5.3); null before F4. */
+    vulnerabilityDataStatus: string | null;
   };
   project: {
     id: string;
@@ -125,6 +128,26 @@ const FORMAT_META: Record<ReportFormat, { ext: string; mimeType: string }> = {
 
 export const VALID_REPORT_FORMATS = new Set<ReportFormat>(Object.keys(FORMAT_META) as ReportFormat[]);
 export { VALID_REPORT_TYPES };
+
+/** One-click export kinds = the fixed file-name suffixes of the routes (REQ-007 contract 6.1). */
+export type ExportKind = 'project-report.pdf' | 'license-inventory.xlsx' | 'license-inventory.csv';
+
+const EXPORT_META: Record<ExportKind, { contentType: string; baseName: string; ext: string }> = {
+  'project-report.pdf': { contentType: FORMAT_META.pdf.mimeType, baseName: 'project-report', ext: 'pdf' },
+  'license-inventory.xlsx': { contentType: FORMAT_META.excel.mimeType, baseName: 'license-inventory', ext: 'xlsx' },
+  'license-inventory.csv': { contentType: 'text/csv; charset=utf-8', baseName: 'license-inventory', ext: 'csv' },
+};
+
+export interface RenderedExport {
+  /** Lower-case canonical scan UUID as read from the database (file name). */
+  scanId: string;
+  body: Buffer;
+  contentType: string;
+  /** `<base>-<scanId>.<ext>`; never the project name (AC-P24-2). */
+  filename: string;
+  /** SHA-256 of `body`, 64 lower-case hex characters. */
+  sha256: string;
+}
 
 export class ReportService {
   constructor(private readonly db: Pool) {}
@@ -231,6 +254,44 @@ export class ReportService {
     }
   }
 
+  /**
+   * One-click export body (REQ-007 P-24, ADR-009 Karar 7): rendered at
+   * request time from the database only, through the same `loadReportData`
+   * and `renderContent` as the asynchronous reports (no copy renderer). No
+   * `reports` row, file, `audit_logs` row or network request. `signal` (the
+   * export time limit) is checked between the steps like `processReport`;
+   * a scan that is missing or not completed throws `statusCode: 404`.
+   */
+  async renderExport(scanId: string, kind: ExportKind, signal?: AbortSignal): Promise<RenderedExport> {
+    signal?.throwIfAborted();
+    const data = await this.loadReportData(scanId);
+    signal?.throwIfAborted();
+    let body: Buffer;
+    switch (kind) {
+      case 'project-report.pdf':
+        body = await this.renderContent(data, 'project_report', 'pdf');
+        break;
+      case 'license-inventory.xlsx':
+        body = await this.renderContent(data, 'license_inventory', 'excel');
+        break;
+      case 'license-inventory.csv':
+        body = renderDependencyCsv(data);
+        break;
+      default:
+        throw new Error('Unknown export kind');
+    }
+    signal?.throwIfAborted();
+    const meta = EXPORT_META[kind];
+    const canonicalId = data.scan.id.toLowerCase();
+    return {
+      scanId: canonicalId,
+      body,
+      contentType: meta.contentType,
+      filename: `${meta.baseName}-${canonicalId}.${meta.ext}`,
+      sha256: crypto.createHash('sha256').update(body).digest('hex'),
+    };
+  }
+
   async listByScan(scanId: string): Promise<ReportRecord[]> {
     const result = await this.db.query<ReportRow>(
       `SELECT ${REPORT_COLUMNS}
@@ -310,6 +371,7 @@ export class ReportService {
       medium_vulns: number;
       low_vulns: number;
       license_violations: number;
+      vulnerability_data_status?: string | null;
       project_id: string;
       project_name: string;
       project_description: string | null;
@@ -319,6 +381,7 @@ export class ReportService {
       `SELECT s.id, s.ref, s.trigger::text, s.completed_at, s.created_at,
               s.total_dependencies, s.total_vulnerabilities, s.critical_vulns,
               s.high_vulns, s.medium_vulns, s.low_vulns, s.license_violations,
+              s.vulnerability_data_status::text AS vulnerability_data_status,
               p.id AS project_id, p.name AS project_name, p.description AS project_description,
               p.criticality::text AS project_criticality, p.repo_url
        FROM scans s
@@ -447,6 +510,7 @@ export class ReportService {
         mediumVulns: scan.medium_vulns,
         lowVulns: scan.low_vulns,
         licenseViolations: scan.license_violations,
+        vulnerabilityDataStatus: scan.vulnerability_data_status ?? null,
       },
       project: {
         id: scan.project_id,
@@ -506,8 +570,11 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
     ['Vulnerabilities', String(data.scan.totalVulnerabilities)],
     ['Critical / High', `${data.scan.criticalVulns} / ${data.scan.highVulns}`],
     ['License violations', String(data.scan.licenseViolations)],
+    // REQ-004 contract 1.5.0 §5.3 (V-12): always the last Summary item.
+    [VULNERABILITY_DATA_STATUS_LABEL, vulnerabilityDataStatusText(data.scan.vulnerabilityDataStatus)],
   ]);
 
+  // Row caps are unchanged (40/40/50); a cut table gets its own note (§5.4).
   if (reportType !== 'license_inventory') {
     writePdfSection(doc, 'Security Findings');
     const vulnerabilities = data.dependencies.flatMap((dep) =>
@@ -515,7 +582,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
     );
     writePdfRows(
       doc,
-      vulnerabilities.slice(0, 40).map(({ dep, vuln }) => [
+      vulnerabilities.slice(0, PDF_FINDING_ROW_LIMIT).map(({ dep, vuln }) => [
         `${dep.name}@${dep.version}`,
         vuln.advisoryId,
         vuln.severity,
@@ -523,6 +590,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
         vuln.status,
       ]),
       ['Package', 'Advisory', 'Severity', 'Fix', 'Status'],
+      vulnerabilities.length,
     );
   }
 
@@ -533,7 +601,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
     );
     writePdfRows(
       doc,
-      licenses.slice(0, 40).map(({ dep, license }) => [
+      licenses.slice(0, PDF_FINDING_ROW_LIMIT).map(({ dep, license }) => [
         `${dep.name}@${dep.version}`,
         license.normalizedLicense ?? license.detectedLicense ?? 'unknown',
         license.riskLevel,
@@ -541,6 +609,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
         license.status,
       ]),
       ['Package', 'License', 'Risk', 'Policy', 'Status'],
+      licenses.length,
     );
   }
 
@@ -548,7 +617,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
     writePdfSection(doc, 'Dependency Inventory');
     writePdfRows(
       doc,
-      data.dependencies.slice(0, 50).map((dep) => [
+      data.dependencies.slice(0, PDF_DEPENDENCY_ROW_LIMIT).map((dep) => [
         `${dep.name}@${dep.version}`,
         dep.ecosystem,
         dep.scope,
@@ -558,6 +627,7 @@ async function renderPdfReport(data: ReportData, reportType: ReportType): Promis
         singleLine(dep.licenseExpression) || 'n/a',
       ]),
       ['Package', 'Eco', 'Scope', 'Manifest', 'Depth', 'License'],
+      data.dependencies.length,
     );
   }
 
@@ -589,6 +659,8 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
     { metric: 'Medium Vulnerabilities', value: data.scan.mediumVulns },
     { metric: 'Low Vulnerabilities', value: data.scan.lowVulns },
     { metric: 'License Violations', value: data.scan.licenseViolations },
+    // REQ-004 contract 1.5.0 §5.3 (V-12): appended last; existing rows unchanged.
+    { metric: VULNERABILITY_DATA_STATUS_LABEL, value: vulnerabilityDataStatusText(data.scan.vulnerabilityDataStatus) },
   ]));
 
   addDependencyWorksheet(workbook, data);
@@ -610,33 +682,88 @@ async function renderExcelReport(data: ReportData, reportType: ReportType): Prom
   return Buffer.from(bytes);
 }
 
+/**
+ * Columns of the Excel `Dependencies` sheet, which is also the CSV export
+ * (REQ-007 contract section 7): header text, order and cell text come from
+ * this table and `dependencyRowCells`, so the two outputs cannot drift.
+ */
+const DEPENDENCY_COLUMNS: ReadonlyArray<{ header: string; key: string; width: number }> = [
+  { header: 'Name', key: 'name', width: 32 },
+  { header: 'Version', key: 'version', width: 18 },
+  { header: 'Ecosystem', key: 'ecosystem', width: 14 },
+  { header: 'Scope', key: 'scope', width: 14 },
+  { header: 'Manifest', key: 'manifest', width: 36 },
+  { header: 'Depth', key: 'depth', width: 10 },
+  { header: 'PURL', key: 'purl', width: 72 },
+  // REQ-004 contract 5.1: new columns only at the end; existing ones unchanged.
+  { header: 'License', key: 'license', width: 32 },
+  { header: 'License Source', key: 'licenseSource', width: 48 },
+];
+
+/** Header row of the `Dependencies` sheet and of the CSV export. */
+export const DEPENDENCY_HEADERS: readonly string[] = DEPENDENCY_COLUMNS.map((column) => column.header);
+
+/**
+ * Shared row builder of the Excel `Dependencies` sheet and the CSV export
+ * (ADR-009 Karar 8), in `DEPENDENCY_COLUMNS` order. Strings get the formula
+ * guard here, once, on the raw value (REQ-004 5.1a; no folding added to the
+ * existing columns); `Depth` stays a number (Excel number cell, CSV
+ * `String(n)`). `License` is folded to one line, `License Source` follows
+ * `licenseSourceCell`. Always plain values, never `{ formula }`.
+ */
+export function dependencyRowCells(dep: ReportDependency): Array<string | number> {
+  return [
+    dep.name,
+    dep.version,
+    dep.ecosystem,
+    dep.scope,
+    dep.manifestPath || dep.manifestFile,
+    dep.depth,
+    dep.purl,
+    singleLine(dep.licenseExpression),
+    licenseSourceCell(dep),
+  ].map((value) => (typeof value === 'number' ? value : excelSafeText(value)));
+}
+
 function addDependencyWorksheet(workbook: ExcelJS.Workbook, data: ReportData): void {
   const sheet = workbook.addWorksheet('Dependencies');
-  sheet.columns = [
-    { header: 'Name', key: 'name', width: 32 },
-    { header: 'Version', key: 'version', width: 18 },
-    { header: 'Ecosystem', key: 'ecosystem', width: 14 },
-    { header: 'Scope', key: 'scope', width: 14 },
-    { header: 'Manifest', key: 'manifest', width: 36 },
-    { header: 'Depth', key: 'depth', width: 10 },
-    { header: 'PURL', key: 'purl', width: 72 },
-    // REQ-004 contract 5.1: new columns only at the end; existing ones unchanged.
-    { header: 'License', key: 'license', width: 32 },
-    { header: 'License Source', key: 'licenseSource', width: 48 },
-  ];
-  sheet.addRows(excelRows(data.dependencies.map((dep) => ({
-    name: dep.name,
-    version: dep.version,
-    ecosystem: dep.ecosystem,
-    scope: dep.scope,
-    manifest: dep.manifestPath || dep.manifestFile,
-    depth: dep.depth,
-    purl: dep.purl,
-    // Always plain strings (never `{ formula }`); single-line folded here,
-    // formula-guarded by `excelRows` like every other string cell (5.1, 5.1a).
-    license: singleLine(dep.licenseExpression),
-    licenseSource: licenseSourceCell(dep),
-  }))));
+  sheet.columns = DEPENDENCY_COLUMNS.map(({ header, key, width }) => ({ header, key, width }));
+  sheet.addRows(data.dependencies.map((dep) => {
+    const cells = dependencyRowCells(dep);
+    return Object.fromEntries(DEPENDENCY_COLUMNS.map((column, i) => [column.key, cells[i]]));
+  }));
+}
+
+/** CSV export: the `Dependencies` sheet as one table (REQ-007 contract section 7). */
+function renderDependencyCsv(data: ReportData): Buffer {
+  return toCsv([DEPENDENCY_HEADERS, ...data.dependencies.map(dependencyRowCells)]);
+}
+
+/** Key of the V-12 row in the Excel and PDF `Summary` (REQ-004 contract 1.5.0 §5.3). */
+const VULNERABILITY_DATA_STATUS_LABEL = 'Vulnerability Data Status';
+
+/** The single value table of the V-12 row; Excel and PDF use the same text (§5.3). */
+const VULNERABILITY_DATA_STATUS_TEXT: Readonly<Record<string, string>> = {
+  complete: 'complete',
+  partial: 'partial (some packages could not be checked)',
+  unavailable: 'unavailable (vulnerability source unreachable)',
+  disabled: 'disabled (lookup turned off)',
+};
+
+/** `NULL` (pre-F4 scan) and any unrecognised value -> `not checked` (defensive). */
+export function vulnerabilityDataStatusText(status: string | null | undefined): string {
+  return (status != null && Object.hasOwn(VULNERABILITY_DATA_STATUS_TEXT, status))
+    ? VULNERABILITY_DATA_STATUS_TEXT[status]
+    : 'not checked';
+}
+
+/** PDF row caps of the finding tables and the dependency table (unchanged; §5.4). */
+const PDF_FINDING_ROW_LIMIT = 40;
+const PDF_DEPENDENCY_ROW_LIMIT = 50;
+
+/** Note under a cut PDF table (REQ-004 contract 1.5.0 §5.4); plain integers, no grouping. */
+export function pdfTruncationNote(shown: number, total: number): string {
+  return `Showing first ${String(shown)} of ${String(total)}; see the Excel or CSV export for the full list.`;
 }
 
 /**
@@ -755,7 +882,12 @@ function writePdfKeyValues(doc: PDFKit.PDFDocument, rows: Array<[string, string]
   }
 }
 
-function writePdfRows(doc: PDFKit.PDFDocument, rows: string[][], headers: string[]): void {
+/**
+ * `rows` are the already capped rows; `total` is the full row count. When
+ * the table was cut (`total > rows.length`) one note line follows the last
+ * row in the same font size, without the 28-character cell cut (§5.4).
+ */
+function writePdfRows(doc: PDFKit.PDFDocument, rows: string[][], headers: string[], total: number = rows.length): void {
   doc.fontSize(9).text(headers.join(' | '));
   doc.moveDown(0.2);
 
@@ -767,6 +899,11 @@ function writePdfRows(doc: PDFKit.PDFDocument, rows: string[][], headers: string
   for (const row of rows) {
     if (doc.y > 740) doc.addPage();
     doc.text(row.map((value) => truncate(value, 28)).join(' | '));
+  }
+
+  if (total > rows.length) {
+    if (doc.y > 740) doc.addPage();
+    doc.text(pdfTruncationNote(rows.length, total));
   }
 }
 

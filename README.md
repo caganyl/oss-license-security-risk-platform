@@ -231,6 +231,46 @@ Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını her
 
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 
+## Tek tıkla çıktılar (PDF, Excel, CSV, NOTICE)
+
+REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama
+geçmişi) sırasıyla `PDF`, `Excel`, `CSV`, `NOTICE` ve `SBOM` bağlantıları vardır; ilk dördü
+dosyayı ara ekran olmadan doğrudan indirir. Çıktılar istek anında yalnız veritabanından üretilir:
+`reports` satırı, dosya, denetim satırı veya ağ isteği oluşmaz (Raporlar ekranındaki asenkron
+raporlar aynen sürer).
+
+| Uç nokta (`reports:read`, oturum çerezi veya `Authorization: Bearer <api-anahtari>`) | İçerik | Dosya adı |
+| --- | --- | --- |
+| `GET /api/scans/{scanId}/exports/project-report.pdf` | `project_report` PDF'i | `project-report-<scanId>.pdf` |
+| `GET /api/scans/{scanId}/exports/license-inventory.xlsx` | `license_inventory` Excel'i (dört sayfa) | `license-inventory-<scanId>.xlsx` |
+| `GET /api/scans/{scanId}/exports/license-inventory.csv` | Excel `Dependencies` sayfasının CSV'si | `license-inventory-<scanId>.csv` |
+| `GET /api/scans/{scanId}/notice` (değişmedi) | NOTICE metni | `NOTICE-<scanId>.txt` |
+
+- **Yanıt:** `Content-Disposition: attachment`, `Content-Length`, `X-Checksum-SHA256` (gövdenin
+  SHA-256'sı) ve `Cache-Control: no-store`. Dosya adında proje adı yoktur. Geçersiz `scanId` →
+  `400`; olmayan veya tamamlanmamış tarama → `404` ("Scan not found or not yet completed").
+- **Eşzamanlı üretim sınırı:** Sunucu aynı anda en fazla **2** PDF/Excel/CSV üretir (üç uç nokta
+  toplamı; NOTICE sınır dışıdır). Fazlası `429` (`code: export_busy`, `Retry-After: 5`) alır; bu
+  durumda tarayıcı indirmeyi başarısız gösterir — **birkaç saniye sonra tekrar deneyin.** Sınır
+  doluyken var olmayan bir tarama için de `429` döner. Tek üretim `EXPORT_WORKER_TIMEOUT_MS`
+  (varsayılan 10 dakika) ile sınırlıdır; aşılırsa `500`.
+- **CSV biçimi:** UTF-8 + BOM, ayırıcı virgül (yerel ayardan bağımsız), satır sonu CRLF (son satır
+  dahil), ilk satır `Name,Version,Ecosystem,Scope,Manifest,Depth,PURL,License,License Source`.
+  Virgül, çift tırnak veya satır sonu içeren ya da başında/sonunda boşluk/sekme olan alan çift
+  tırnağa alınır (içteki `"` → `""`). Hücre metinleri Excel `Dependencies` sayfasıyla aynıdır;
+  `=`, `+`, `-`, `@`, sekme veya satır başı ile başlayan değerlerin başında Excel'deki gibi `'`
+  bulunur (formül enjeksiyonu kalkanı). Aynı tarama için CSV bayt bayt aynıdır; PDF ve Excel üretim
+  zamanını içerdiği için istekten isteğe özet değişebilir. Türkçe yerel ayarlı Excel'de (ayırıcı
+  `;`) `.xlsx` çıktısını kullanın.
+- **Güvenlik açığı verisi satırı (V-12):** Excel ve PDF raporlarının `Summary` bölümünün sonunda
+  `Vulnerability Data Status` satırı bulunur: `complete`, `partial (some packages could not be
+  checked)`, `unavailable (vulnerability source unreachable)`, `disabled (lookup turned off)`
+  veya (F4 öncesi taramalar) `not checked`. Asenkron raporlarda da aynıdır.
+- **PDF kesinti notu:** PDF'teki `Security Findings` (40 satır), `License Findings` (40) ve
+  `Dependency Inventory` (50) tabloları kesildiğinde tablonun altına
+  `Showing first <n> of <toplam>; see the Excel or CSV export for the full list.` yazılır. Tam
+  liste Excel/CSV'dedir.
+
 ## Komut satırı istemcisi (`oss-risk` CLI)
 
 REQ-007 (F6) / ADR-009. CLI, çalışan bir sunucuya karşı mevcut bir projenin taramasını başlatır,

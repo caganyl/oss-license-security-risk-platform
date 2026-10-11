@@ -13,6 +13,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { threadEntry } from '../../lib/threadBootstrap';
 import type { ParserLockIntegrityRecord, ParserRunOutput, RunParserFn, SandboxScanResult } from '../../types/scan';
+import { isNugetLockIntegrity } from './lockIntegrityValue';
 import type { ParserThreadInput, ParserThreadResponse } from './thread';
 
 export interface ParserResourceLimits {
@@ -111,12 +112,35 @@ function sideChannelOf(message: Partial<ParserThreadResponse> & { sideChannel?: 
   return records;
 }
 
+/**
+ * Re-validates the NuGet side channel on the main thread (REQ-006 AC-P20-16,
+ * ADR-008 Karar 6): text fields only, value exactly `sha512-` + 86 base64
+ * characters + `==`, at most one record per dependency. Malformed records are
+ * dropped.
+ */
+function nugetSideChannelOf(message: Partial<ParserThreadResponse> & { sideChannel?: unknown }, result: SandboxScanResult): ParserLockIntegrityRecord[] {
+  const channel = message.sideChannel as { nugetIntegrity?: unknown } | undefined;
+  if (!channel || typeof channel !== 'object' || !Array.isArray(channel.nugetIntegrity)) return [];
+  const records: ParserLockIntegrityRecord[] = [];
+  for (const raw of channel.nugetIntegrity.slice(0, result.dependencies.length) as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const { manifestPath, name, version, integrity } = raw as Record<string, unknown>;
+    if (typeof manifestPath !== 'string' || typeof name !== 'string' || typeof version !== 'string') continue;
+    if (!isNugetLockIntegrity(integrity) || integrity.length > MAX_SIDE_CHANNEL_CHARS) continue;
+    records.push({ manifestPath, name, version, integrity });
+  }
+  return records;
+}
+
 function mapOutcome(outcome: Outcome, scanId: string, options: ThreadParserOptions): ParserRunOutput {
   switch (outcome.kind) {
     case 'message': {
       const message = outcome.message as Partial<ParserThreadResponse> | null;
       if (message && message.ok === true && isValidResult(message.result, scanId)) {
-        return { result: message.result, lockIntegrity: sideChannelOf(message, message.result) };
+        const output: ParserRunOutput = { result: message.result, lockIntegrity: sideChannelOf(message, message.result) };
+        const nugetIntegrity = nugetSideChannelOf(message, message.result);
+        if (nugetIntegrity.length > 0) output.nugetIntegrity = nugetIntegrity;
+        return output;
       }
       if (message && message.ok === false) {
         throw new ParserFailedError(`Ayrıştırıcı beklenmeyen bir hatayla durdu (${String(message.error ?? '')}).`);

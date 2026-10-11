@@ -1195,6 +1195,29 @@ biri için tanımlı yedek veya AC-P18-14 sırasında teyit adımı vardır (Kar
 >   (önerilen seçenek), contract 1.1.0 ile aynı dayanak. ADR durumu `Accepted`
 >   kalır; kayıt kullanıcının commit'iyle kesinleşir.
 
+## ADR-008 notu (2026-10-11)
+
+> **ADR-008 ile kısmen superseded (2026-10-11).** REQ-006 (F5):
+> - **Karar 3:** aday kümesi `dotnet` paketlerini de içerir (OSV ekosistemi
+>   `NuGet`, anahtar küçük harfli kimlik ve sürüm). Gövdedeki ad `.nuspec`
+>   `<id>` (kanonik ad), yoksa ilk kaydın kaynak harf biçimidir.
+>   `bestAffected` NuGet için harf duyarsız bir adım kazanır.
+> - **Karar 7:** `SCOPE_PAGE_SQL`'deki `CASE … ELSE 'pypi'` kaldırılır ve
+>   üç değerli, `ELSE`'siz bir eşlemeyle değiştirilir. NuGet anahtarları
+>   `lower(… COLLATE "C")` ile üretilir (I-14'ten bağımsız).
+>   `registry_package_cache.canonical_name` ile `LEFT JOIN` yapılır.
+> - **Karar 12:** L-5 artık yalnız npm için değildir. NuGet'te karşılaştırma
+>   meta veri aşamasında değil, arşiv aşamasında indirilen baytlar üzerinde
+>   yapılır: ham SHA-512 veya imzalı paket içerik özeti. Uyuşmazlıkta aynı
+>   fail-safe ve aynı kolon/metinler kullanılır. Zenginleştirme açıkken NuGet
+>   anahtarlarının varsayılan değeri `not_comparable`'dır ("npm dışı →
+>   `NULL`" ifadesi PyPI için geçerli kalır). Birden çok farklı lock özeti
+>   `mismatch` sayılır.
+>
+> Ayrıntı:
+> `docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md`
+> Karar 6, 10, 13.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

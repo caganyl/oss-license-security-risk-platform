@@ -18,6 +18,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 - [Göç testleri](#göç-testleri)
 - [Kayıt defteri önbelleği (`006`)](#kayıt-defteri-önbelleği-006)
 - [Güvenlik açığı önbellekleri ve yeniden kontrol kaydı (`007`)](#güvenlik-açığı-önbellekleri-ve-yeniden-kontrol-kaydı-007)
+- [NuGet önbelleği ve sınıflandırılmamış lisans işareti (`008`)](#nuget-önbelleği-ve-sınıflandırılmamış-lisans-işareti-008)
 - [Parola kurtarma (SQL adımı)](#parola-kurtarma-sql-adımı)
 - [Kurallar](#kurallar)
 
@@ -26,7 +27,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | Yol | Amaç |
 | --- | --- |
 | `migrations/NNN_ad.up.sql` / `.down.sql` | İleri / geri göç. Araç her dosyayı, `schema_migrations` kaydıyla (`up`'ta `INSERT`, `down`'da `DELETE`) birlikte **tek transaction** içinde çalıştırır: ya ikisi birden işlenir ya hiçbiri. Dosyalarda `BEGIN/COMMIT` yoktur. |
-| `schema.sql` | `001`–`007` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
+| `schema.sql` | `001`–`008` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
 | `tests/f1_migrations_test.sql` | `002`–`004` için up → assert → down → up senaryosu. `psql` gerektirmez: `npm test` bunu `tests/integration/migrations.test.ts` içinde gömülü PostgreSQL'e karşı çalıştırır (`\ir` satırları satır içine alınır). Bulgu parmak izi referans değerleri de buradadır. |
 | `../src/db/migrate.ts` | CLI (`npm run db:migrate` = `node dist/db/migrate.js`). |
 | `../src/db/migrator.ts` | Göç kütüphanesi: klasör doğrulama, durum okuma, `up`, `down`, `status`, `npm start` için bekleyen göç kontrolü. |
@@ -43,6 +44,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | `005_scan_next_attempt` | `scans.next_attempt_at TIMESTAMPTZ NULL` (yeniden deneme bekleme zamanı); indeks ve CHECK yok | ADR-004 Karar 11, D-40 | Yalnız kuyruktaki taramaların yeniden deneme zamanlaması (bekleyenler hemen sahiplenilebilir olur) |
 | `006_registry_enrichment` | `registry_package_cache` (kayıt defteri lisans meta veri önbelleği), `registry_archive_cache` (arşivden çıkarılan lisans dosyaları ve telif satırları); `scan_dependencies`'e 7 kolon: `license_expression`, `license_source`, `license_lock_hint`, `license_hint_differs`, `license_enrichment_status`, `notice_status`, `notice_archive_id` (FK, `ON DELETE SET NULL`); `idx_scan_dependencies_notice_archive`. Veri taşıma yok; eski satırlar `NULL` kalır (= F3 öncesi tarama) | ADR-006 Karar 9–10, D-57, D-62, D-79 | İki önbellek (kayıt defterlerinden yeniden indirilebilir) ve F3 sonrası taramaların etkin lisans / NOTICE alanları (kalıcı; bu taramalar F3 öncesi gibi görünür, NOTICE için yeniden tarama gerekir) |
 | `007_vulnerability_recheck` | `vulnerability_recheck_runs` (günlük yeniden kontrol çalıştırma kaydı; `runtime_run_id` çiti, aynı anda tek `running` satırı: `uq_vulnerability_recheck_runs_running`), `osv_vulnerability_cache` (kırpılmış OSV kayıtları), `nvd_cvss_cache` (CVE başına CVSS özeti); `scans.vulnerability_data_status` (`complete`/`partial`/`unavailable`/`disabled`, `NULL` = F4 öncesi), `scans.vulnerability_checked_at`; `findings.recheck_run_id` (FK, `ON DELETE SET NULL`); `scan_dependencies.lock_integrity` (L-5: `match`/`mismatch`/`not_comparable`); `idx_findings_recheck_run`, `idx_findings_accepted`, `idx_scans_project_completed`. Enum değişikliği ve veri taşıma yok; eski satırlar `NULL` kalır | ADR-007 Karar 14, D-102, D-103 | Yeniden kontrol çalıştırma geçmişi, bulguların yeniden kontrol bağlantısı (bulgular, incelemeler ve denetim satırları **kalır**), taramaların güvenlik açığı verisi durumu ve son kontrol zamanı, L-5 işaretleri (kalıcı); iki önbellek (OSV/NVD'den yeniden alınabilir) |
+| `008_nuget_enrichment` | `registry_package_cache` ve `registry_archive_cache` `ecosystem` CHECK'ine `nuget`; `registry_package_cache`'e 3 kolon (yalnız NuGet `found` satırlarında dolu, `registry_package_cache_nuget_fields`): `license_unclassified` (`file`/`url`), `license_file_path` (≤ 256), `canonical_name` (≤ 100, `.nuspec` `<id>`); `scan_dependencies.license_source` CHECK'ine `registry:nuget`; `scan_dependencies.license_unclassified` (`file`/`url`/`NULL`). İndeks, enum değişikliği ve veri taşıma yok; eski satırlar `NULL` kalır | ADR-008 Karar 14, D-139, D-157, D-158 | NuGet meta veri ve arşiv önbellek satırları (yeniden indirilebilir; NuGet satırlarının `notice_archive_id`'si `NULL` olur, NOTICE için yeniden tarama gerekir); `registry:nuget` → `none` (**toplu güncelleme**, `license_expression` korunur); `license_unclassified` işaretleri (kalıcı) |
 
 **Dağıtım sırası:**
 
@@ -62,6 +64,13 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
   rapor/NOTICE/SBOM kodu yeni tabloları ve kolonları okur/yazar; `npm start`
   göç bekliyorsa başlamaz). `007`'yi geri almak REQ-005 kodunu geri almakla
   birlikte yapılır. REQ-005 öncesi kod yeni tabloları ve kolonları yok sayar.
+- `008`, REQ-006 çalışma zamanından **önce** uygulanır (worker, NOTICE, rapor,
+  SBOM ve OSV yeniden kontrol kodu yeni kolonları ve değerleri okur/yazar;
+  `npm start` göç bekliyorsa başlamaz). `008`'i geri almak REQ-006 kodunu geri
+  almakla birlikte yapılır (REQ-006 worker'ı geri yüklenen CHECK'lerin
+  reddettiği `nuget` / `registry:nuget` değerlerini yazar). Down betiği toplu
+  veri güncellemesi içerdiği için yalnız açık insan onayıyla çalıştırılır.
+  REQ-006 öncesi kod yeni kolonları yok sayar.
 - Veritabanında dosyası olmayan bir sürüm varsa (veritabanı koddan yeni) ne
   araç (`up`/`down`) ne `npm start` çalışır; önce kodu güncelleyin.
 
@@ -257,10 +266,16 @@ açılır. Testler uygulamanın kendi veritabanına asla bağlanmaz.
   `running` satırı, `ON DELETE SET NULL`, down'da bulguların korunması,
   `schema.sql` eşitliği): REQ-005 AC-G-7 Vitest göç testleri (`tests/`,
   qa-automation).
+- `008` (up → down → up, CHECK kümelerinin contract 1.4.0 ile birebirliği,
+  `registry_package_cache_nuget_fields`, down'da `registry:nuget` → `none` ve
+  `license_expression`'ın korunması, NuGet önbellek satırlarının silinmesi,
+  `schema.sql` eşitliği): REQ-006 AC-G-7 Vitest göç testleri (`tests/`,
+  qa-automation).
 
 ## Kayıt defteri önbelleği (`006`)
 
-REQ-004 (F3) lisans zenginleştirmesi, npm ve PyPI'dan aldığı sonuçları iki
+REQ-004 (F3) lisans zenginleştirmesi, npm ve PyPI'dan (`008` ile NuGet'ten de;
+bkz. [`008`](#nuget-önbelleği-ve-sınıflandırılmamış-lisans-işareti-008)) aldığı sonuçları iki
 tabloda kalıcı olarak önbelleğe alır (ADR-006 Karar 9–10, D-57). Kayıtlar
 tarama sonucu transaction'ından **bağımsız**, istek sonuçlandığı anda kendi
 transaction'ında yazılır; iptal edilen veya geri alınan bir tarama önbelleği
@@ -269,7 +284,7 @@ indirilebilir; önbellek her zaman güvenle temizlenebilir.
 
 | Tablo | Anahtar | İçerik | Geçerlilik |
 | --- | --- | --- | --- |
-| `registry_package_cache` | `(ecosystem, name, version)` — `ecosystem` `npm`/`pypi`, `name` istek adı (npm olduğu gibi, PyPI PEP 503), kesin sürüm | `outcome` (`found`/`not_found`), türetilmiş `declared_license`, PyPI uzun lisans metni `license_text` (NOTICE yedeği, ≤ 1 MiB), `archive_candidates` (arşiv URL'si, özet, boyut), `extractor_version` | `found`: süresiz (koddaki `METADATA_EXTRACTOR_VERSION` artınca yenilenir). `not_found` (404/410): `expires_at` = yazım + 24 saat, veritabanı saatiyle. Geçici hatalar hiç yazılmaz. |
+| `registry_package_cache` | `(ecosystem, name, version)` — `ecosystem` `npm`/`pypi`/`nuget` (`008`), `name` istek adı (npm olduğu gibi, PyPI PEP 503, NuGet ASCII küçük harfli kimlik), kesin sürüm | `outcome` (`found`/`not_found`), türetilmiş `declared_license`, PyPI uzun lisans metni `license_text` (NOTICE yedeği, ≤ 1 MiB), `archive_candidates` (arşiv URL'si, özet, boyut), `extractor_version` | `found`: süresiz (koddaki `METADATA_EXTRACTOR_VERSION` artınca yenilenir). `not_found` (404/410): `expires_at` = yazım + 24 saat, veritabanı saatiyle. Geçici hatalar hiç yazılmaz. |
 | `registry_archive_cache` | `id` (UUID); benzersiz `registry_archive_cache_key` = `(ecosystem, name, version, archive_digest)` | `outcome` (`collected`/`no_license_file`/`unsupported_format`/`limit_exceeded`), `outcome_detail`, `license_files` (`[{path,text}` \| `{path,omitted}]`), `copyright_lines`, arşiv URL'si/boyutu, `extractor_version` | Süresiz; `ARCHIVE_EXTRACTOR_VERSION` artınca aynı `id` ile yerinde güncellenir. İndirme/bütünlük/iş parçacığı hataları ve bütçe aşımı yazılmaz. |
 
 Taramaya bağlı alanlar `scan_dependencies` satırındadır (`license_expression`,
@@ -434,6 +449,62 @@ DELETE FROM vulnerability_recheck_runs
   EXCLUSIVE` kilit tutar, ardından üç indeks `SHARE` kilidiyle oluşturulur.
   Yerel veritabanlarında saniyeler sürer; göçten önce uygulamayı durdurun.
 
+## NuGet önbelleği ve sınıflandırılmamış lisans işareti (`008`)
+
+REQ-006 (F5) NuGet `.nuspec` lisans meta verisini ve `.nupkg` lisans
+dosyalarını `006`'nın iki önbellek tablosunda `ecosystem = 'nuget'` ile tutar
+(ADR-008 Karar 9, 11, 14; D-139). Anahtar `('nuget', ASCII küçük harfli kimlik,
+küçük harfli normal sürüm)`'dür. Yazım kuralları, süreler ve yerinde güncelleme
+`006` ile aynıdır; NuGet satırları da kayıt defterinden yeniden indirilebilir.
+
+| Kolon | Tablo | Değerler | Anlamı |
+| --- | --- | --- | --- |
+| `license_unclassified` | `registry_package_cache` | `file` / `url` / `NULL` | `.nuspec` `<license type="file">` veya SPDX ifadesine eşlenemeyen `<licenseUrl>`. URL metni hiç saklanmaz. |
+| `license_file_path` | `registry_package_cache` | ≤ 256 karakter / `NULL` | `.nuspec`'te bildirilen lisans dosyası yolu (normalleştirilmiş arşiv yolu). |
+| `canonical_name` | `registry_package_cache` | ≤ 100 karakter / `NULL` | `.nuspec` `<id>`'nin özgün harf biçimi; OSV sorgusunda ve yeniden kontrol kapsamında ad olarak kullanılır (ADR-008 Karar 13.2, 13.4). |
+| `license_unclassified` | `scan_dependencies` | `file` / `url` / `NULL` | Taramanın kendi kopyası; önbellek silinse de Excel/NOTICE nedenini taşır. Durum değeri **değildir**: satır `no_license` / `none` / ifade `NULL`'dır. API yanıtında dönmez. |
+
+- Önbellekteki üç kolon yalnız NuGet `found` satırlarında dolu olabilir
+  (`registry_package_cache_nuget_fields`); npm/PyPI ve `not_found` satırlarında
+  `NULL`'dır.
+- `scan_dependencies.license_source` değer kümesi `registry:nuget` ile genişler
+  ve bu değer her zaman dolu bir `license_expression` taşır.
+  `license_unclassified` değer kümesi
+  `docs/contracts/REQ-004-notice-and-outputs.md` bölüm 4.5, `license_source`
+  bölüm 4.1 ile birebir aynıdır.
+- `license_enrichment_status`, `notice_status` ve `lock_integrity` kümeleri
+  değişmez; `lock_integrity` NuGet'te `.nupkg` baytları ile lock/assets özeti
+  karşılaştırmasını taşır (contract bölüm 4.4).
+
+### NuGet önbelleğini temizleme (SQL)
+
+Yalnız NuGet satırları; npm/PyPI önbelleğine dokunmaz. pgAdmin Query Tool'unda
+veya `psql` ile çalıştırılır; production veritabanında veri silmek insan onayı
+gerektirir. Arşiv satırları silinince NuGet taramalarının `notice_archive_id`'si
+`NULL` olur ve NOTICE için yeniden tarama gerekir (bkz. [Önbelleği
+temizleme](#önbelleği-temizleme-sql)); önce uygulamayı durdurun.
+
+```sql
+BEGIN;
+DELETE FROM registry_archive_cache WHERE ecosystem = 'nuget';
+DELETE FROM registry_package_cache WHERE ecosystem = 'nuget';
+COMMIT;
+```
+
+- Göç `008` kendisi: varsayılansız `NULL` kolon eklemek tabloyu yeniden yazmaz;
+  her `ALTER TABLE` CHECK doğrulaması boyunca (tablo başına bir tarama) kısa
+  süre `ACCESS EXCLUSIVE` kilit tutar. İndeks oluşturulmaz. Yerel
+  veritabanlarında saniyeler sürer; göçten önce uygulamayı durdurun.
+- `008`'in değiştirdiği CHECK'ler `006`'nın varsayılan adlarını taşır
+  (`registry_package_cache_ecosystem_check`, `registry_archive_cache_ecosystem_check`,
+  `scan_dependencies_license_source_check`). `DROP CONSTRAINT` bilerek
+  `IF EXISTS`'siz yazılmıştır: ad tutmazsa göç sessizce iki CHECK bırakmak
+  yerine hata verir.
+- Geri alma (`down --to 007`) toplu veri güncellemesi içerir
+  (`registry:nuget` → `none`, `license_expression` korunur) ve NuGet önbellek
+  satırlarını siler; yalnız açık insan onayıyla, yedek alındıktan sonra
+  çalıştırılır.
+
 ## Parola kurtarma (SQL adımı)
 
 Arayüz veya API üzerinden parola kurtarma ya da değiştirme yoktur (ADR-001
@@ -483,7 +554,7 @@ Sonrasında:
 - Yeni şema değişikliği yalnız yeni bir `NNN_ad.up.sql` + `.down.sql` çiftiyle,
   uygulanmış en büyük numaradan sonra yapılır; **uygulanmış bir göç dosyası
   değiştirilmez**, düzeltme yeni göçle yapılır (araç checksum saklamaz; `001`…
-  `006`'nın normalize içerik özetleri testle sabitlenir; `007` REQ-005 ile
+  `007`'nin normalize içerik özetleri testle sabitlenir; `008` REQ-006 ile
   sabitlenir).
 - Her `.down.sql`, kaybolacak veriyi dosya başında açıkça yazar.
 - Göç dosyaları `BEGIN/COMMIT/ROLLBACK/START TRANSACTION` ve `psql` meta

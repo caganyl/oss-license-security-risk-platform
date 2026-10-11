@@ -22,6 +22,8 @@ import { computeNextDue, createVulnerabilityScheduler, type VulnerabilitySchedul
 import { useTestDatabase } from '../helpers/db';
 import { type FakeOsv, osvKey, startFakeOsv } from '../helpers/fakeOsv';
 import { insertFindingRow, insertReview, insertUser, makeF4Lookup, seedF4Scan } from '../helpers/f4Seed';
+import { f3Dep, seedScan } from '../helpers/f3Seed';
+import { REPO_ROOT } from '../helpers/paths';
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 240_000 });
 
@@ -200,6 +202,80 @@ describe('AC-P18-3: scope = latest completed scan of every project', () => {
     const summary = await runnerOf(lookupOf(), { maxPackages: 2 }).run(new AbortController().signal);
     expect(osv.batches().flat()).toHaveLength(2);
     expect(summary).toMatchObject({ status: 'partial', packagesChecked: 2, packagesUnchecked: 1, errorSummary: 'osv:package_limit' });
+  });
+});
+
+describe('REQ-006 security review I-7: recheck scope key of PyPI/NuGet names is Turkish-locale safe', () => {
+  /**
+   * The scope SQL is not exported; it is read from the source text so the test
+   * runs exactly the SQL the runner sends (only `${LATEST_SCANS_SQL}` is
+   * substituted). The test database is `--locale=C`, so a Turkish ICU
+   * collation is put on `packages.name` of this fresh per-test database to
+   * reproduce a `tr_TR` ctype database: there `lower('I')` is a dotless `ı`
+   * unless `COLLATE "C"` is applied.
+   */
+  const scopeSql = (): string => {
+    const source = fs.readFileSync(path.join(REPO_ROOT, 'src', 'vulnerability', 'recheck.ts'), 'utf8');
+    const latest = /const LATEST_SCANS_SQL = `([\s\S]*?)`;/.exec(source)?.[1];
+    const scope = /const SCOPE_PAGE_SQL = `([\s\S]*?)`;/.exec(source)?.[1];
+    expect(latest, 'LATEST_SCANS_SQL in recheck.ts').toBeDefined();
+    expect(scope, 'SCOPE_PAGE_SQL in recheck.ts').toBeDefined();
+    expect(scope).toContain('${LATEST_SCANS_SQL}');
+    return scope!.replace('${LATEST_SCANS_SQL}', latest!);
+  };
+  const turkishCollation = async (): Promise<string | null> => {
+    const rows = await db.query<{ collname: string }>(
+      `SELECT collname FROM pg_collation WHERE collprovider = 'i' AND collname IN ('tr-TR-x-icu', 'tr-x-icu') ORDER BY collname LIMIT 1`,
+    );
+    return rows[0]?.collname ?? null;
+  };
+
+  it('I-7: every lower() in the scope SQL runs under COLLATE "C"', () => {
+    const sql = scopeSql();
+    const lowers = sql.match(/lower\(/g) ?? [];
+    expect(lowers.length).toBeGreaterThanOrEqual(3);
+    expect(sql).toContain(`lower(regexp_replace(p.name, '[-_.]+', '-', 'g') COLLATE "C")`);
+    expect(sql).toContain(`lower(p.name COLLATE "C")`);
+    expect(sql).toContain(`lower(p.version COLLATE "C")`);
+  });
+
+  it('I-7: "Ixml_Pkg", "IXML.pkg" and "ixml-pkg" are one PyPI key "ixml-pkg" (and "Ion.Core" one NuGet key) even with a Turkish column collation', async () => {
+    // The pinned embedded PostgreSQL ships ICU; without a Turkish collation this test would be vacuous, so it fails instead.
+    const tr = await turkishCollation();
+    expect(tr, 'ICU Turkish collation (tr-TR-x-icu / tr-x-icu) in the test PostgreSQL').not.toBeNull();
+    // Non-vacuous: this collation really lowers I to a dotless ı.
+    const [probe] = await db.query<{ v: string }>(`SELECT lower('Ixml' COLLATE "${tr}") AS v`);
+    expect(probe.v).toBe('ıxml');
+    await db.query(`ALTER TABLE packages ALTER COLUMN name TYPE text COLLATE "${tr}"`);
+    await seedScan(db, { projectName: 'i7-a', deps: [f3Dep({ ecosystem: 'python', name: 'Ixml_Pkg', version: '1.0', purl: 'pkg:pypi/ixml-pkg@1.0' })] });
+    await seedScan(db, { projectName: 'i7-b', deps: [f3Dep({ ecosystem: 'python', name: 'IXML.pkg', version: '1.0', purl: 'pkg:pypi/ixml-pkg@1.0#b' })] });
+    await seedScan(db, {
+      projectName: 'i7-c',
+      deps: [
+        f3Dep({ ecosystem: 'python', name: 'ixml-pkg', version: '1.0', purl: 'pkg:pypi/ixml-pkg@1.0#c' }),
+        f3Dep({ ecosystem: 'dotnet', name: 'Ion.Core', version: '1.0.0', purl: 'pkg:nuget/Ion.Core@1.0.0' }),
+        f3Dep({ ecosystem: 'dotnet', name: 'ION.CORE', version: '1.0.0', purl: 'pkg:nuget/ION.CORE@1.0.0' }),
+      ],
+    });
+
+    // The exact scope SQL: one row per registry key, ASCII-lowered.
+    const rows = await db.query<{ eco: string; req: string; version: string }>(scopeSql(), [null, null, null, 5_000]);
+    expect(rows.map((r) => [r.eco, r.req, r.version])).toEqual([
+      ['nuget', 'ion.core', '1.0.0'],
+      ['pypi', 'ixml-pkg', '1.0'],
+    ]);
+    // Mutation check: the pre-I-7 PyPI expression (no COLLATE "C") splits the key under this collation.
+    const before = scopeSql().replace(`lower(regexp_replace(p.name, '[-_.]+', '-', 'g') COLLATE "C")`, `lower(regexp_replace(p.name, '[-_.]+', '-', 'g'))`);
+    const split = await db.query<{ eco: string; req: string }>(before, [null, null, null, 5_000]);
+    expect(split.filter((r) => r.eco === 'pypi').map((r) => r.req)).toEqual(['ixml-pkg', 'ıxml-pkg']);
+
+    // The runner sends one PyPI and one NuGet query.
+    const summary = await runnerOf().run(new AbortController().signal);
+    const queries = osv.batches().flat().map((q) => `${q.package.ecosystem}|${q.package.name}@${q.version}`).sort();
+    expect(queries).toHaveLength(2);
+    expect(queries[1]).toBe('PyPI|ixml-pkg@1.0');
+    expect(queries[0]).toMatch(/^NuGet\|(Ion\.Core|ION\.CORE)@1\.0\.0$/);
+    expect(summary).toMatchObject({ packagesChecked: 2, packagesUnchecked: 0 });
   });
 });
 

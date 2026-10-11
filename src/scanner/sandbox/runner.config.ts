@@ -145,6 +145,8 @@ export const ENRICHMENT_LIMITS = Object.freeze({
   client: Object.freeze({
     /** Metadata response (network and decompressed bytes). */
     metadataMaxBytes: 8 * MiB,
+    /** NuGet `.nuspec` response, decompressed body (REQ-006, ADR-008 Karar 8). */
+    nuspecMaxBytes: 1 * MiB,
     /** One package archive. */
     archiveMaxBytes: 64 * MiB,
     /** Archive download time floor: `max(REGISTRY_TIMEOUT_MS, 60 s)`. */
@@ -376,8 +378,8 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
     }),
     shallowDepth: 1,
     maxRepoSizeMb: 512,
-    // MVP: Node.js and Python only
-    supportedEcosystems: ['nodejs', 'python'],
+    // Node.js, Python and .NET (NuGet; REQ-006 AC-P20-17, ADR-008 Karar 15). Order is the default stack order.
+    supportedEcosystems: ['nodejs', 'python', 'dotnet'],
   },
 
   retry: {

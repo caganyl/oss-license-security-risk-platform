@@ -1,0 +1,77 @@
+{
+  "scan_id": "nuget-golden-lock-v2",
+  "status": "completed",
+  "total_deps": 4,
+  "dependencies": [
+    {
+      "ecosystem": "dotnet",
+      "name": "Contoso.Core",
+      "version": "1.0.0-Beta",
+      "purl": "pkg:nuget/Contoso.Core@1.0.0-Beta",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.lock.json",
+      "manifest_path": ".",
+      "declared_range": "[1.0.0-Beta, )"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Contoso.Utils",
+      "version": "1.2.3",
+      "purl": "pkg:nuget/Contoso.Utils@1.2.3",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "packages.lock.json",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Contoso.Utils",
+      "version": "4.0.10.1",
+      "purl": "pkg:nuget/Contoso.Utils@4.0.10.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "packages.lock.json",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Runtime.Native",
+      "version": "2.0.0-Beta.1",
+      "purl": "pkg:nuget/Runtime.Native@2.0.0-Beta.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "packages.lock.json",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dotnet",
+      "filename": "packages.lock.json",
+      "file_path": "packages.lock.json",
+      "file_hash": "017cc61e231083c6d5f4f002a4be05af95d6600830a06455311f2254917d8451",
+      "size_bytes": 1057
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dotnet",
+      "file": "packages.lock.json",
+      "error": "Geçersiz paket kimliği içeren girdiler atlandı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "packages.lock.json",
+      "error": "Bilinmeyen bağımlılık türü içeren girdiler atlandı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "packages.lock.json",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "scan_id": "nuget-golden-broken",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "dotnet",
+      "name": "Fallback.Package",
+      "version": "1.2.3",
+      "purl": "pkg:nuget/Fallback.Package@1.2.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "project.assets.json",
+      "manifest_path": "a",
+      "declared_range": "[1.2.3, )"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Project.File.Fallback",
+      "version": "4.5.6",
+      "purl": "pkg:nuget/Project.File.Fallback@4.5.6",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "b.csproj",
+      "manifest_path": "b",
+      "declared_range": "4.5.6"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dotnet",
+      "filename": "project.assets.json",
+      "file_path": "a/obj/project.assets.json",
+      "file_hash": "e1440db52a0926c91f393d4736f6a44c17e0aaa17a973a2d8eb11f70226f4f3b",
+      "size_bytes": 210
+    },
+    {
+      "ecosystem": "dotnet",
+      "filename": "b.csproj",
+      "file_path": "b/b.csproj",
+      "file_hash": "a2c3845b2e3b306001a0ac360bb40e48fe3d282e7cc36a77d47b5a7334611a4e",
+      "size_bytes": 147
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dotnet",
+      "file": "a/packages.lock.json",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "b/packages.lock.json",
+      "error": "Desteklenmeyen packages.lock.json sürümü."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "b/obj/project.assets.json",
+      "error": "Desteklenmeyen project.assets.json sürümü."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "c/c.csproj",
+      "error": "XML belge türü bildirimi (DOCTYPE) desteklenmiyor."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "c/packages.config",
+      "error": "XML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "d/packages.lock.json",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "d/d.csproj",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "e/e.csproj",
+      "error": "XML ayrıştırılamadı."
+    }
+  ]
+}

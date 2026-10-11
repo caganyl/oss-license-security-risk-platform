@@ -102,6 +102,11 @@ export interface ParserLockIntegrityRecord {
 export interface ParserRunOutput {
   result: SandboxScanResult;
   lockIntegrity: ParserLockIntegrityRecord[];
+  /**
+   * NuGet lock/assets SHA-512 records (`sha512-<base64>`; REQ-006 AC-P20-16,
+   * ADR-008 Karar 6). Present only when the thread sent at least one valid record.
+   */
+  nugetIntegrity?: ParserLockIntegrityRecord[];
 }
 
 /**

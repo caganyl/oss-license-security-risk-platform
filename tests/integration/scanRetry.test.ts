@@ -493,7 +493,8 @@ describe('I-6 (security review): loadEcosystems logs only the error code', () =>
         expect(String(arg)).not.toContain('not-a-real-pass');
       }
     }
-    expect(parser.mock.calls[0][1]).toEqual(['nodejs', 'python']);
+    // REQ-006 AC-P20-17 (D-130): the empty-stack fallback now includes dotnet (order kept, appended last).
+    expect(parser.mock.calls[0][1]).toEqual(['nodejs', 'python', 'dotnet']);
     expect((await row(scanId)).status).toBe('completed');
   });
 });

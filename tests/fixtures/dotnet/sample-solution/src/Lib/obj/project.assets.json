@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "Serilog/3.1.1": {
+        "type": "package",
+        "compile": { "lib/net7.0/Serilog.dll": {} }
+      },
+      "Serilog.Sinks.Console/5.0.1": {
+        "type": "package",
+        "dependencies": { "Serilog": "3.1.1" }
+      }
+    }
+  },
+  "libraries": {
+    "Serilog/3.1.1": {
+      "sha512": "FBCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJKLMNOP==",
+      "type": "package",
+      "path": "serilog/3.1.1",
+      "files": ["lib/net7.0/Serilog.dll", "serilog.3.1.1.nupkg.sha512", "serilog.nuspec"]
+    },
+    "Serilog.Sinks.Console/5.0.1": {
+      "sha512": "HBCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJKLMNOP==",
+      "type": "package",
+      "path": "serilog.sinks.console/5.0.1",
+      "files": ["lib/net7.0/Serilog.Sinks.Console.dll"]
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": ["Serilog.Sinks.Console >= 5.0.1"]
+  },
+  "packageFolders": {
+    "C:\\Users\\fixtureuser\\.nuget\\packages\\": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\fixtureuser\\source\\sample\\src\\Lib\\Lib.csproj",
+      "projectPath": "C:\\Users\\fixtureuser\\source\\sample\\src\\Lib\\Lib.csproj",
+      "packagesPath": "C:\\Users\\fixtureuser\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\fixtureuser\\source\\sample\\src\\Lib\\obj\\"
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "dependencies": {
+          "Serilog.Sinks.Console": {
+            "target": "Package",
+            "version": "[5.0.1, )",
+            "versionCentrallyManaged": true
+          }
+        }
+      }
+    }
+  },
+  "logs": [
+    {
+      "code": "NU1603",
+      "level": "Warning",
+      "message": "C:\\Users\\fixtureuser\\source\\sample\\src\\Lib\\Lib.csproj warning"
+    }
+  ]
+}

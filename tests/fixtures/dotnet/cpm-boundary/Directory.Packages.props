@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Outside.Root" Version="1.0.0" />
+  </ItemGroup>
+</Project>

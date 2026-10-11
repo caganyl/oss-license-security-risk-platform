@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "libraries": {
+    "Fallback.Package/1.2.3": { "type": "package" }
+  },
+  "project": { "frameworks": { "net8.0": { "dependencies": { "Fallback.Package": { "version": "[1.2.3, )" } } } } }
+}

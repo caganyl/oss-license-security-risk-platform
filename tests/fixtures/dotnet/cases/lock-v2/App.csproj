@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Never.Read.Because.Lock.Wins" Version="1.0.0" />
+  </ItemGroup>
+</Project>

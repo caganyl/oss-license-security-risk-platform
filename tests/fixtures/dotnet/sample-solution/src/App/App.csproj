@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="System.Memory" Version="4.5.5" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <ProjectReference Include="..\Lib\Lib.csproj" />
+  </ItemGroup>
+</Project>

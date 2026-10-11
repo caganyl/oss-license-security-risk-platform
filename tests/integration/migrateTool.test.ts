@@ -58,6 +58,7 @@ const ALL = [
   '005_scan_next_attempt',
   '006_registry_enrichment', // REQ-004
   '007_vulnerability_recheck', // REQ-005
+  '008_nuget_enrichment', // REQ-006
 ];
 /** Newest real migration (the "latest version" of the --to / compiled-CLI scenarios). */
 const LATEST = ALL[ALL.length - 1];
@@ -173,6 +174,26 @@ function migDir(files: Record<string, string | Buffer>): string {
   const dir = fs.mkdtempSync(path.join(tmpBase, 'm-'));
   for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
   return dir;
+}
+
+/** Error of a rejected query (pg DatabaseError: code + constraint). */
+async function pgError(p: Promise<unknown>): Promise<{ code?: string; constraint?: string }> {
+  const e = await p.then(
+    () => null,
+    (err: unknown) => err,
+  );
+  expect(e, 'query should have been rejected').not.toBeNull();
+  return e as { code?: string; constraint?: string };
+}
+
+/** Comment of one column (NULL when none). */
+async function columnComment(db: ScratchDatabase, table: string, column: string): Promise<string | null> {
+  const rows = await db.query<{ comment: string | null }>(
+    `SELECT col_description(a.attrelid, a.attnum) AS comment FROM pg_attribute a
+     WHERE a.attrelid = to_regclass($1) AND a.attname = $2 AND NOT a.attisdropped`,
+    [table, column],
+  );
+  return rows[0]?.comment ?? null;
 }
 
 function pair(version: string, up: string, down: string): Record<string, string> {
@@ -303,16 +324,7 @@ describe('AC-P11-16: migration 005_scan_next_attempt', () => {
 
 describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
   const V007 = '007_vulnerability_recheck';
-
-  /** Error of a rejected query (pg DatabaseError: code + constraint). */
-  async function pgError(p: Promise<unknown>): Promise<{ code?: string; constraint?: string }> {
-    const e = await p.then(
-      () => null,
-      (err: unknown) => err,
-    );
-    expect(e, 'query should have been rejected').not.toBeNull();
-    return e as { code?: string; constraint?: string };
-  }
+  const V008 = '008_nuget_enrichment'; // REQ-006: applied on top of 007, so "down --to 006" reverts it too
 
   /** project -> scan -> package -> scan_dependency; returns the ids a finding needs. */
   async function seedDependency(db: ScratchDatabase): Promise<{ scanId: string; depId: string }> {
@@ -356,19 +368,27 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
     expect(up.out).toContainEqual(expect.stringMatching(new RegExp(`^uygulandı ${V007} \\(\\d+ ms\\)$`)));
     const full = await schemaSnapshot(db);
 
-    // Reference: a fresh database migrated with 001…006 only.
+    // Reference: a fresh database migrated with 001…006 only (007 and every later file removed).
     const dir006 = copyOfRealMigrations();
-    for (const f of [`${V007}.up.sql`, `${V007}.down.sql`]) fs.rmSync(path.join(dir006, f));
+    for (const v of [V007, V008]) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(dir006, f));
+    expect((await loadMigrations(dir006)).map((m) => m.version)).toEqual(ALL.slice(0, 6));
     const ref = await newDb({ migrated: false });
     expect((await cli(['up'], { url: ref.url, dir: dir006 })).code).toBe(0);
     const at006 = await schemaSnapshot(ref);
 
     const down = await cli(['down', '--to', '006'], { url: db.url });
     expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
-    expect(down.out).toContain(`geri alınacak (sırayla): ${V007}`);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${V008}, ${V007}`);
     expect(await versions(db)).toEqual(ALL.slice(0, 6));
     for (const t of ['vulnerability_recheck_runs', 'osv_vulnerability_cache', 'nvd_cvss_cache']) expect(await tableExists(db, t), t).toBe(false);
-    for (const [t, c] of [['scans', 'vulnerability_data_status'], ['scans', 'vulnerability_checked_at'], ['findings', 'recheck_run_id'], ['scan_dependencies', 'lock_integrity']]) {
+    for (const [t, c] of [
+      ['scans', 'vulnerability_data_status'],
+      ['scans', 'vulnerability_checked_at'],
+      ['findings', 'recheck_run_id'],
+      ['scan_dependencies', 'lock_integrity'],
+      ['scan_dependencies', 'license_unclassified'], // 008
+      ['registry_package_cache', 'canonical_name'], // 008
+    ]) {
       expect(await columnExists(db, t, c), `${t}.${c}`).toBe(false);
     }
     expect(await schemaSnapshot(db)).toEqual(at006);
@@ -377,7 +397,7 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
-    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V007]);
+    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V007, V008]);
     expect(await versions(db)).toEqual(ALL);
     expect(await schemaSnapshot(db)).toEqual(full);
   });
@@ -484,6 +504,402 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
   });
 });
 
+describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0 §4.1, §4.5; ADR-008 Karar 14)', () => {
+  const V007 = '007_vulnerability_recheck';
+  const V008 = '008_nuget_enrichment';
+  /** The 008 columns: [table, column]. */
+  const NEW_COLUMNS: Array<[string, string]> = [
+    ['registry_package_cache', 'license_unclassified'],
+    ['registry_package_cache', 'license_file_path'],
+    ['registry_package_cache', 'canonical_name'],
+    ['scan_dependencies', 'license_unclassified'],
+  ];
+  /** The tables 008 alters. */
+  const TABLES_008 = ['registry_package_cache', 'registry_archive_cache', 'scan_dependencies'];
+
+  /** CHECK constraints of the 008 tables: name -> definition. */
+  async function checkConstraints(db: ScratchDatabase): Promise<Record<string, string>> {
+    const rows = await db.query<{ conname: string; def: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+       WHERE contype = 'c' AND connamespace = 'public'::regnamespace AND conrelid::regclass::text = ANY($1::text[])
+       ORDER BY conname`,
+      [TABLES_008],
+    );
+    return Object.fromEntries(rows.map((r) => [r.conname, r.def]));
+  }
+
+  /** Values of an `x = ANY (ARRAY['a'::text, …])` CHECK, sorted. */
+  function valueSet(defs: Record<string, string>, conname: string): string[] {
+    expect(defs[conname], `${conname} exists`).toBeDefined();
+    return [...(defs[conname] ?? '').matchAll(/'([^']+)'::text/g)].map((m) => m[1]).sort();
+  }
+
+  /** Reference database migrated with 001…007 only. */
+  async function at007Database(): Promise<ScratchDatabase> {
+    const dir = copyOfRealMigrations();
+    for (const f of [`${V008}.up.sql`, `${V008}.down.sql`]) fs.rmSync(path.join(dir, f));
+    expect((await loadMigrations(dir)).map((m) => m.version)).toEqual(ALL.slice(0, 7));
+    const ref = await newDb({ migrated: false });
+    const run = await cli(['up'], { url: ref.url, dir });
+    expect(run.code, run.all).toBe(0);
+    return ref;
+  }
+
+  async function insertPackageCache(
+    db: ScratchDatabase,
+    row: { ecosystem: string; name: string; outcome?: 'found' | 'not_found'; unclassified?: string | null; filePath?: string | null; canonical?: string | null },
+  ): Promise<unknown> {
+    const outcome = row.outcome ?? 'found';
+    return db.query(
+      `INSERT INTO registry_package_cache (ecosystem, name, version, outcome, declared_license, extractor_version, expires_at,
+                                           license_unclassified, license_file_path, canonical_name)
+       VALUES ($1, $2, '1.0.0', $3, NULL, 1, CASE WHEN $3 = 'not_found' THEN NOW() + INTERVAL '1 day' END, $4, $5, $6)`,
+      [row.ecosystem, row.name, outcome, row.unclassified ?? null, row.filePath ?? null, row.canonical ?? null],
+    );
+  }
+
+  async function insertArchive(db: ScratchDatabase, ecosystem: string, name: string): Promise<string> {
+    const [a] = await db.query<{ id: string }>(
+      `INSERT INTO registry_archive_cache (ecosystem, name, version, archive_digest, archive_url, archive_size, outcome, extractor_version)
+       VALUES ($1, $2, '1.0.0', 'sha512-qa', 'https://registry.invalid/qa', 10, 'collected', 1) RETURNING id`,
+      [ecosystem, name],
+    );
+    return a.id;
+  }
+
+  /** project -> completed scan; packages are added with `dependency`. */
+  async function seedScan(db: ScratchDatabase): Promise<string> {
+    const [p] = await db.query<{ id: string }>(`INSERT INTO projects (name) VALUES ('qa-008') RETURNING id`);
+    const [s] = await db.query<{ id: string }>(
+      `INSERT INTO scans (project_id, trigger, status, ref, completed_at) VALUES ($1, 'manual', 'completed', 'main', NOW()) RETURNING id`,
+      [p.id],
+    );
+    return s.id;
+  }
+
+  async function dependency(
+    db: ScratchDatabase,
+    scanId: string,
+    pkg: { ecosystem: 'dotnet' | 'nodejs'; name: string; purl: string },
+    lic: { expression: string | null; source: string; status: string; noticeStatus?: string | null; archiveId?: string | null; lockIntegrity?: string | null },
+  ): Promise<string> {
+    const [row] = await db.query<{ id: string }>(
+      `INSERT INTO packages (ecosystem, name, version, purl) VALUES ($1, $2, '1.0.0', $3) RETURNING id`,
+      [pkg.ecosystem, pkg.name, pkg.purl],
+    );
+    const manifest = pkg.ecosystem === 'dotnet' ? 'packages.lock.json' : 'package-lock.json';
+    const [d] = await db.query<{ id: string }>(
+      `INSERT INTO scan_dependencies (scan_id, package_id, manifest_file, manifest_path, license_expression, license_source,
+                                      license_enrichment_status, notice_status, notice_archive_id, lock_integrity)
+       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [scanId, row.id, manifest, lic.expression, lic.source, lic.status, lic.noticeStatus ?? null, lic.archiveId ?? null, lic.lockIntegrity ?? null],
+    );
+    return d.id;
+  }
+
+  it('up -> down --to 007 (restores exactly the 007 schema and comments, enum types untouched) -> up yields the identical schema', async () => {
+    const db = await newDb({ migrated: false });
+    const up = await cli(['up'], { url: db.url });
+    expect(up.code, up.all).toBe(0);
+    expect(up.out).toContainEqual(expect.stringMatching(new RegExp(`^uygulandı ${V008} \\(\\d+ ms\\)$`)));
+    const full = await schemaSnapshot(db);
+    for (const [t, c] of NEW_COLUMNS) {
+      expect(await columnExists(db, t, c), `${t}.${c}`).toBe(true);
+      expect(await columnComment(db, t, c), `${t}.${c} comment`).toEqual(expect.any(String));
+    }
+    const fullLockComment = await columnComment(db, 'scan_dependencies', 'lock_integrity');
+    expect(fullLockComment ?? '').toMatch(/NuGet/);
+    // Nullable, no default: existing rows get NULL, no table rewrite.
+    const cols = await db.query(
+      `SELECT table_name, column_name, data_type, is_nullable, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND (table_name, column_name) IN
+         (('registry_package_cache','license_unclassified'), ('registry_package_cache','license_file_path'),
+          ('registry_package_cache','canonical_name'), ('scan_dependencies','license_unclassified'))
+       ORDER BY table_name, column_name`,
+    );
+    expect(cols).toEqual(
+      [...NEW_COLUMNS]
+        .sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]))
+        .map(([table_name, column_name]) => ({ table_name, column_name, data_type: 'text', is_nullable: 'YES', column_default: null })),
+    );
+    // 008 creates no index.
+    expect(await db.query(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND (indexdef ILIKE '%license_unclassified%' OR indexdef ILIKE '%canonical_name%' OR indexdef ILIKE '%license_file_path%')`)).toEqual([]);
+
+    const ref = await at007Database();
+    const at007 = await schemaSnapshot(ref);
+    const refLockComment = await columnComment(ref, 'scan_dependencies', 'lock_integrity');
+
+    const down = await cli(['down', '--to', '007'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${V008}`);
+    expect(down.out).toContainEqual(expect.stringMatching(new RegExp(`^geri alındı ${V008} \\(\\d+ ms\\)$`)));
+    expect(down.out).toContain(`Tamam: 1 göç geri alındı; son uygulanmış sürüm ${V007}.`);
+    expect(await versions(db)).toEqual(ALL.slice(0, 7));
+    for (const [t, c] of NEW_COLUMNS) expect(await columnExists(db, t, c), `${t}.${c}`).toBe(false);
+    expect((await checkConstraints(db)).registry_package_cache_nuget_fields).toBeUndefined();
+    expect(await schemaSnapshot(db)).toEqual(at007);
+    // The lock_integrity comment is put back to its 007 text.
+    expect(await columnComment(db, 'scan_dependencies', 'lock_integrity')).toBe(refLockComment);
+    expect(refLockComment).not.toBe(fullLockComment);
+    // No enum type gains or loses a value (tech_ecosystem already had 'dotnet').
+    expect(full.types).toEqual(at007.types);
+
+    const again = await cli(['up'], { url: db.url });
+    expect(again.code, again.all).toBe(0);
+    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V008]);
+    expect(await versions(db)).toEqual(ALL);
+    expect(await schemaSnapshot(db)).toEqual(full);
+    expect(await columnComment(db, 'scan_dependencies', 'lock_integrity')).toBe(fullLockComment);
+  });
+
+  it('CHECK value sets (binding names): cache ecosystems incl. nuget, license_source incl. registry:nuget, license_unclassified file|url', async () => {
+    const db = await newDb(); // migrated template: 001…latest
+    const defs = await checkConstraints(db);
+    expect(valueSet(defs, 'registry_package_cache_ecosystem_check')).toEqual(['npm', 'nuget', 'pypi']);
+    expect(valueSet(defs, 'registry_archive_cache_ecosystem_check')).toEqual(['npm', 'nuget', 'pypi']);
+    expect(valueSet(defs, 'scan_dependencies_license_source_check')).toEqual(
+      ['lockfile (unverified)', 'none', 'registry:npm', 'registry:nuget', 'registry:pypi'],
+    );
+    expect(valueSet(defs, 'scan_dependencies_license_unclassified_check')).toEqual(['file', 'url']);
+    expect(valueSet(defs, 'registry_package_cache_license_unclassified_check')).toEqual(['file', 'url']);
+    expect(defs.registry_package_cache_license_file_path_check).toMatch(/char_length\(license_file_path\) <= 256/);
+    expect(defs.registry_package_cache_canonical_name_check).toMatch(/char_length\(canonical_name\) <= 100/);
+    // Exactly one CHECK per column: the old 006 CHECK was replaced, not left next to the new one.
+    for (const column of ['ecosystem', 'license_source', 'license_unclassified']) {
+      for (const table of TABLES_008) {
+        const hits = Object.entries(defs).filter(([name, def]) => name.startsWith(`${table}_`) && new RegExp(`\\(?${column} = ANY`).test(def));
+        expect(hits.length, `${table}.${column}`).toBeLessThanOrEqual(1);
+      }
+    }
+
+    // Behaviour of the scan_dependencies CHECKs.
+    const scanId = await seedScan(db);
+    const depId = await dependency(db, scanId, { ecosystem: 'dotnet', name: 'Qa.Nuget', purl: 'pkg:nuget/Qa.Nuget@1.0.0' }, { expression: 'MIT', source: 'registry:nuget', status: 'ok' });
+    for (const v of ['file', 'url', null]) {
+      await db.query(`UPDATE scan_dependencies SET license_unclassified = $1 WHERE id = $2`, [v, depId]);
+    }
+    expect(await pgError(db.query(`UPDATE scan_dependencies SET license_unclassified = 'bogus' WHERE id = $1`, [depId]))).toMatchObject({
+      code: '23514',
+      constraint: 'scan_dependencies_license_unclassified_check',
+    });
+    expect(await pgError(db.query(`UPDATE scan_dependencies SET license_source = 'registry:maven' WHERE id = $1`, [depId]))).toMatchObject({
+      code: '23514',
+      constraint: 'scan_dependencies_license_source_check',
+    });
+
+    // Archive cache: nuget accepted, anything else rejected.
+    await insertArchive(db, 'nuget', 'qa.nuget');
+    expect(await pgError(insertArchive(db, 'maven', 'qa.maven'))).toMatchObject({ code: '23514', constraint: 'registry_archive_cache_ecosystem_check' });
+  });
+
+  it('registry_package_cache_nuget_fields and length limits: the NuGet fields exist only on NuGet found rows; 256 / 100 characters (not bytes)', async () => {
+    const db = await newDb();
+    // NuGet found rows may carry every field; non-ASCII counts by characters.
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.full', unclassified: 'file', filePath: 'ü'.repeat(256), canonical: 'Ç'.repeat(100) });
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.url', unclassified: 'url' });
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.plain' });
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.missing', outcome: 'not_found' });
+    await insertPackageCache(db, { ecosystem: 'npm', name: 'qa-npm' });
+    await insertPackageCache(db, { ecosystem: 'pypi', name: 'qa-pypi' });
+
+    const fieldsRule = { code: '23514', constraint: 'registry_package_cache_nuget_fields' };
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.nf1', outcome: 'not_found', canonical: 'Qa.Nf1' }))).toMatchObject(fieldsRule);
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.nf2', outcome: 'not_found', unclassified: 'url' }))).toMatchObject(fieldsRule);
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.nf3', outcome: 'not_found', filePath: 'LICENSE' }))).toMatchObject(fieldsRule);
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'npm', name: 'qa-npm-2', unclassified: 'file' }))).toMatchObject(fieldsRule);
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'pypi', name: 'qa-pypi-2', canonical: 'Qa' }))).toMatchObject(fieldsRule);
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'npm', name: 'qa-npm-3', filePath: 'LICENSE' }))).toMatchObject(fieldsRule);
+
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.long1', filePath: 'ü'.repeat(257) }))).toMatchObject({
+      code: '23514',
+      constraint: 'registry_package_cache_license_file_path_check',
+    });
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.long2', canonical: 'Ç'.repeat(101) }))).toMatchObject({
+      code: '23514',
+      constraint: 'registry_package_cache_canonical_name_check',
+    });
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.bad', unclassified: 'expression' }))).toMatchObject({
+      code: '23514',
+      constraint: 'registry_package_cache_license_unclassified_check',
+    });
+    expect(await pgError(insertPackageCache(db, { ecosystem: 'maven', name: 'qa.maven' }))).toMatchObject({
+      code: '23514',
+      constraint: 'registry_package_cache_ecosystem_check',
+    });
+    expect(await db.query(`SELECT ecosystem, name FROM registry_package_cache ORDER BY ecosystem, name`)).toEqual([
+      { ecosystem: 'npm', name: 'qa-npm' },
+      { ecosystem: 'nuget', name: 'qa.full' },
+      { ecosystem: 'nuget', name: 'qa.missing' },
+      { ecosystem: 'nuget', name: 'qa.plain' },
+      { ecosystem: 'nuget', name: 'qa.url' },
+      { ecosystem: 'pypi', name: 'qa-pypi' },
+    ]);
+  });
+
+  it('down: NuGet cache rows deleted, npm/PyPI rows kept; registry:nuget -> none with license_expression kept; notice_archive_id SET NULL; no scan/dependency/package/finding deleted', async () => {
+    const db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'newtonsoft.json', canonical: 'Newtonsoft.Json' });
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.unclassified', unclassified: 'file', filePath: 'LICENSE.txt', canonical: 'Qa.Unclassified' });
+    await insertPackageCache(db, { ecosystem: 'nuget', name: 'qa.gone', outcome: 'not_found' });
+    await insertPackageCache(db, { ecosystem: 'npm', name: 'left-pad' });
+    await insertPackageCache(db, { ecosystem: 'pypi', name: 'requests' });
+    const nugetArchive = await insertArchive(db, 'nuget', 'newtonsoft.json');
+    const npmArchive = await insertArchive(db, 'npm', 'left-pad');
+    const pypiArchive = await insertArchive(db, 'pypi', 'requests');
+
+    const scanId = await seedScan(db);
+    const nuget = await dependency(
+      db,
+      scanId,
+      { ecosystem: 'dotnet', name: 'Newtonsoft.Json', purl: 'pkg:nuget/Newtonsoft.Json@1.0.0' },
+      { expression: 'MIT', source: 'registry:nuget', status: 'ok', noticeStatus: 'collected', archiveId: nugetArchive, lockIntegrity: 'match' },
+    );
+    const unclassified = await dependency(
+      db,
+      scanId,
+      { ecosystem: 'dotnet', name: 'Qa.Unclassified', purl: 'pkg:nuget/Qa.Unclassified@1.0.0' },
+      { expression: null, source: 'none', status: 'no_license', noticeStatus: 'no_license_file', lockIntegrity: 'not_comparable' },
+    );
+    await db.query(`UPDATE scan_dependencies SET license_unclassified = 'file' WHERE id = $1`, [unclassified]);
+    const npm = await dependency(
+      db,
+      scanId,
+      { ecosystem: 'nodejs', name: 'left-pad', purl: 'pkg:npm/left-pad@1.0.0' },
+      { expression: 'WTFPL', source: 'registry:npm', status: 'ok', noticeStatus: 'collected', archiveId: npmArchive, lockIntegrity: 'match' },
+    );
+    const [finding] = await db.query<{ id: string }>(
+      `INSERT INTO findings (scan_id, scan_dependency_id, finding_type, fingerprint) VALUES ($1, $2, 'security', $3) RETURNING id`,
+      [scanId, nuget, 'e'.repeat(64)],
+    );
+    const counts = async () =>
+      (
+        await db.query<{ scans: number; deps: number; packages: number; findings: number }>(
+          `SELECT (SELECT count(*)::int FROM scans) AS scans, (SELECT count(*)::int FROM scan_dependencies) AS deps,
+                  (SELECT count(*)::int FROM packages) AS packages, (SELECT count(*)::int FROM findings) AS findings`,
+        )
+      )[0];
+    const before = await counts();
+
+    const down = await cli(['down', '--to', '007'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+
+    expect(await db.query(`SELECT ecosystem, name FROM registry_package_cache ORDER BY ecosystem`)).toEqual([
+      { ecosystem: 'npm', name: 'left-pad' },
+      { ecosystem: 'pypi', name: 'requests' },
+    ]);
+    expect((await db.query<{ id: string }>(`SELECT id FROM registry_archive_cache ORDER BY ecosystem`)).map((r) => r.id)).toEqual([npmArchive, pypiArchive]);
+
+    const dep = async (id: string) =>
+      (
+        await db.query(
+          `SELECT license_expression, license_source, license_enrichment_status, notice_status, notice_archive_id, lock_integrity
+           FROM scan_dependencies WHERE id = $1`,
+          [id],
+        )
+      )[0];
+    // registry:nuget -> none, the expression stays; the archive link goes (ON DELETE SET NULL), notice_status stays.
+    expect(await dep(nuget)).toEqual({
+      license_expression: 'MIT',
+      license_source: 'none',
+      license_enrichment_status: 'ok',
+      notice_status: 'collected',
+      notice_archive_id: null,
+      lock_integrity: 'match',
+    });
+    // The unclassified marker is gone with its column; the row itself is a plain no_license / none row.
+    expect(await dep(unclassified)).toEqual({
+      license_expression: null,
+      license_source: 'none',
+      license_enrichment_status: 'no_license',
+      notice_status: 'no_license_file',
+      notice_archive_id: null,
+      lock_integrity: 'not_comparable',
+    });
+    expect(await dep(npm)).toEqual({
+      license_expression: 'WTFPL',
+      license_source: 'registry:npm',
+      license_enrichment_status: 'ok',
+      notice_status: 'collected',
+      notice_archive_id: npmArchive,
+      lock_integrity: 'match',
+    });
+    expect(await counts()).toEqual(before);
+    expect(await db.query(`SELECT id FROM findings WHERE id = $1`, [finding.id])).toHaveLength(1);
+    expect(await db.query(`SELECT 1 FROM packages WHERE ecosystem = 'dotnet'`)).toHaveLength(2);
+
+    // The 007 CHECKs are back: NuGet values are rejected again.
+    expect(await pgError(db.query(`UPDATE scan_dependencies SET license_source = 'registry:nuget' WHERE id = $1`, [nuget]))).toMatchObject({
+      code: '23514',
+      constraint: 'scan_dependencies_license_source_check',
+    });
+    expect(
+      await pgError(
+        db.query(`INSERT INTO registry_package_cache (ecosystem, name, version, outcome, extractor_version) VALUES ('nuget', 'qa.after', '1.0.0', 'found', 1)`),
+      ),
+    ).toMatchObject({ code: '23514', constraint: 'registry_package_cache_ecosystem_check' });
+    expect(await pgError(insertArchive(db, 'nuget', 'qa.after'))).toMatchObject({ code: '23514', constraint: 'registry_archive_cache_ecosystem_check' });
+
+    // Up again works on the rolled-back data; the lost marker is not restored.
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+    expect(await db.query(`SELECT license_unclassified FROM scan_dependencies WHERE id = $1`, [unclassified])).toEqual([{ license_unclassified: null }]);
+    expect((await dep(nuget))?.license_source).toBe('none');
+  });
+
+  it('the .down.sql opens with a DATA LOSS header naming what is lost and what is kept (before any statement)', () => {
+    const text = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V008}.down.sql`)));
+    const firstStatement = text.search(/^(DELETE|UPDATE|ALTER|DROP|COMMENT)\b/m);
+    expect(firstStatement).toBeGreaterThan(0);
+    const header = text.slice(0, firstStatement);
+    expect(header.split('\n').filter((l) => l.trim() !== '').every((l) => l.startsWith('--'))).toBe(true);
+    expect(header).toMatch(/DATA LOSS/);
+    for (const what of [
+      'registry_package_cache',
+      'registry_archive_cache',
+      "'nuget'",
+      'notice_archive_id',
+      'ON DELETE SET NULL',
+      "'registry:nuget' is rewritten to 'none'",
+      'license_expression is KEPT',
+      'scan_dependencies.license_unclassified is dropped',
+      'license_unclassified',
+      'license_file_path',
+      'canonical_name',
+    ]) {
+      expect(header, what).toContain(what);
+    }
+    expect(header).toMatch(/No scan, scan_dependencies, package, finding or license_findings row is\s+(--\s+)?deleted/);
+    expect(header).toMatch(/explicit human approval/);
+    // The up file is all-or-nothing: no transaction control, no CONCURRENTLY.
+    const upText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V008}.up.sql`)));
+    expect(findForbiddenStatements(upText)).toEqual([]);
+    expect(findForbiddenStatements(text)).toEqual([]);
+    expect(upText.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n')).not.toMatch(/CONCURRENTLY/i);
+  });
+
+  it('db/schema.sql equals 001…008: same columns, enum types, CHECK constraints of the 008 tables and comments of the 008 columns', async () => {
+    const migrated = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: migrated.url })).code).toBe(0);
+    const fromSchema = await newDb({ migrated: false });
+    const c = await connect(fromSchema.url);
+    try {
+      await c.query(decodeMigrationSql(fs.readFileSync(path.join(REPO_ROOT, 'db', 'schema.sql'))));
+    } finally {
+      await c.end();
+    }
+    const a = await schemaSnapshot(migrated);
+    const b = await schemaSnapshot(fromSchema);
+    expect(b.columns).toEqual(a.columns);
+    expect(b.types).toEqual(a.types);
+    expect(await checkConstraints(fromSchema)).toEqual(await checkConstraints(migrated));
+    for (const [t, col] of [...NEW_COLUMNS, ['scan_dependencies', 'lock_integrity'] as [string, string]]) {
+      expect(await columnComment(fromSchema, t, col), `${t}.${col}`).toBe(await columnComment(migrated, t, col));
+    }
+    expect(await fs.promises.readFile(path.join(REPO_ROOT, 'db', 'schema.sql'), 'utf8')).toContain(V008);
+  });
+});
+
 describe('AC-P11-8: --to forms and targets', () => {
   it('--to 003 (number) equals --to 003_declared_range; --to=<latest number> is a no-op; --to 001 keeps 001 applied', async () => {
     const db = await newDb({ migrated: false });
@@ -501,7 +917,8 @@ describe('AC-P11-8: --to forms and targets', () => {
     expect((await cli(['up'], { url: db.url })).code).toBe(0);
     const toFirst = await cli(['down', '--to', '001'], { url: db.url });
     expect(toFirst.code, toFirst.all).toBe(0);
-    expect(toFirst.out).toContain(`geri alınacak (sırayla): ${ALL.slice(1).reverse().join(', ')}`);    expect(await versions(db)).toEqual(['001_initial_core_schema']);
+    expect(toFirst.out).toContain(`geri alınacak (sırayla): ${ALL.slice(1).reverse().join(', ')}`);
+    expect(await versions(db)).toEqual(['001_initial_core_schema']);
     expect(await tableExists(db, 'projects')).toBe(true);
   });
 
@@ -999,9 +1416,12 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
     // REQ-005 AC-G-7: frozen with the 007 commit (32a6ee2).
     '007_vulnerability_recheck.up.sql': '6147d9288c2147b008bcb9a1f4a0f5bf6969ab1546bb7261fa2b6d4d3969f4c8',
     '007_vulnerability_recheck.down.sql': '39305662c8c90d6e69ed7a2c0bdd2202cbf968359082bd1ff599bb973f079835',
+    // REQ-006 AC-G-7: frozen with the 008 commit (6f4701d).
+    '008_nuget_enrichment.up.sql': 'e1d27b34b66f60afe3f1d964c9d59e1caf76fbfa56e2ad4ce685404ceafea6e0',
+    '008_nuget_enrichment.down.sql': '65c9ca47d63dd2836012ee26fb46bbd7531d549fc6b906a501d075a16b7d383f',
   };
 
-  it('AC-G-7 (REQ-004, REQ-005): 001…007 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
+  it('AC-G-7 (REQ-004, REQ-005, REQ-006): 001…008 keep their normalized SHA-256 (a released migration is never edited; add a new one instead)', () => {
     const actual = Object.fromEntries(
       Object.keys(FROZEN).map((name) => [
         name,
@@ -1009,7 +1429,7 @@ describe('AC-P11-15 / applied migrations are immutable', () => {
       ]),
     );
     expect(actual).toEqual(FROZEN);
-    expect(migrationVersions().slice(0, 7)).toEqual(ALL.slice(0, 7));
+    expect(migrationVersions().slice(0, 8)).toEqual(ALL.slice(0, 8));
     expect(migrationVersions()).toEqual(ALL); // ALL above lists every real migration
   });
 

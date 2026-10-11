@@ -76,6 +76,8 @@ taklidiyle, clone işlemi enjekte edilen sahte `cloneRepo` ile yapılır.
 | `integration/reportTimeout.test.ts` | Güvenlik incelemesi L-5: rapor süre sınırı `processReport(reportId, signal)`'ı iptal eder; `ready` yazılmaz, dosya oluşmaz |
 | `security/followUpItems.test.ts` | AC-T-5 statik (`overrides.uuid`, lock, çalışma anı çözümü), AC-T-6 (`db/README.md` kurtarma bölümü) |
 | `security/` | XSS (jsdom), sır taraması, kaynak kodu korumaları |
+| `unit/nugetClientRules.test.ts` | REQ-006 AC-P21-3: NuGet amaçlarında F3 vekil kararı (kapalı-başarısız) ve host başına devre kesici (iki ayrı sahte kayıt defteri) |
+| `integration/nugetScanGates.test.ts` | REQ-006 AC-G-10 (tarama sırasında alt süreç yok), AC-P21-13 (`REGISTRY_ENRICHMENT=off` → NuGet isteği/önbelleği yok, `disabled`), OSV NuGet ad harf duyarlılığı gerilemesi |
 
 ## Test veritabanı
 
@@ -496,6 +498,96 @@ her süre denetleyicisi izlenir, `pause()`/`stop()` hepsini iptal eder; test art
 Yardımcılar: `helpers/f4Seed.ts` (paket upsert'li tarama/bulgu/inceleme tohumlama, sahte OSV'ye karşı gerçek
 sorgu motoru). Testler `VULNERABILITY_RECHECK=off` test varsayılanıyla çalışır; durum uç noktasındaki
 `next_check_earliest_at` beklentisi etkin `recheck_enabled` değerine göre kurulur.
+
+## REQ-006 (F5 — NuGet) QA batch B: zenginleştirme, çıktılar, OSV NuGet
+
+Yardımcı: `helpers/fakeNuget.ts` — sahte kayıt defterinde flat container
+(`/v3-flatcontainer/{id}/{ver}/{id}.nuspec`, `{id}.{ver}.nupkg`) rotaları, `.nuspec`
+kurucusu, test anında üretilen imzalı biçimli/imzasız `.nupkg`, bağımsız içerik özeti
+kâhini (`.signature.p7s` olmadan aynı girdilerin deterministik zip'i) ve
+`packages.lock.json` üreticisi. Gerçek nuget.org `contentHash` değerleri
+(Newtonsoft.Json 13.0.3/13.0.1) yalnız belge sabitidir; indirilmez.
+
+| AC | Test |
+| --- | --- |
+| AC-P21-2 | `unit/nugetEnrichmentPure` (URL biçimi); `integration/nugetEnrichment` (yalnız flat container istekleri, `.nuspec` aynı köken yönlendirmesi izlenir, `.nupkg` yönlendirmesi reddedilir) |
+| AC-P21-4 | `unit/nugetEnrichmentPure` (`BAD_NUSPEC`: kök, `metadata`, id; bozuk XML; DOCTYPE; 1 MiB → `TOO_LARGE`); `integration/nugetEnrichment` (`BAD_NUSPEC` → `error`, önbelleğe yazılmaz, ikinci taramada yeniden istenir) |
+| AC-P21-5 | `unit/nugetEnrichmentPure` (öncelik, bilinmeyen `type`, `../LICENSE` eşleşmez); `integration/nugetEnrichment` (`no_license`/`none`/`license_unclassified='file'`, EULA metni NOTICE'te, iç içe `lib/net8.0/LICENSE` toplanmaz) |
+| AC-P21-6 | `unit/nugetEnrichmentPure` (URL tablosu, `licenses.nuget.org`, aka.ms, spdx.org); `integration/nugetEnrichment` (`licenseUrl` hiç istenmez, `url` sınıfı) |
+| AC-P21-7 | `integration/nugetEnrichment` (contract 1.4.0 §5.1 C-29: `License` ifade veya boş, `License Source` hiç boş değil, `Licenses` sayfasında `NOASSERTION`) |
+| AC-P21-8 | `integration/nugetEnrichment` (ikinci taramada `.nuspec` isteği sıfır, `canonical_name` saklanır) |
+| AC-P21-9 | `unit/nugetEnrichmentPure` (`nugetSignedContentHash` = kâhin, imza başta/ortada/sonda; imzasız/çift imza/ZIP64/kesik → null; bozuk bayt → farklı özet); `integration/nugetEnrichment` (içerik özeti `match`; ham özet `match`; farklı özet → fail-safe, önbelleğe yazılmaz, yeniden indirilir; özet yok → istek yok `no_candidate`/`not_comparable`; iki farklı özet → indirmeden `mismatch`; önbellek isabeti `match`) |
+| AC-P21-11 | `integration/nugetEnrichment` (NOTICE `nuget` girdileri, satır 7a, satır 15, "not supported" nedeni yok, sınıflandırılmamış öneki) |
+| AC-P21-14 | `integration/nugetEnrichment` (`[registry]` satırında NuGet `error`/uyuşmazlık sayıları, paket adı yok) |
+| AC-P21-15 | `unit/nugetEnrichmentPure` (ifadede kontrol karakteri saklanmaz) |
+| AC-P20-18 | `integration/nugetEnrichment` (NOTICE sırası `npm < nuget < pypi`, harf farkı tek girdi; Excel PURL; SBOM `pkg:nuget/<id>@<sürüm>` ve `NOASSERTION`) |
+| AC-NV-1 | `unit/nugetEnrichmentPure` (`NuGet` ekosistemi, `<id>`/ilk görülen yazım, dotnet→PyPI yok); `integration/nugetEnrichment` (querybatch gövdesi) |
+| AC-NV-2 | `unit/nugetEnrichmentPure` (harf duyarsız `affected` seçimi; npm F4 zinciri); `integration/nugetEnrichment` (`acme.expr` kaydı → 1 zafiyet) |
+| AC-NV-3 | `integration/nugetEnrichment` (yeniden kontrol `dotnet`→`NuGet`, `canonical_name`) |
+| AC-NV-4 | `unit/nugetEnrichmentPure` (npm/PyPI sorguları kanonik ad haritasından etkilenmez, F4 biçimi) |
+| AC-G-4 | `integration/nugetEnrichment` (`license_unclassified` yalnız worker/enrichment/NOTICE/rapor üreticilerinde; API yanıtına girmez) |
+
+Bilinen kırmızı: yok. Gözlem: `bestAffected` ilk adımı (ekosistemden bağımsız birebir ad
+eşleşmesi) F4'ten korunmuştur; aynı kayıtta aynı adlı npm ve NuGet girdisi olursa npm
+girdisi seçilebilir (pratikte OSV kayıtları ekosistem başınadır).
+
+## REQ-006 (F5 — NuGet) P-20 AC → test
+
+| AC | Test |
+| --- | --- |
+| AC-P20-1 (keşif) | `unit/nugetGolden` (dosya keşfi, `SKIP_DIRS`, harf biçimleri) |
+| AC-P20-2 (proje klasörü ve öncelik) | `unit/nugetGolden` (lock > assets > proje dosyası; klasör başına tek kaynak) |
+| AC-P20-3 (`packages.lock.json`) | `unit/nugetGolden`, `unit/nugetIdentity` (v1/v2, Direct/Transitive, klasör içi tekilleştirme) |
+| AC-P20-4 (`project.assets.json`) | `unit/nugetGolden`, `unit/nugetIdentity` |
+| AC-P20-5 (`PackageReference`) | `unit/nugetGolden`, `unit/nugetIdentity` |
+| AC-P20-6 (merkezi paket yönetimi) | `unit/nugetGolden` (`Directory.Packages.props`, `VersionOverride`) |
+| AC-P20-7 (`packages.config`) | `unit/nugetGolden` |
+| AC-P20-8 (sürüm kuralları) | `unit/nugetIdentity`, `unit/nugetGolden` |
+| AC-P20-9 (ad kuralları ve purl) | `unit/nugetIdentity` |
+| AC-P20-10 (kayıt şekli) | `unit/nugetGolden` |
+| AC-P20-11 (örnek çözüm) | `unit/nugetGolden`; `integration/nugetWorkerScan` (uçtan uca 18 kayıt, ağ isteği yok) |
+| AC-P20-12 (golden'lar) | `unit/nugetGolden` (`fixtures/dotnet/expected`) |
+| AC-P20-13 (güvenli XML okuyucu) | `unit/nugetXmlReader`, `unit/nugetIdentity` |
+| AC-P20-14 (iş parçacığı ve sınırlar) | `unit/nugetGolden` |
+| AC-P20-15 (hata metinleri) | `unit/nugetGolden`, `unit/nugetIdentity`, `unit/nugetXmlReader` |
+| AC-P20-16 (bütünlük yan kanalı) | `unit/nugetSideChannel`, `unit/nugetGolden` |
+| AC-P20-17 (teknoloji yığını) | `integration/nugetWorkerScan` (yalnız `nodejs` yığını .NET okumaz), `integration/scanRetry` |
+| AC-P20-18 (politika ve parmak izi) | `integration/nugetEnrichment` (NOTICE sırası, Excel PURL, SBOM) |
+
+## REQ-006 kısmen karşılanan AC'lerin kapatılması (AC-G-2, AC-G-10, AC-P21-3, AC-P21-13)
+
+`docs/handoffs/REQ-006.md`'de "kısmen" işaretli dört AC için NuGet'e özgü testler:
+
+| AC | Test |
+| --- | --- |
+| AC-G-2 | `unit/networkGuard` "REQ-006 AC-G-2": `api.nuget.org`'a `net.connect`, `tls.connect`, flat container `.nuspec` `https.request` ve `dns.lookup` engellenir (4 kayıt tüketilir, OSV/NVD ile aynı yardımcı); `fetch` ile `.nupkg` isteği reddedilir ve kaydedilir |
+| AC-G-10 | `integration/nugetScanGates` "AC-G-10": örnek çözümün yerel klasör taraması (zenginleştirme açık, sahte NuGet; OSV sorgusu açık, sahte OSV) sırasında `child_process.spawn/spawnSync/exec/execSync/execFile/execFileSync/fork` kaydedici ile değiştirilir (`syncBuiltinESMExports` ile ESM adlı dışa aktarımlar da) → 0 çağrı. Pozitif kontrol: aynı yama altında `probeGitVersion()` tek `spawn git` kaydı üretir (hiçbir süreç başlamaz). Kapsam notu: yama ana iş parçacığını kapsar; ayrıştırıcı/arşiv `worker_threads` modülleri için güvence `security/staticCode` statik import yasağıdır |
+| AC-P21-3 | `unit/nugetClientRules`: `shouldUseProxy`/`resolveProxy` `api.nuget.org` için (`NO_PROXY` biçimleri); geçersiz `HTTPS_PROXY` veya eski Node'da vekil → `metadata-nuget` ve `archive-nuget` `PROXY_UNAVAILABLE`, bağlantı yok (ağ koruması kaydı boş), değer günlüğe yazılmaz; loopback NuGet kökeni vekil kullanmaz; devre kesici: yeniden denemesiz 5 ardışık hata NuGet hostunu kapatır (4'te açık), kapalıyken istek yok (`CIRCUIT_OPEN`), npm/PyPI hostu aynı oturumda açık, yeni oturum yeniden ulaşır; varsayılan 2 yeniden denemede deneme başına sayım (3 + 2 deneme); npm hostunun kapanması NuGet hostunu etkilemez. İki ayrı portlu sahte kayıt defteri = iki ayrı host |
+| AC-P21-13 | `integration/nugetScanGates` "AC-P21-13": `enrichmentConfigFrom(process.env)` (`REGISTRY_ENRICHMENT=off`) ile kurulan zenginleştirici → sahte NuGet sunucusuna 0 istek, `registry_package_cache`/`registry_archive_cache`'te `nuget` satırı yok, 18 satırın tümü `disabled`/`none`/ifade yok/`lock_integrity` `NULL` (D-156), `[registry]` "disabled" satırı anahtar sayısıyla (16) |
+
+OSV NuGet ad harf duyarlılığı gerilemesi (`integration/nugetScanGates`, AC-NV-1 / D-149): ana
+oturumun 2026-10-11 api.osv.dev gözlemi — `Newtonsoft.Json` 12.0.1 → GHSA-5crp-9r3c-p9vr;
+`newtonsoft.json` ve `NEWTONSOFT.JSON` → sonuç yok. Lock ve ayrı bir `.csproj` id'yi küçük harfle
+yazar, `.nuspec` `<id>` `Newtonsoft.Json`'dır, sahte OSV yalnız kanonik anahtarı yanıtlar:
+querybatch gövdesinde tek `Newtonsoft.Json@12.0.1`, 1 zafiyet, önbellekte `canonical_name`.
+Kontrol: zenginleştirme kapalı ve önbellek boşken ilk görülen yazım (`newtonsoft.json`) gider ve
+0 zafiyet döner (sahte OSV'nin harf duyarlı olduğunun kanıtı).
+
+## REQ-006 güvenlik incelemesi takipleri (L-1, L-3, I-7, I-8)
+
+`docs/quality/security-reports/` REQ-006 raporundaki düzeltmelerin (commit `b6bf7f6`)
+ve I-8 test kapsamı önerisinin testleri:
+
+| Bulgu | Test |
+| --- | --- |
+| L-3 (`.nuspec` `<version>` istenen sürüm olmalı) | `unit/nugetEnrichmentPure` "L-3": NuGet normalleştirmesiyle eşleşenler (`1.0`↔`1.0.0`, `1.0.0.0`, `01.00.000`, `+build` metadata, `1.0.0-BETA`↔`1.0.0-beta`, boşluk) → `found`; başka sürüm/ön sürüm, aralık, yüzen sürüm, `$(…)`, boş veya eksik `<version>` → `BAD_NUSPEC`. `integration/nugetEnrichment` "L-3": aynı köken yönlendirmesi başka sürümün nuspec'ine → `error`, hiçbir sürümle önbelleğe yazılmaz, ikinci taramada yeniden istenir; `<version>` yok → `error`; `4.0.0.0` ve `5.0.0-BETA+build.7` → `ok`, istenen (normal) sürümle önbellekte |
+| L-1 (tarama başına 100 000 .NET bağımlılık sınırı) | `unit/nugetGolden` "L-1": 6 klasör × 20 000 lock girdisi → tam 100 000 kayıt, tek `{file:'', error: NUGET_MESSAGES.scanLimit}` kaydı, 6. klasörün `scan_files`'ı ve özet (collector) kaydı yok; proje dosyası klasörü sınırı aşınca dosya düzeyi kaydı (`invalidId`) kalır, `scan_files`'a girmez, sonraki klasörler okunmaz; tam 100 000 → kayıt yok (sınır dahil). ~1 s |
+| I-7 (PyPI yeniden kontrol anahtarı `COLLATE "C"`) | `integration/vulnRecheck` "I-7": kapsam SQL'i kaynak metinden okunur (dışa aktarılmıyor) ve aynen çalıştırılır; test veritabanı `--locale=C` olduğundan `packages.name` sütununa ICU `tr-TR-x-icu` harmanlaması konur (`lower('I')` = `ı` olduğu önce doğrulanır); `Ixml_Pkg`/`IXML.pkg`/`ixml-pkg` tek `pypi|ixml-pkg` satırı, `Ion.Core`/`ION.CORE` tek NuGet satırı; mutasyon kontrolü: `COLLATE "C"` olmayan eski ifade anahtarı ikiye böler; koşucu tek PyPI ve tek NuGet sorgusu gönderir. ICU Türkçe harmanlaması yoksa test bilerek kırmızıdır (boş geçmez) |
+| I-8 (`__proto__` anahtarları) | `unit/nugetGolden` "I-8": lock'ta `__proto__`/`constructor`/`hasOwnProperty` paket id'si ve `__proto__` TFM anahtarı, assets'te `__proto__/1.0.0` kütüphanesi ve `__proto__` framework/bağımlılık anahtarı sıradan anahtar olarak işlenir (geçerli NuGet id'leri olduğundan kayıt olurlar); `Object.prototype` kirlenmez, kayıt şekli değişmez, özet yan kanalı doğru |
+| I-8 (`.signature.p7s` lisans dosyası beyanı) | `integration/nugetEnrichment` "I-8": `<license type="file">` `.signature.p7s` / `.SIGNATURE.P7S` / `./.signature.p7s` → arşiv içerik özetiyle doğrulanır (`match`), `license_files` boş, NOTICE'te imza baytları ve dosya adı yok, `License files: 0` |
+
+`helpers/fakeNuget` `nuspecXml({ version: null })` `<version>` öğesini atlar; kayıt
+defteri rotaları artık `version`'ı açıkça verir (L-3).
 
 Test adları AC kimliğiyle başlar (`AC-P01-13: …`). Bugün yeşil olan birkaç test
 bilinçli regresyon korumasıdır (ör. AC-P07-3, AC-P06-3, hata mesajının

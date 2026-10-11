@@ -15,12 +15,12 @@
  * - An abort (budget or job) is rethrown; the enricher classifies it.
  */
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
-import type { ArchiveThreadOptions, ArchiveThreadOutcome } from './archive/archiveThread';
-import type { ArchiveKind } from './archive/extract';
+import type { ArchiveThreadInput, ArchiveThreadOptions, ArchiveThreadOutcome } from './archive/archiveThread';
 import { type DownloadQuota, type InFlightByteBudget, processInFlightBudget } from './budget';
 import { type CacheDb, type CachedArchive, writeArchiveCache } from './cache';
 import { type RegistryEcosystem, coordinateKey } from './coordinates';
 import { digestKey, verifyDigest } from './integrity';
+import type { LockIntegrity } from './lockIntegrity';
 import type { RegistrySession } from './registryClient';
 import type { ArchiveCandidate, NoticeStatus } from './types';
 
@@ -29,15 +29,23 @@ export interface ArchiveTask {
   requestName: string;
   version: string;
   candidates: readonly ArchiveCandidate[];
+  /** NuGet: `.nuspec` `<license type="file">` path (ADR-008 Karar 11). */
+  declaredLicensePath?: string | null;
 }
 
 export interface ArchiveStageResult {
   noticeStatus: NoticeStatus;
   archiveId: string | null;
+  /**
+   * NuGet only (ADR-008 Karar 10): `match` (cached row for the lock hash, raw
+   * SHA-512 or signed-package content hash equal) or `mismatch` (fail-safe:
+   * nothing opened, nothing cached). Absent -> the caller's default.
+   */
+  lockIntegrity?: LockIntegrity;
 }
 
 export type RunArchiveThreadFn = (
-  input: { kind: ArchiveKind; filename: string | null; bytes: Uint8Array },
+  input: ArchiveThreadInput,
   signal: AbortSignal,
   options: ArchiveThreadOptions,
 ) => Promise<ArchiveThreadOutcome>;
@@ -64,7 +72,33 @@ export function archiveCacheKey(ecosystem: RegistryEcosystem, requestName: strin
 
 /** Candidates tried for a package (npm: 1, PyPI: up to 3). */
 export function triedCandidates(ecosystem: RegistryEcosystem, candidates: readonly ArchiveCandidate[]): ArchiveCandidate[] {
-  return candidates.slice(0, ecosystem === 'npm' ? 1 : ENRICHMENT_LIMITS.archive.maxCandidatesTried);
+  switch (ecosystem) {
+    case 'npm':
+    case 'nuget':
+      return candidates.slice(0, 1);
+    case 'pypi':
+      return candidates.slice(0, ENRICHMENT_LIMITS.archive.maxCandidatesTried);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+/** Archive request purpose of a registry (exhaustive, ADR-008 Karar 1). */
+function archivePurposeOf(ecosystem: RegistryEcosystem): 'archive-npm' | 'archive-pypi' | 'archive-nuget' {
+  switch (ecosystem) {
+    case 'npm':
+      return 'archive-npm';
+    case 'pypi':
+      return 'archive-pypi';
+    case 'nuget':
+      return 'archive-nuget';
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
 }
 
 function abortError(signal: AbortSignal): unknown {
@@ -85,13 +119,15 @@ function hostOf(url: string): string | null {
 export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext): Promise<ArchiveStageResult> {
   const candidates = triedCandidates(task.ecosystem, task.candidates);
   if (candidates.length === 0) return { noticeStatus: 'no_candidate', archiveId: null };
-  const purpose = task.ecosystem === 'npm' ? 'archive-npm' : 'archive-pypi';
+  const purpose = archivePurposeOf(task.ecosystem);
+  const nuget = task.ecosystem === 'nuget';
   let last: NoticeStatus = 'download_failed';
 
   for (const candidate of candidates) {
     for (const value of candidate.digests) {
       const hit = ctx.cached.get(archiveCacheKey(task.ecosystem, task.requestName, task.version, digestKey(candidate.algorithm, value)));
-      if (hit) return { noticeStatus: hit.outcome, archiveId: hit.id };
+      // NuGet: a row keyed by the lock hash was written only from bytes verified against it (ADR-008 Karar 10.1).
+      if (hit) return nuget ? { noticeStatus: hit.outcome, archiveId: hit.id, lockIntegrity: 'match' } : { noticeStatus: hit.outcome, archiveId: hit.id };
     }
     ctx.signal.throwIfAborted();
     const host = hostOf(candidate.url);
@@ -131,21 +167,29 @@ export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext
         continue;
       }
       if (download.size > held) releases.push(inFlight.grow(download.size - held));
-      if (!verifyDigest({ algorithm: candidate.algorithm, values: candidate.digests }, download.digest)) {
+      const rawMatch = verifyDigest({ algorithm: candidate.algorithm, values: candidate.digests }, download.digest);
+      if (!rawMatch && !nuget) {
         // Integrity before parsing: the buffer is dropped, nothing is cached.
         last = 'integrity_failed';
         continue;
       }
 
-      outcome = await ctx.runThread(
-        { kind: task.ecosystem, filename: candidate.filename, bytes: download.body },
-        ctx.signal,
-        ctx.threadOptions,
-      );
+      // NuGet without a raw match: the thread verifies the signed-package content
+      // hash first and opens no entry when it differs (ADR-008 Karar 10.2).
+      const input: ArchiveThreadInput = { kind: task.ecosystem, filename: candidate.filename, bytes: download.body };
+      if (nuget) {
+        if (task.declaredLicensePath) input.declaredLicensePath = task.declaredLicensePath;
+        if (!rawMatch) input.verify = { nugetContentHash: candidate.digests.map((value) => digestKey('sha512', value)) };
+      }
+      outcome = await ctx.runThread(input, ctx.signal, ctx.threadOptions);
     } finally {
       for (const release of releases) release();
     }
     if (outcome.kind === 'aborted') throw abortError(ctx.signal);
+    if (outcome.kind === 'integrity_mismatch') {
+      // L-5 fail-safe: the buffer is dropped, nothing is cached, NOTICE is not attempted.
+      return { noticeStatus: 'not_attempted', archiveId: null, lockIntegrity: 'mismatch' };
+    }
     if (outcome.kind === 'failed') {
       ctx.warn(`Arşiv işlenemedi (${outcome.code}); önbelleğe yazılmadı.`);
       return { noticeStatus: 'processing_failed', archiveId: null };
@@ -156,7 +200,13 @@ export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext
       archiveId =
         (await writeArchiveCache(
           ctx.db,
-          { ecosystem: task.ecosystem, name: task.requestName, version: task.version, digest: digestKey(candidate.algorithm, download.digest) },
+          {
+            ecosystem: task.ecosystem,
+            name: task.requestName,
+            version: task.version,
+            // NuGet rows are keyed by the verified lock hash (raw or content hash), not the raw archive digest.
+            digest: nuget ? digestKey('sha512', candidate.digests[0]) : digestKey(candidate.algorithm, download.digest),
+          },
           {
             outcome: result.outcome,
             outcomeDetail: result.outcomeDetail,
@@ -170,7 +220,7 @@ export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext
       // A failed cache write only loses this record (ADR-006 Karar 2).
       ctx.warn(`Arşiv önbelleği yazılamadı (${errorCodeOf(err)}).`);
     }
-    return { noticeStatus: result.outcome, archiveId };
+    return nuget ? { noticeStatus: result.outcome, archiveId, lockIntegrity: 'match' } : { noticeStatus: result.outcome, archiveId };
   }
   return { noticeStatus: last, archiveId: null };
 }

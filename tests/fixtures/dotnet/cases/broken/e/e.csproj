@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Entity.User" Version="&custom;" />
+  </ItemGroup>
+</Project>

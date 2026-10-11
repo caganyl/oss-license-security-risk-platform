@@ -100,12 +100,29 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
   it('ADR-005 Karar 1: src/scanner/parsers imports only node:fs/path/crypto/worker_threads, smol-toml (toml.ts), siblings and types; threadParser.ts may also import ../../lib/threadBootstrap (ADR-006 Karar 16)', () => {
     const files = fs.readdirSync(parsersDir).filter((n) => n.endsWith('.ts'));
     // REQ-005 ADR-007 Karar 12: lockIntegrityValue.ts (L-5 side channel) is import-free.
-    expect(files.sort()).toEqual(['common.ts', 'index.ts', 'lockIntegrityValue.ts', 'nodejs.ts', 'python.ts', 'thread.ts', 'threadParser.ts', 'toml.ts']);
-    expect(importsOf(path.join(parsersDir, 'lockIntegrityValue.ts'))).toEqual([]);
+    // REQ-006 ADR-008 Karar 1: six NuGet modules; xmlReader.ts is import-free as well.
+    expect(files.sort()).toEqual([
+      'common.ts',
+      'index.ts',
+      'lockIntegrityValue.ts',
+      'msbuildProject.ts',
+      'nodejs.ts',
+      'nuget.ts',
+      'nugetAssets.ts',
+      'nugetIdentity.ts',
+      'nugetLock.ts',
+      'python.ts',
+      'thread.ts',
+      'threadParser.ts',
+      'toml.ts',
+      'xmlReader.ts',
+    ]);
+    const importFree = new Set(['lockIntegrityValue.ts', 'xmlReader.ts']);
+    for (const name of importFree) expect(importsOf(path.join(parsersDir, name)), name).toEqual([]);
     const violations: string[] = [];
     for (const name of files) {
       const imports = importsOf(path.join(parsersDir, name));
-      if (name !== 'lockIntegrityValue.ts') expect(imports.length, name).toBeGreaterThan(0);
+      if (!importFree.has(name)) expect(imports.length, name).toBeGreaterThan(0);
       for (const { spec, typeOnly } of imports) {
         if (typeOnly) continue;
         if (ALLOWED_RUNTIME.has(spec)) continue;
@@ -126,12 +143,16 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
 
   it('REQ-004 ADR-006 Karar 1 / AC-P15-4: archive thread modules import only node:zlib/worker_threads/buffer, each other and the import-free src/lib/textSanitize.ts', () => {
     const enrichmentDir = path.join(REPO_ROOT, 'src', 'enrichment');
-    const threadModules = ['archive/thread.ts', 'archive/extract.ts', 'archive/gzip.ts', 'archive/tar.ts', 'archive/zip.ts', 'archive/licenseFiles.ts', 'text.ts', 'copyright.ts'].map(
+    // REQ-006 ADR-008 Karar 10.3: archive/nupkgHash.ts (signed-package content hash) joins the thread;
+    // it may import only node:crypto and ./zip (checked below).
+    const threadModules = ['archive/thread.ts', 'archive/extract.ts', 'archive/gzip.ts', 'archive/tar.ts', 'archive/zip.ts', 'archive/licenseFiles.ts', 'archive/nupkgHash.ts', 'text.ts', 'copyright.ts'].map(
       (p) => path.join(enrichmentDir, ...p.split('/')),
     );
+    const nupkgHash = path.normalize(path.join(enrichmentDir, 'archive', 'nupkgHash.ts'));
     const textSanitize = path.join(REPO_ROOT, 'src', 'lib', 'textSanitize.ts');
     const allowedFiles = new Set([...threadModules, textSanitize].map((f) => path.normalize(f)));
     const allowedRuntime = new Set(['node:zlib', 'node:worker_threads', 'node:buffer']);
+    expect(importsOf(nupkgHash).map((i) => i.spec)).toEqual(['node:crypto', './zip']);
     const forbidden = /^(node:)?(fs|fs\/promises|net|tls|http|https|http2|dgram|dns|child_process|cluster)$|^(pg|dotenv)$|(^|\/)lib\/db$/;
     const violations: string[] = [];
     for (const file of threadModules) {
@@ -142,6 +163,7 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
           continue;
         }
         if (typeOnly || allowedRuntime.has(spec)) continue;
+        if (spec === 'node:crypto' && path.normalize(file) === nupkgHash) continue;
         if (spec.startsWith('.') && allowedFiles.has(path.normalize(path.resolve(path.dirname(file), `${spec}.ts`)))) continue;
         violations.push(`${rel(file)}: ${spec}`);
       }

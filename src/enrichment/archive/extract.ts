@@ -23,14 +23,16 @@ import {
 import { TarReader } from './tar';
 import { extractZip } from './zip';
 
-export type ArchiveKind = 'npm' | 'pypi';
+export type ArchiveKind = 'npm' | 'pypi' | 'nuget';
 
 export interface ExtractInput {
   kind: ArchiveKind;
-  /** PyPI file name (format detection); ignored for npm. */
+  /** PyPI/NuGet file name (format detection); ignored for npm. */
   filename: string | null;
   bytes: Uint8Array;
   limits: ArchiveLimits;
+  /** NuGet: `.nuspec` `<license type="file">` path (ADR-008 Karar 11). */
+  declaredLicensePath?: string | null;
 }
 
 type Format = 'tgz' | 'zip';
@@ -44,9 +46,14 @@ function isZip(b: Uint8Array): boolean {
 }
 
 /** Detected format, or null when extension and magic bytes disagree. */
-export function detectFormat(kind: ArchiveKind, filename: string | null, bytes: Uint8Array): { format: Format; wheel: boolean } | null {
+export function detectFormat(kind: ArchiveKind, filename: string | null, bytes: Uint8Array): { format: Format; wheel: boolean; nupkg?: true } | null {
   if (kind === 'npm') return isGzip(bytes) ? { format: 'tgz', wheel: false } : null;
   const lower = (filename ?? '').toLowerCase();
+  if (kind === 'nuget') {
+    // ADR-008 Karar 11: `.nupkg` name and a local-header zip magic (`PK\x03\x04`).
+    const localMagic = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+    return lower.endsWith('.nupkg') && localMagic ? { format: 'zip', wheel: false, nupkg: true } : null;
+  }
   if (lower.endsWith('.whl')) return isZip(bytes) ? { format: 'zip', wheel: true } : null;
   if (lower.endsWith('.zip')) return isZip(bytes) ? { format: 'zip', wheel: false } : null;
   if (lower.endsWith('.tar.gz')) return isGzip(bytes) ? { format: 'tgz', wheel: false } : null;
@@ -60,7 +67,9 @@ function failureResult(outcome: 'unsupported_format' | 'limit_exceeded', detail:
 export async function extractArchive(input: ExtractInput): Promise<ExtractResult> {
   const detected = detectFormat(input.kind, input.filename, input.bytes);
   if (detected === null) return failureResult('unsupported_format', 'format');
-  const matcher = new LicenseFileMatcher(detected.wheel ? 'wheel' : 'top-folder');
+  const matcher = detected.nupkg
+    ? new LicenseFileMatcher('nupkg', { declaredPath: input.declaredLicensePath ?? null })
+    : new LicenseFileMatcher(detected.wheel ? 'wheel' : 'top-folder');
   const collector = new LicenseFileCollector(input.limits);
   try {
     if (detected.format === 'zip') {

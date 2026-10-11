@@ -1,11 +1,19 @@
 # REQ-004 NOTICE ve Çıktı Contract'ı (F3 — P-14, P-15, P-16, L-6)
 
-- **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10
+- **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10;
+  1.4.0 revizyonu Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11
 - **status:** approved
-- **Sürüm:** 1.3.0 (revizyon: bkz. bölüm 13)
-- **Tarih:** 2026-10-10
+- **Sürüm:** 1.4.0 (revizyon: bkz. bölüm 13)
+- **Tarih:** 2026-10-10 (1.4.0: 2026-10-11)
 - **Makine okunur contract:** `docs/contracts/REQ-004-notice-api.openapi.yaml` (OpenAPI 3.0.3;
-  `info.version` 1.0.0 kalır — 1.1.0 ve 1.2.0 revizyonları uç nokta yüzeyini değiştirmez)
+  `info.version` 1.1.0 — 1.4.0 ile yalnız bilgi amaçlı `LicenseSource` şemasına `registry:nuget`
+  **eklendi** (additive) ve bilgi amaçlı `LicenseUnclassified` şeması tanımlandı; uç nokta
+  yüzeyi, yanıt başlıkları ve hata gövdesi değişmez)
+- **Revizyon dayanağı (1.4.0):** `docs/product/REQ-006.md` (P-21: AC-P21-5…7, AC-P21-9…12,
+  AC-P21-14; AC-P20-17, AC-P20-18; D-130, D-133, D-134, D-137, D-139, D-144),
+  `docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md` (Karar 4, 9, 10,
+  11, 12, 14, 15, 16 satır 6; "REQ-006 netleştirmeleri" 3, 12, 13). REQ-006 ile ADR-008'in
+  ayrıştığı yerde ADR-008 izlenir.
 - **Revizyon dayanağı (1.1.0):** `docs/quality/security-reports/REQ-004-security-review.md`
   bulguları L-1, L-2, I-3 ve M-1
 - **Revizyon dayanağı (1.2.0):** `docs/product/REQ-005.md` L-5 (AC-L5-1…4, D-103),
@@ -58,6 +66,36 @@
 > tüm çıktılar 1.1.0 ile bayt bayt aynıdır (AC-L5-4; NOTICE golden'ı değişmez).
 > Bu revizyon REQ-005 implementation'ıyla birlikte uygulanır; kapıları REQ-005
 > contract'ındadır (`docs/ownership/REQ-005.json`, göç `007`).
+>
+> **1.4.0 revizyonu (REQ-006 F5, NuGet)** — Onaylandı (kullanıcı daimi talimatı,
+> önerilen seçenek), 2026-10-11 ("bana soru sorma önerilen seçeneklerle devam et").
+> NuGet (`dotnet`) paketleri F3 çıktılarına npm/PyPI ile aynı kurallarla girer.
+> Değişiklikler: `license_source` değer kümesine `registry:nuget` (4.1); yeni saklanan
+> kolon `scan_dependencies.license_unclassified` (`file` / `url` / `NULL`; göç `008`) ve
+> gösterimi (4.5; Excel 4.1/5.1, NOTICE 4.3, SBOM 6); NOTICE ekosistem etiketi `nuget`,
+> sıralama ve NuGet tekillik anahtarı (3.3); `.nupkg` lisans dosyaları (3.4, 3.5); NuGet
+> `no_candidate` nedeni ve satır 14'ün (C-13) NuGet için kalkması (4.3); `lock_integrity`
+> NuGet anlamı (4.4); `[registry]` sayımlarına NuGet anahtarlarının katılması, şablonlar
+> değişmeden (8); SBOM purl `pkg:nuget/…` (6); proje formunda `.NET (NuGet)` seçeneği
+> (7.1). `NOTICE format: 1` kalır (C-30). NuGet içermeyen taramalarda tüm çıktılar 1.3.0
+> ile bayt bayt aynıdır (REQ-006 AC-G-9; mevcut NOTICE ve P-10 golden'ları değişmez).
+>
+> **1.4.0 insan onayı kapıları (contract onayıyla kapanmış sayılmaz):**
+> - **Dış sistem entegrasyonu:** yeni host `api.nuget.org` (`.nuspec` ve `.nupkg`);
+>   kesin sürümlü NuGet paket adları dışarı gider. `docs/ownership/REQ-006.json`
+>   `status: approved` ve manifestin `api.nuget.org` erişimini açıkça kapsaması gerekir.
+> - **Veritabanı migration'ı:** göç `008` (ADR-008 Karar 14); down betiği toplu veri
+>   güncellemesi içerir (`registry:nuget` → `none`). Yerel veritabanına uygulanması
+>   kullanıcı kararıdır; down yalnız açık insan onayıyla çalışır.
+> - **Dağıtılan çıktı:** NuGet `.nupkg` lisans dosyaları NOTICE'e girer; hukuki görüş
+>   değildir.
+>
+> **Paralel çalışma uyarısı (1.4.0):** Bu revizyon `Accepted` olsa da backend
+> (`src/`), database (`db/`), frontend (`public/index.html`) ve test (`tests/`)
+> çalışması `docs/ownership/REQ-006.json` `status: approved` olmadan **başlatılmamalıdır**.
+> Manifest onaylandıktan sonra frontend (bölüm 7.1) ve backend birbirini beklemeden
+> çalışabilir; database-engineer göç `008`'i backend'den önce teslim eder (ADR-008
+> Karar 17, tek yazar kuralı).
 
 ## İçindekiler
 
@@ -91,6 +129,11 @@ Bu contract F3'ün dışarıdan görünen yüzeyini sabitler:
 - (1.2.0) L-5 lock `integrity` uyuşmazlığının (`scan_dependencies.lock_integrity`)
   Excel, NOTICE, SBOM ve `[registry]` gösterimi (REQ-005 AC-L5-2, ADR-007 Karar 12).
   Uyuşmazlık olmayan taramalarda çıktılar 1.1.0 ile bayt bayt aynıdır.
+- (1.4.0) NuGet (`dotnet`) paketlerinin tüm F3 çıktılarındaki gösterimi:
+  `registry:nuget`, `license_unclassified`, NOTICE etiketi/sıralaması/nedenleri,
+  `.nupkg` lisans dosyaları, `lock_integrity` NuGet anlamı, purl ve proje formundaki
+  `.NET (NuGet)` seçeneği (REQ-006 AC-P20-17, AC-P20-18, AC-P21-5…14; ADR-008 Karar 11,
+  12, 15). NuGet içermeyen taramalarda çıktılar 1.3.0 ile bayt bayt aynıdır.
 
 **Geriye uyumluluk (AC-G-4, D-74):**
 
@@ -258,9 +301,20 @@ Note: This scan predates license enrichment. License data is incomplete; rescan 
   `(ekosistem, ad)`. Her anahtar **tam bir kez** listelenir. Aynı anahtarın
   birden çok satırı varsa etkin lisans alanları aynıdır (ADR-006 Karar 9);
   `PURL` olarak UTF-8 bayt sırasına göre en küçük purl alınır.
+- **NuGet tekillik anahtarı (1.4.0, C-28):** ekosistem `dotnet` iken anahtar
+  `(dotnet, asciiLower(ad), asciiLower(sürüm))`'dür (sürümsüzde `(dotnet,
+  asciiLower(ad))`; `asciiLower` yalnız `A–Z`'yi dönüştürür, ADR-008 Karar 4). NuGet
+  kimlik ve sürümleri harf duyarsızdır; farklı proje klasörlerinden gelen
+  `Newtonsoft.Json` ve `newtonsoft.json` **tek** girdi olur. Girdide gösterilen
+  `Package:`/`Version:` değerleri, anahtarın satırları arasında `(ad, sürüm)` UTF-8 bayt
+  sırasına göre en küçük olan satırınkidir; `PURL` yukarıdaki kuralla (en küçük purl)
+  seçilir. Etkin lisans alanları anahtarın tüm satırlarında aynıdır (zenginleştirme
+  anahtarı küçük harflidir). npm/PyPI tekillik anahtarı değişmez.
 - **Sıralama anahtarı:** `(ekosistem etiketi, küçük harfli ad, ad, sürüm)`.
-  - Ekosistem etiketi: `nodejs` → `npm`, `python` → `pypi`, diğerleri enum
-    değeri olduğu gibi.
+  - Ekosistem etiketi: `nodejs` → `npm`, `python` → `pypi`, `dotnet` → `nuget`
+    (1.4.0), diğerleri enum değeri olduğu gibi. Etiketlerin bayt sırası
+    `npm` < `nuget` < `pypi`'dir; NuGet girdileri npm girdilerinden sonra, PyPI
+    girdilerinden önce gelir.
   - Küçük harf: `String.prototype.toLowerCase()` (yerel ayardan bağımsız).
   - Sürüm `NULL` ise karşılaştırmada boş metin sayılır (aynı adın sürümlü
     girdilerinden önce gelir).
@@ -306,6 +360,18 @@ SPDX license: https://spdx.org/licenses/<kimlik>.html   (yalnız metinsiz girdid
   …` hariç) ilk görülme sırasıyla ve tekrarsız birer satır. İfade geçersiz
   veya boşsa satır yoktur. Gömülü lisans metni kütüphanesi kullanılmaz (D-69).
 
+**NuGet girdileri (1.4.0).** Alanlar ve sıraları aynıdır; yeni alan yoktur:
+
+- `Ecosystem: nuget`; `PURL: pkg:nuget/<id>@<sürüm>` (bölüm 6, purl kuralı).
+- `License source:` `registry:nuget` (ifade varsa) veya `none`. `license_unclassified`
+  NOTICE'ta `License source:` değerini değiştirmez (yine `none`); metinsiz girdide
+  `Reason:` önekiyle görünür (bölüm 4.3, 4.5).
+- `Copyright:` ve `License files:` doğrulanmış `.nupkg` arşiv kaydından gelir (F3 telif
+  kuralı, ADR-006 Karar 8). `.nuspec` `<copyright>` alanı **yazılmaz** (ADR-008
+  Değerlendirilen alternatifler).
+- Meta veri lisans metni bloğu NuGet'te hiçbir zaman yazılmaz (NuGet meta verisi
+  `license_text` taşımaz; ADR-008 Karar 9).
+
 ### 3.5 Lisans dosyası blokları
 
 Arşiv kaydındaki `license_files` öğeleri, kayıttaki sırayla (AC-P15-7:
@@ -336,6 +402,17 @@ File: <path>
 
 - **Metinli girdi** = en az bir `{ path, text }` öğesi olan girdi (üst bilgi
   `A` sayısı ve `Reason:` satırının yokluğu buna göre).
+- **`.nupkg` lisans dosyaları (1.4.0, ADR-008 Karar 11; REQ-006 AC-P21-10, -11):**
+  NuGet arşiv kaydının `license_files` öğeleri iki kaynaktan gelir: (a) arşiv kökündeki
+  (yolunda `/` olmayan) ve adı D-67 önek kuralıyla `LICENSE`, `LICENCE`, `COPYING`,
+  `NOTICE` veya `COPYRIGHT` ile başlayan dosyalar; (b) `.nuspec` `<license
+  type="file">` ile bildirilen ve normalleştirilmiş yolu ASCII harf duyarsız eşleşen dosya
+  (adı ne olursa olsun, ör. `docs/EULA.md`). Bir dosya her iki kurala da uyarsa **bir
+  kez** listelenir. Öğe sırası, `File:` değeri (arşiv içindeki normalleştirilmiş yol,
+  `package/` öneki yoktur) ve 10 dosya / 1 MiB / 4 MiB sınırları F3 ile aynıdır.
+  `[Content_Types].xml`, `_rels/`, `package/` altı, `.signature.p7s` ve `<id>.nuspec`
+  hiçbir zaman öğe olmaz. Bildirilen yol doğrulamadan geçmediyse (256 karakter,
+  `normalizeArchivePath`) yalnız (a) kuralı uygulanır.
 - **Metin satırları:** metin bölüm 9 arındırmasından geçer; sondaki `\n`
   karakterleri atılır; kalan metin `\n` ile satırlara bölünür; her satıra
   ayraç kalkanı (bölüm 3.6) uygulanır ve LF ile yazılır. Atıldıktan sonra
@@ -502,8 +579,9 @@ gerektirir.
 | --- | --- | --- | --- |
 | `registry:npm` | npm kayıt defteri lisansı | `registry:npm`; uyuşmazlıkta `registry:npm (lockfile differs: <ipucu>)` | `registry:npm` |
 | `registry:pypi` | PyPI lisansı | `registry:pypi`; uyuşmazlıkta `registry:pypi (lockfile differs: <ipucu>)` | `registry:pypi` |
+| `registry:nuget` (1.4.0) | NuGet `.nuspec` lisansı: `<license type="expression">` veya `licenses.nuget.org` / tablo eşlemeli `licenseUrl` (ADR-008 Karar 9); her zaman dolu bir ifade taşır | `registry:nuget` (NuGet'te lock ipucu yoktur, `(lockfile differs: …)` biçimi oluşmaz) | `registry:nuget` |
 | `lockfile (unverified)` | Lock ipucu, doğrulanmadı (AC-L6-3) | `lockfile (unverified)` | `lockfile (unverified)` |
-| `none` | Etkin lisans yok | `none`; `lock_integrity = 'mismatch'` ise `none (lockfile integrity mismatch)` (1.2.0, öncelikli); aksi hâlde durum `no_license` ve ipucu varsa `none (lockfile hint ignored: <ipucu>)` | `none` |
+| `none` | Etkin lisans yok | Öncelik sırasıyla ilk uyan: (1) `lock_integrity = 'mismatch'` → `none (lockfile integrity mismatch)` (1.2.0); (2) `license_unclassified = 'file'` → `none (license file in package, not classified)` (1.4.0); (3) `license_unclassified = 'url'` → `none (license URL not classified)` (1.4.0); (4) durum `no_license` ve ipucu varsa `none (lockfile hint ignored: <ipucu>)`; (5) `none` | `none` |
 | `NULL` | F3 öncesi tarama | boş hücre | `not recorded` |
 
 - **L-5 (1.2.0):** `lock_integrity = 'mismatch'` satırında `license_source` her zaman
@@ -520,6 +598,11 @@ gerektirir.
   ipucu gösterilmez (NOTICE dağıtım belgesidir; L-6 görünürlüğü raporun işidir).
   L-5 bütünlük uyuşmazlığı (`lock_integrity = 'mismatch'`) ise NOTICE'ta yalnız
   `Reason:` satırıyla görünür (bölüm 4.3 satır 15; 1.2.0).
+- **1.4.0 (NuGet):** (2) ve (3) metinleri sabittir, URL metni veya dosya yolu **hiçbir
+  zaman** hücreye yazılmaz (ADR-008 Karar 9). `license_unclassified` yalnız `none`
+  satırlarında dolu olabilir (bölüm 4.5); (1) ile birlikte oluşmaz (yazılma kuralı gereği
+  `mismatch` satırında `NULL`), öncelik savunma derinliği içindir. NuGet satırlarında lock
+  ipucu yoktur (REQ-006 AC-P21-12), bu yüzden (4) NuGet'te oluşmaz.
 
 ### 4.2 `license_enrichment_status`
 
@@ -564,7 +647,8 @@ satır kazanır.
 | 4 | `no_license_file` | `no license file in package archive` |
 | 5 | `unsupported_format` | `package archive format not supported` |
 | 6 | `limit_exceeded` | `archive exceeds size limit` |
-| 7 | `no_candidate` | `no verifiable package archive available` |
+| 7 | `no_candidate` — ekosistem `nodejs`/`python` | `no verifiable package archive available` |
+| 7a | `no_candidate` — ekosistem `dotnet` (1.4.0; lock/assets bütünlük değeri yok, `.nupkg` indirilmedi) | `package archive not downloaded (no lockfile integrity value)` |
 | 8 | `integrity_failed` | `package archive integrity check failed` |
 | 9 | `download_failed` | `package archive could not be downloaded` |
 | 10 | `processing_failed` | `package archive could not be processed` |
@@ -579,8 +663,41 @@ satır kazanır.
 | | `budget_exceeded` | `license enrichment time budget exceeded during scan` |
 | | diğer | `package archive not collected` |
 | 13 | `not_runtime` | NOTICE'ta yer almaz (runtime değil) |
-| 14 | Ekosistem `nodejs`/`python` dışında | `license enrichment not supported for this ecosystem` |
-| 15 | `lock_integrity = 'mismatch'` (1.2.0; bu durumda `notice_status = 'not_attempted'`, `notice_archive_id = NULL`) | `lockfile integrity does not match registry; license not verified` |
+| 14 | Ekosistem `nodejs`/`python`/`dotnet` dışında (1.4.0: `dotnet` bu satırdan çıkarıldı; C-13 NuGet için kalkar) | `license enrichment not supported for this ecosystem` |
+| 15 | `lock_integrity = 'mismatch'` (1.2.0; bu durumda `notice_status = 'not_attempted'`, `notice_archive_id = NULL`; 1.4.0: npm ve NuGet) | `lockfile integrity does not match registry; license not verified` |
+
+**`license_unclassified` öneki (1.4.0, C-26).** Metinsiz bir girdide
+`license_unclassified` doluysa, yukarıdaki sırayla seçilen metnin **başına** sabit bir
+önek ve `; ` (noktalı virgül + boşluk) eklenir; satır yine **tek** `Reason:` satırıdır:
+
+| `license_unclassified` | Önek |
+| --- | --- |
+| `file` | `license is a file inside the package (not classified)` |
+| `url` | `license URL not classified` |
+
+Örnekler:
+`Reason: license is a file inside the package (not classified); package archive not downloaded (no lockfile integrity value)`
+(lock'suz proje, `type="file"` paket);
+`Reason: license URL not classified; package archive could not be downloaded`.
+
+- Önek yalnız metinsiz girdide görünür. `type="file"` paketin bildirdiği dosya `.nupkg`'den
+  toplandıysa girdi metinlidir: lisans metni dosya bloğunda yer alır, `Reason:` satırı
+  yoktur, `License: NOASSERTION` ve `License source: none` kalır (ADR-008 Karar 12).
+- `license_unclassified` satır 1 ve 15 koşullarında `NULL`'dır (F3/F5 öncesi satırlar ve
+  yazılma kuralı), bu yüzden önek o satırlarla birleşmez. Satır 2 ile birleşebilir (ör.
+  `type="file"` paketin arşiv önbelleği temizlenmiş):
+  `Reason: license is a file inside the package (not classified); license file data no longer cached; rescan required`.
+- URL metni ve bildirilen dosya yolu NOTICE'e yazılmaz.
+
+**NuGet notları (1.4.0):**
+
+- NuGet `integrity_failed` **üretmez** (ADR-008 Karar 10.2); satır 8 NuGet'te oluşmaz.
+  NuGet bütünlük uyuşmazlığı satır 15 ile görünür.
+- NuGet `.nupkg` indirme, boyut, kota ve bütçe hataları F3 değerlerini alır (satır 5, 6,
+  9, 10, 11); metinler değişmez.
+- NuGet meta veri durumları (`not_found`, `unreachable`, `error`, `disabled`,
+  `version_unknown`, `invalid_coordinates`, `budget_exceeded`) satır 12 metinlerini
+  kullanır.
 
 - Satır 15 aynı anahtarın tüm runtime satırları için geçerlidir (`lock_integrity`
   anahtar düzeyinde hesaplanır, aynı anahtarın satırları aynı değeri taşır; ADR-007
@@ -630,6 +747,61 @@ parmak izi anahtarı `NOASSERTION`).
 `lock_integrity` hiçbir JSON yanıtında dönmez (AC-G-4) ve Excel'e ayrı sütun olarak
 eklenmez (D-63).
 
+**NuGet anlamı (1.4.0; ADR-008 Karar 10, netleştirme 12).** Değer kümesi değişmez.
+Anahtar `(nuget, asciiLower(id), asciiLower(normal sürüm))`. NuGet kayıt defteri özet
+yayımlamadığı için karşılaştırma **indirilen `.nupkg` baytları** ile taramanın
+`packages.lock.json` `contentHash` / `project.assets.json` `libraries.*.sha512` değeri
+(`sha512-<base64>`) arasında yapılır:
+
+| Değer | NuGet'te ne zaman |
+| --- | --- |
+| `match` | Anahtarın tek bir ayrık lock/assets değeri `d` var **ve** (a) indirilen baytların ham SHA-512'si `d`'ye eşit **veya** (b) NuGet imzalı paket içerik özeti (`.signature.p7s` girdisi yokmuş gibi hesaplanan, ADR-008 Karar 10.3) `d`'ye eşit; **veya** arşiv önbelleğinde `(nuget, id, sürüm, d)` satırı var (yalnız daha önce `d`'ye karşı doğrulanmış baytlardan yazılır). |
+| `not_comparable` | **Zenginleştirme açıkken varsayılan.** Lock/assets değeri yok (lock'suz proje; bu durumda `notice_status = 'no_candidate'`, indirme yok); meta veri `found` değil; koordinat geçersiz / sürüm bilinmiyor; indirme hatası, boyut sınırı, kota veya bütçe aşımı (`.nuspec` lisansı kullanılır, F3 davranışı). |
+| `mismatch` | Anahtarın **birden çok farklı** lock/assets değeri var (indirme yapılmaz); **veya** indirilen baytlar ne ham özetle ne içerik özetiyle `d`'ye eşit (içerik özeti hesaplanamadıysa da). Fail-safe yukarıdaki `mismatch` satırıyla **aynıdır**; ek olarak `license_unclassified = NULL`. |
+| `NULL` | Zenginleştirme kapalı (`REGISTRY_ENRICHMENT=off` veya fail-closed geçersiz değer) / zenginleştirici enjekte edilmemiş; F5 öncesi tarama. |
+
+- Tablonun ilk satırındaki `npm` anahtarı ve `NULL` satırındaki "npm dışı ekosistem"
+  ifadesi 1.4.0 ile şöyle okunur: npm ve NuGet karşılaştırılır; PyPI `NULL` kalır.
+- NuGet `integrity_failed` üretmez; `mismatch` satırının çıktı özeti (Excel, NOTICE satır
+  15, SBOM, `[registry]` `X`) npm ile aynı metinleri kullanır.
+- `match`/`not_comparable` NuGet satırlarında çıktılar bu contract'ın NuGet kurallarıyla
+  üretilir (ek uyarı yoktur).
+
+### 4.5 `license_unclassified` (1.4.0, REQ-006 AC-P21-5, AC-P21-6)
+
+Saklama yeri `scan_dependencies.license_unclassified` (göç `008`, `TEXT NULL CHECK
+(license_unclassified IN ('file', 'url'))`; ADR-008 Karar 12, 14). Durum değeri
+**değildir**: satırın `license_enrichment_status` değeri `no_license`, `license_source`
+değeri `none`, `license_expression` değeri `NULL`'dır.
+
+| Değer | Anlamı (`.nuspec`, ADR-008 Karar 9) |
+| --- | --- |
+| `file` | `<license type="file">`: lisans paketin içindeki bir dosyadadır; SPDX ifadesine sınıflandırılmadı. |
+| `url` | `<licenseUrl>` var, ama `licenses.nuget.org` ifadesine veya sabit URL tablosuna eşlenemedi (`aka.ms/deprecateLicenseUrl` yer tutucusu yok sayılır, bu değeri üretmez). |
+| `NULL` | Diğer her durum: npm/PyPI satırları, F5 öncesi satırlar, `ok` durumu, ne `license` ne `licenseUrl` olan paket (düz `no_license`), meta veri `found` değil, `lock_integrity = 'mismatch'`. |
+
+**Yazılma kuralı:** yalnız ekosistem `dotnet`, durum `no_license` ve `lock_integrity <>
+'mismatch'` iken meta verideki değer yazılır; aksi hâlde `NULL`. Aynı anahtarın tüm
+satırları aynı değeri taşır.
+
+**Çıktı özeti:**
+
+| Çıktı | `file` | `url` | Bölüm |
+| --- | --- | --- | --- |
+| Excel `Dependencies.License` | boş metin | boş metin | 5.1 |
+| Excel `Dependencies.License Source` | `none (license file in package, not classified)` | `none (license URL not classified)` | 4.1, 5.1 |
+| Excel `Licenses` / bulgu API'si | runtime paket için `NOASSERTION` bulgusu (mevcut satır kuralı, yapı değişmez) | aynı | 5.1a |
+| PDF `License` | `n/a` | `n/a` | 5.2 |
+| NOTICE `License:` / `License source:` | `NOASSERTION` / `none` | `NOASSERTION` / `none` | 3.4 |
+| NOTICE lisans dosyası | bildirilen dosya ve kök `LICENSE*` dosyaları `.nupkg` doğrulandıysa bloklarda | kök `LICENSE*` dosyaları doğrulandıysa bloklarda | 3.5 |
+| NOTICE `Reason:` (yalnız metinsiz girdi) | önek `license is a file inside the package (not classified); …` | önek `license URL not classified; …` | 4.3 |
+| SPDX 2.3 | `licenseDeclared` `NOASSERTION`; yeni `licenseComments` satırı **yok** | aynı | 6.1 (C-27) |
+| CycloneDX 1.5 | `licenses` yazılmaz | aynı | 6.2, 6.3 |
+| `[registry]` | ayrı sayılmaz; şablon değişmez | aynı | 8 |
+
+Kolon hiçbir JSON yanıtında dönmez (REQ-006 AC-G-4) ve Excel'e ayrı sütun olarak
+eklenmez.
+
 ## 5. Excel ve PDF raporları
 
 ### 5.1 Excel `Dependencies` sayfası
@@ -641,7 +813,14 @@ Mevcut 7 sütun aynen kalır (1.1.0: formül kalkanı öneki hariç, bölüm
 | --- | --- | --- | --- | --- |
 | 1–7 | `Name`, `Version`, `Ecosystem`, `Scope`, `Manifest`, `Depth`, `PURL` | mevcut | mevcut | mevcut |
 | 8 | `License` | `license` | 32 | `license_expression`; boş/`NULL` → boş metin |
-| 9 | `License Source` | `licenseSource` | 48 | bölüm 4.1 "Excel" sütunu (1.2.0: `lock_integrity = 'mismatch'` → `none (lockfile integrity mismatch)`); F3 öncesi → boş metin |
+| 9 | `License Source` | `licenseSource` | 48 | bölüm 4.1 "Excel" sütunu (1.2.0: `lock_integrity = 'mismatch'` → `none (lockfile integrity mismatch)`; 1.4.0: `registry:nuget`, `none (license file in package, not classified)`, `none (license URL not classified)`); F3 öncesi → boş metin |
+
+- **NuGet satırları (1.4.0):** `Ecosystem` sütunu mevcut kuralla enum değerini yazar
+  (`dotnet`); `PURL` `pkg:nuget/…` (bölüm 6). `License` sütununun kuralı ekosistemden
+  bağımsızdır: ifade yoksa boş metin (C-29). REQ-006 AC-P21-7'deki "lisans hücresi boş
+  kalmaz" ölçütü, NuGet satırında `License` (ifade) **veya** `License Source` (kaynak /
+  neden metni, hiçbir zaman boş değil) ile birlikte `Licenses` sayfasındaki ve bulgu
+  API'sindeki `NOASSERTION` bulgusuyla karşılanır.
 
 - Satır başına bir `scan_dependencies` satırı (mevcut). Başlık satırı kalın,
   donuk ve otomatik filtreli (mevcut döngü; filtre 9 sütunu kapsar).
@@ -733,8 +912,35 @@ satırları `notice_archive_id` → `registry_archive_cache.copyright_lines`
   `detectedLicense`) tekrarsız, ilk görülme sırasıyla ` AND ` ile birleşik
   ifade; hiç yoksa yok.
 
+- **NuGet (1.4.0):** `registry:nuget` satırında `L` = `.nuspec` ifadesi (normalleştirilmiş).
+  `license_unclassified` dolu satırda `license_expression` `NULL` olduğu için `L` yoktur →
+  SPDX `NOASSERTION`, CycloneDX `licenses` yazılmaz; yeni `licenseComments` satırı
+  **eklenmez** (C-27). NuGet'te `lockfile (unverified)` kaynağı oluşmaz, bu yüzden
+  `licenseComments` satırı (b) NuGet'te yazılmaz; satır (a) (geçersiz ifade) mevcut
+  kuralla yazılabilir. Telif satırları doğrulanmış `.nupkg` arşiv kaydından gelir.
+
 **Geçerlilik:** `spdxExpression.canonicalize(L)` (AC-P16-3). Geçerliyse
 kanonik ifade `C`; değilse "geçersiz".
+
+**purl (1.4.0; REQ-006 AC-P20-18, ADR-008 Karar 4 ve Karar 16 satır 6).** NuGet
+bileşenlerinin purl'ü `pkg:nuget/<id>@<sürüm>` (sürüm bilinmiyorsa `pkg:nuget/<id>`):
+
+- `<id>` kaynaktaki harf biçimini **korur** (küçük harfe çevrilmez; ör.
+  `pkg:nuget/Newtonsoft.Json@13.0.3`). Ad alanı (namespace) bileşeni yoktur.
+- `<sürüm>` NuGet normal biçimidir (baştaki sıfırlar atılmış, 2 parçalıya `.0` eklenmiş,
+  4. parça `0` ise atılmış, yapı üst verisi `+…` yok); ön sürüm etiketi kaynaktaki harf
+  biçimini korur. Değer `scan_dependencies` / `packages` satırındaki `version` ile aynıdır.
+- `<id>` ve `<sürüm>` `npmPurl`/`pypiPurl` ile aynı yüzde kodlama yardımcısından geçer
+  (NuGet kimlik/sürüm kuralları gereği pratikte değişmez).
+- Purl SPDX `externalRefs` (`PACKAGE-MANAGER` / `purl`; tag-value `ExternalRef`),
+  CycloneDX `purl` (ve mevcut kuralla `bom-ref`), Excel `PURL`, NOTICE `PURL:` alanlarında
+  aynı değerdir. SBOM bileşen tekilleştirmesi mevcut purl kuralıyla yapılır (harf
+  biçimi farklı iki purl iki bileşen olur; NOTICE tekilliği bölüm 3.3'teki NuGet
+  anahtarını kullanır).
+- **Doğrulanması gerekiyor (ADR-008 Karar 16 satır 6, güven orta-yüksek):** purl
+  belirtiminin `nuget` tipi için küçük harf normalleştirmesi istemediği varsayılmıştır.
+  Aksi teyit edilirse yalnız `nugetPurl` ve bu madde bir contract revizyonuyla
+  değişir; parmak izi formülü (ADR-003) etkilenmez.
 
 ### 6.1 SPDX 2.3 (JSON ve tag-value)
 
@@ -854,6 +1060,46 @@ Dosya: `public/app.js`, fonksiyon `scanActions(row)` (frontend-engineer).
   birbirini beklemeden çalışır. Ortak tek arayüz `GET /api/scans/{id}/notice`
   yoludur.
 
+### 7.1 Proje formu: `.NET (NuGet)` teknoloji yığını seçeneği (1.4.0; REQ-006 AC-P20-17, D-130; ADR-008 Karar 15)
+
+Dosya: `public/index.html` (frontend-engineer). `public/app.js` **değişmez**.
+
+- "Technology Stack" çoklu seçim listesine (`<select id="ecosystems" class="form-control"
+  multiple style="height: 80px;">`), mevcut iki seçenekten **sonra** tek satır eklenir:
+
+  ```html
+  <option value="dotnet">.NET (NuGet)</option>
+  ```
+
+  | Öğe | Değer (birebir) |
+  | --- | --- |
+  | `value` | `dotnet` (`tech_ecosystem` enum değeri; küçük harf) |
+  | Görünen metin | `.NET (NuGet)` |
+  | `selected` | **yok** — varsayılan seçim değişmez (`nodejs` seçili kalır) |
+  | Sıra | `nodejs`, `python`, `dotnet` |
+
+- Mevcut seçenekler (`<option value="nodejs" selected>Node.js (NPM / Yarn)</option>`,
+  `<option value="python">Python (pip / PyPI)</option>`) ve listenin öznitelikleri
+  (`id`, sınıf, `multiple`, `style`) bayt bayt aynı kalır. Başka arayüz değişikliği
+  yapılmaz (rozet, sütun veya yeni metin yok; REQ-006 D-138, D-144).
+- **Gönderim (mevcut, değişmez):** `public/app.js` seçili seçeneklerin `value`
+  değerlerini toplar (`Array.from(byId('ecosystems').selectedOptions).map((o) =>
+  o.value)`) ve `POST /api/projects` gövdesinde `ecosystems: string[]` olarak gönderir.
+  `projectController` her değeri `$2::tech_ecosystem` ile `project_tech_stacks`'e yazar;
+  `dotnet` enum'da zaten vardır. Proje listesi (`GET /api/projects`) `ecosystems`
+  dizisinde `dotnet` değerini döndürür ve arayüz bunu mevcut `capsule` ile ham değer
+  olarak (`dotnet`) gösterir.
+- **API şeması değişmez:** `POST /api/projects` istek gövdesindeki `ecosystems` ve
+  yanıttaki `ecosystems` zaten serbest `string[]`'dir (REQ-002 OpenAPI: "tech_ecosystem
+  enum değerleri"); yeni alan, yeni zorunlu alan veya enum değişikliği yoktur. Yalnız
+  arayüzün gönderebildiği değer kümesi `dotnet` ile genişler (additive).
+- **Çalışma zamanı (bilgi, backend):** `supportedEcosystems` `['nodejs', 'python',
+  'dotnet']`; yığını boş projenin varsayılan listesi `['nodejs', 'python', 'dotnet']`
+  (ADR-008 Karar 15). Yığını yalnız `nodejs` olan proje .NET dosyalarını taramaz.
+- **Paralel çalışma:** frontend bu bölüme göre, backend ADR-008'e göre birbirini
+  beklemeden çalışır (manifest onayından sonra); ortak arayüz mevcut `POST /api/projects`
+  gövdesidir.
+
 ## 8. `[registry]` uyarı satırı
 
 Tamamlanmış taramanın `error_message` alanına, mevcut `parse_errors`
@@ -907,6 +1153,24 @@ zenginleştirme durumu `ok`/`no_license` olduğundan `T`'ye girmezler. Satır yi
   ardından `[osv]` → `[nvd]` gelir (`docs/contracts/REQ-005-vulnerability-data.md`
   bölüm 3.4).
 
+**NuGet (1.4.0; REQ-006 AC-P21-14, ADR-008 Karar 12).** Üç şablonun metni **değişmez**.
+
+- NuGet anahtarları `(nuget, asciiLower(id), asciiLower(normal sürüm))` olarak mevcut
+  sayımlara katılır: `u`, `e`, `b`, `T`, kapalı şablondaki `M + K` ve uyuşmazlık sayısı
+  `X`. `X` 1.4.0 ile `lock_integrity = 'mismatch'` olan benzersiz npm **ve** NuGet
+  anahtarlarının toplamıdır.
+- NuGet'te lock ipucu olmadığından NuGet anahtarları `M`'ye hiç katılmaz, her zaman
+  `K`'ye (`no license`) sayılır.
+- `license_unclassified` (`file` / `url`) ayrı sayılmaz; bu anahtarlar `no_license`
+  durumundadır ve `T`'ye girmez.
+- Uyuşmazlık metnindeki `(registry license and lockfile hint not used)` ifadesi NuGet
+  anahtarları için de aynen kullanılır (NuGet'te "registry license" `.nuspec` lisansıdır;
+  ipucu yoktur). Paket adı yazılmaz.
+- NuGet içermeyen taramada satır 1.3.0 ile bayt bayt aynıdır (veya yoktur).
+- Ayrıştırıcının NuGet hata satırları `parse_errors` biçimindedir
+  (`[dotnet] File <göreli yol>: <sabit metin>`; ADR-008 Karar 7) ve `[registry]`'den önce
+  gelir; metinleri bu contract'ın kapsamında değildir (NuGet golden'larıyla donar).
+
 ## 9. Ortak metin kuralları
 
 Güvenilmeyen her metin (paket adı, sürüm, purl, proje adı, lisans ifadesi,
@@ -959,9 +1223,15 @@ sütunlarına adım 1–3 uygulanmaz.
 | backend-engineer (1.2.0) | `lock_integrity` saklama (4.4); Excel `none (lockfile integrity mismatch)` metni ve önceliği (4.1, 5.1); NOTICE satır 15 seçimi ve uyuşmazlıklı anahtarda arşiv önbelleğinin okunmaması (4.3); `[registry]` `X` eki ve üçüncü şablon (8); SBOM'da `NOASSERTION` ve yeni `licenseComments` satırı olmaması (6). Lint, typecheck, hedef testler raporlanır. |
 | qa-automation (1.2.0) | Lock'ta kayıt defterinden farklı `sha512` taşıyan npm paketiyle (sahte kayıt defteri): `lock_integrity = 'mismatch'`, arşiv isteği **sıfır** (önbellekte kayıt olsa bile NOTICE onu kullanmaz), Excel `License` boş ve `License Source` = `none (lockfile integrity mismatch)` (lock ipucu ve kayıt defteri lisansı metinde yok), NOTICE girdisi satır 15 nedeni ve `License: NOASSERTION`, SPDX `licenseDeclared`/`copyrightText` `NOASSERTION` ve `licenseComments` yok, CycloneDX `licenses`/`copyright` yok, PDF `n/a`, runtime pakette `NOASSERTION` lisans bulgusu, `[registry]` satırında `X` (yalnız uyuşmazlık → üçüncü şablon; erişilemeyen paketle birlikte → ekli "incomplete" şablonu). Eşleşen, yalnız `sha1`, bozuk, 1025 karakterlik lock değerinde ve PyPI paketinde çıktılar 1.1.0 ile aynı; mevcut NOTICE golden'ı ve P-10 golden'ları değişmeden yeşil (AC-L5-3, AC-L5-4). |
 
+| backend-engineer (1.4.0) | `registry:nuget` kaynağı (4.1); `license_unclassified` yazılma kuralı (4.5); Excel `License Source` öncelik zinciri ve iki yeni metin (4.1, 5.1); NOTICE etiket `nuget`, NuGet tekillik anahtarı ve sıralama (3.3), `.nupkg` lisans dosyaları (3.5), satır 7a, satır 14 daraltması, `license_unclassified` öneki (4.3); `lock_integrity` NuGet değerleri (4.4); SBOM purl ve `NOASSERTION`, yeni `licenseComments` yok (6); `[registry]` sayımları (8). Lint, typecheck, hedef testler raporlanır. |
+| database-engineer (1.4.0) | Göç `008`: `scan_dependencies.license_source` CHECK'e `registry:nuget`, `scan_dependencies.license_unclassified` kolonu ve CHECK'i (ADR-008 Karar 14 bağlayıcı adlar); `db/schema.sql`. Up → down → up testi qa ile. |
+| frontend-engineer (1.4.0) | Bölüm 7.1 seçeneği; lint. |
+| qa-automation (1.4.0) | **Sahte NuGet sunucusuyla (loopback):** `type="expression"` paket → Excel `License` = ifade, `License Source` = `registry:nuget`, NOTICE `License source: registry:nuget`, `Ecosystem: nuget`, `PURL: pkg:nuget/<Kaynak.Harf>@<sürüm>`; `type="file"` paket → Excel `License` boş + `License Source` = `none (license file in package, not classified)`, doğrulanmış `.nupkg`'de bildirilen `docs/EULA.md` ve kök `LICENSE.txt` NOTICE dosya bloklarında (`lib/net8.0/LICENSE` yok; `../LICENSE` bildirimi eşleşmez), lock'suz projede `Reason: license is a file inside the package (not classified); package archive not downloaded (no lockfile integrity value)`; sınıflandırılmamış URL → `none (license URL not classified)` ve URL metninin hiçbir çıktıda geçmediği (metin taraması); lock'suz NuGet paketi → satır 7a; NuGet paketi için `license enrichment not supported for this ecosystem` metninin **hiç** üretilmediği; farklı özet → `mismatch` fail-safe çıktılarının hepsi (Excel `none (lockfile integrity mismatch)`, NOTICE satır 15, SPDX `NOASSERTION`, CycloneDX `licenses` yok, `[registry]` `X` NuGet anahtarını içerir, `license_unclassified` `NULL`); ham özet ve imzalı içerik özeti → `match`; iki farklı lock özeti → `mismatch` ve indirme yok. **Sıralama:** npm, NuGet, PyPI karışık taramada NOTICE girdi sırası `npm` < `nuget` < `pypi`; `Newtonsoft.Json` ve `newtonsoft.json` (iki klasör) tek NOTICE girdisi. **`[registry]`:** NuGet hostu kapalıyken `unreachable` sayısı NuGet anahtarlarını içerir; şablon metinleri birebir. **Arayüz (jsdom veya statik HTML denetimi):** `#ecosystems` listesinde sırayla `nodejs` (selected), `python`, `dotnet` seçenekleri; `dotnet` metni `.NET (NuGet)` ve `selected` değil. **Geriye uyumluluk:** NuGet'siz taramalarda mevcut NOTICE, Excel, SBOM ve P-10 golden'ları değişmeden yeşil (REQ-006 AC-G-9); mevcut contract testleri değişmez. |
+| security-red-team (1.4.0) | URL metni / bildirilen yolun çıktılara sızmadığı; `.nupkg` lisans dosyası seçiminde yol geçişi; fail-safe'in NuGet'te bulgu gizlemeye yol açmadığı. |
+
 ## 11. Sürümleme
 
-- Güncel contract sürümü **1.2.0** (aşağıda). 1.1.0 notu: (minor: güvenlik sertleştirmesi; uç nokta,
+- Güncel contract sürümü **1.4.0** (aşağıda; 1.3.0 yalnız yapılandırma ayrıştırmasıdır). 1.1.0 notu: (minor: güvenlik sertleştirmesi; uç nokta,
   şema, sütun ve değer kümeleri değişmez). API yolu sürümlenmez (`/api/...`,
   mevcut desen). OpenAPI `info.version` 1.0.0 kalır.
 - **NOTICE biçim sürümü 1.1.0'da `1` kalır.** I-3 kalkan genişletmesi ve
@@ -981,6 +1251,14 @@ sütunlarına adım 1–3 uygulanmaz.
   değişikliklerine (bölüm 3 yapısı, mevcut girdilerin baytları) uygulanır;
   bölüm 4 değer tablolarına yalnız yeni koşul için yeni değer eklemek minor
   contract revizyonudur ve biçim numarasını artırmaz. Excel'de yeni sütun yoktur.
+- **1.4.0 (NuGet):** contract sürümü minor artar (D-144): yeni değer `registry:nuget`,
+  yeni saklanan kolon `license_unclassified`, yeni metinler (Excel iki metin, NOTICE satır
+  7a ve iki önek), NuGet etiket/tekillik/sıralama kuralı ve arayüz seçeneği. Mevcut
+  değerlerin anlamı değişmez (major değil). **`NOTICE format: 1` kalır** (C-30): bölüm 3
+  yapısı değişmez; NuGet etiketi, satır 7a ve önekler yalnız F5 sonrası NuGet girdilerinde
+  görünür; NuGet'siz taramalarda baytlar 1.3.0 ile aynıdır. OpenAPI `info.version`
+  1.0.0 → 1.1.0 (yalnız bilgi amaçlı şemalarda additive değişiklik; uç nokta yüzeyi
+  aynı).
 - NOTICE biçim sürümü üst bilgideki `NOTICE format: 1` satırıdır. Bölüm 3'te
   çıktı baytlarını değiştiren her değişiklik bu sayıyı artırır, golden
   dosyayı günceller ve bu contract'ın yeni sürümünü gerektirir.
@@ -1009,7 +1287,7 @@ Tümü "kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10".
 | C-10 | PDF `License` boş değeri | `n/a` (mevcut PDF deseni) | `writePdfRows` tutarlılığı |
 | C-11 | SPDX lock kaynağı görünürlüğü | `licenseComments` satırı `License source: lockfile (unverified)` | L-6 görünürlüğü SBOM'da da |
 | C-12 | F3 öncesi SBOM telifi | `NOASSERTION` (önbellek araması yok); NOTICE ise ADR-006 Karar 12'ye göre önbellekte arar | ADR-006 SBOM için F3 öncesi telif kaynağı tanımlamıyordu; `packages.copyright_text` hiç dolmadığı için bugünkü çıktı da `NOASSERTION` |
-| C-13 | Desteklenmeyen ekosistem | NOTICE nedeni `license enrichment not supported for this ecosystem`; F3 ayrıştırıcıları yalnız `nodejs`/`python` ürettiği için bugün oluşmaz | `tech_ecosystem` enum'u daha geniş |
+| C-13 | Desteklenmeyen ekosistem | NOTICE nedeni `license enrichment not supported for this ecosystem`; F3 ayrıştırıcıları yalnız `nodejs`/`python` ürettiği için bugün oluşmaz. **1.4.0:** `dotnet` için kalktı (NuGet zenginleştirilir); diğer enum değerleri için geçerli | `tech_ecosystem` enum'u daha geniş; REQ-006 AC-P21-11 |
 | C-14 | Tag-value tek satırlık değerlerde `<text>` (1.1.0) | Önerilen seçenek: değerin yalnız başı değil **her yerindeki** `<text>`/`</text>` (harf duyarsız) blok içi kaçışla birebir aynı biçimde `&lt;text&gt;`/`&lt;/text&gt;` olur; adım 1–3'ten sonra uygulanır | Güvenlik raporu L-1; ADR-006 Karar 13 tag-value kaçışını yalnız bloklar için tanımlıyordu |
 | C-15 | Excel formül kalkanının kapsamı (1.1.0) | Önerilen seçenek: tüm sayfalardaki tüm metin hücreleri; sayı hücreleri tipini korur; mevcut sütunlara yalnız kalkan eklenir (adım 1–3 eklenmez) | Güvenlik raporu L-2; ADR-006 Karar 13 "Mevcut sütunlar değişmez" ve D-63 "`Licenses` sayfası değişmez" ifadeleri bu güvenlik istisnasıyla daraltılır (yapı değişmez, yalnız tetikleyici önekli değerler) |
 | C-16 | Unicode satır ayırıcıları (1.1.0) | U+0085/U+2028/U+2029 tek satırlık değerlerde boşluk; çok satırlı NOTICE metninde korunur ama ayraç kalkanı için satır sonu sayılır | Güvenlik raporu I-3 |
@@ -1020,6 +1298,15 @@ Tümü "kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10".
 | C-21 | `[registry]` uyuşmazlık sayısı (1.2.0) | Tek satır: "incomplete" şablonuna ek cümle veya yalnız uyuşmazlık için üçüncü şablon; `X = 0` iken 1.1.0 ile aynı | AC-L5-2, ADR-007 Karar 12; tek satır kuralı (ADR-006 Karar 11) |
 | C-22 | SBOM'da uyuşmazlık açıklaması (1.2.0) | Yeni `licenseComments` satırı yok; yalnız `NOASSERTION` | AC-L5-2 yalnız `NOASSERTION` ister; CycloneDX'te karşılığı yok; değişiklik yüzeyini küçük tutmak |
 | C-23 | NOTICE `Reason:` önceliği (1.2.0) | Satır 15, satır 14'ten sonra ve satır 1–2'den önce | Uyuşmazlık yalnız F4 sonrası taramalarda oluşur; `not_attempted` genel nedeninden daha belirgin |
+| C-25 | Excel `License Source` NuGet metinleri (1.4.0) | `none (license file in package, not classified)` ve `none (license URL not classified)`; öncelik L-5 metni > `file` > `url` > ipucu metni > `none` | REQ-006 AC-P21-5/6 "sabit metin"; ADR-008 Karar 12 öncelik; mevcut `none (…)` deseni; kaynak değeri `none` ile tutarlı |
+| C-26 | NOTICE'ta `type="file"` / sınıflandırılmamış URL (1.4.0) | Metinsiz girdide tek `Reason:` satırına sabit önek + `; ` + mevcut neden; metinli girdide satır yok | Tek `Reason:` satırı biçimi (bölüm 3.4) korunur; okuyucu hem lisansın nerede olduğunu hem dosyanın neden eklenmediğini görür |
+| C-27 | SBOM'da `license_unclassified` (1.4.0) | Yalnız `NOASSERTION`; yeni `licenseComments` satırı yok | C-22 emsali; ADR-008 Karar 12 yalnız `NOASSERTION` tanımlar; CycloneDX'te karşılığı yok; değişiklik yüzeyi küçük |
+| C-28 | NOTICE NuGet tekillik anahtarı (1.4.0) | `(dotnet, asciiLower(ad), asciiLower(sürüm))`; gösterilen ad/sürüm bayt sırasıyla en küçük satırınki | NuGet kimlik/sürümleri harf duyarsız (ADR-008 Karar 4, netleştirme 6); zenginleştirme anahtarı küçük harfli; "her anahtar tam bir kez" (bölüm 3.3) |
+| C-29 | Excel `Dependencies.License` NuGet'te boşken (1.4.0) | Ekosistemden bağımsız mevcut kural: ifade yoksa boş metin; AC-P21-7 `License Source` + `NOASSERTION` bulgusuyla karşılanır | ADR-008 Karar 12 `License` sütununu değiştirmez; npm/PyPI golden'ları değişmez (AC-G-9). **Product-analyst REQ-006 r2'de AC-P21-7 metnini buna göre netleştirmelidir** (`Dependencies.License` değil, lisans bulgusu + kaynak metni) |
+| C-30 | NOTICE biçim numarası (1.4.0) | `NOTICE format: 1` kalır | Bölüm 3 yapısı değişmez; yalnız değer/etiket eklemesi (C-20 kuralı) |
+| C-31 | NuGet `no_candidate` nedeni (1.4.0) | `package archive not downloaded (no lockfile integrity value)` (satır 7a); npm/PyPI satır 7 değişmez | REQ-006 AC-P21-11 "bütünlük değeri olmadığı için arşiv indirilmedi"; noktalı virgülsüz biçim önekle birleşince tek ayraç kalır |
+| C-32 | `lock_integrity` NuGet anlamı (1.4.0) | Varsayılan `not_comparable`; `match` = ham **veya** imzalı içerik özeti eşit; birden çok farklı lock değeri → `mismatch`; `integrity_failed` yok | ADR-008 Karar 10, netleştirme 1, 2, 12 |
+| C-33 | Arayüz seçeneği (1.4.0) | `<option value="dotnet">.NET (NuGet)</option>`, sonda, seçili değil; `app.js` ve API şeması değişmez | REQ-006 AC-P20-17, D-130; ADR-008 Karar 15 |
 
 **Handoff:** Bu contract non-trivial'dir. Implementation ve doğrulama sonunda
 `docs/handoffs/REQ-004.md` güncellenmelidir (integration-release; Delivery Lead
@@ -1029,7 +1316,10 @@ XSD sırası teyidi (bölüm 6.3) ve bu contract'tan sapma varsa gerekçesi.
 I-3, M-1) atfı, düzeltmelerin durumu ve M-1 kapatılmadan merge edilecekse
 insan risk kabulü. 1.2.0 (L-5) uygulaması REQ-005 kapsamında yapıldığı için
 kanıtı `docs/handoffs/REQ-005.md`'ye yazılır (uyuşmazlık testleri, golden'ların
-değişmediği).
+değişmediği). 1.4.0 (NuGet) uygulaması REQ-006 kapsamındadır; kanıt
+`docs/handoffs/REQ-006.md`'ye yazılır (NuGet NOTICE/Excel/SBOM testleri, NuGet'siz
+golden'ların değişmediği, purl harf biçimi teyidi — ADR-008 Karar 16 satır 6, imzalı
+paket `match` release kapısı — AC-P21-16).
 
 **ADR uyumu (1.1.0):** C-14 ve C-15, ADR-006 Karar 13 tablosundaki SPDX
 tag-value ve Excel satırlarından daha sıkıdır. Bu bir gevşetme değil güvenlik
@@ -1052,3 +1342,4 @@ ADR-006 ve repo kodu (`src/controllers/sbomController.ts`,
 | 1.1.0 | 2026-10-10 | **L-1:** SPDX tag-value tek satırlık değerlerde `<text>`/`</text>` (harf duyarsız) → `&lt;text&gt;`/`&lt;/text&gt;`, blok içi kuralla aynı; hiçbir tek satırlık değer ham `<text>` ile başlayamaz (6.1, 9 adım 4; C-14). **L-2:** Excel formül kalkanı tüm sayfalardaki tüm metin hücrelerine genişletildi (`Summary`, `Dependencies`, `Licenses`, `Vulnerabilities`); sayı hücreleri tipini korur; mevcut içerik kalkan öneki dışında değişmez (1, 5.1, 5.1a; C-15). **I-3:** adım 3'te U+0085/U+2028/U+2029 → boşluk; NOTICE ayraç kalkanı bu karakterlerden sonra da uygulanır (3.5, 3.6, 9; C-16). **M-1:** NOTICE metinleri parti parti okunur ve kesimden sonra okunmaz; çıktı biçimi değişmez (3.7; C-18). `NOTICE format: 1` kalır (11; C-17). Test yükümlülükleri eklendi (10). | `docs/quality/security-reports/REQ-004-security-review.md` (M-1, L-1, L-2, I-3) | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.2.0 | 2026-10-10 | **L-5:** `scan_dependencies.lock_integrity` değerleri ve `mismatch` fail-safe saklama kuralı (4.4); Excel `License Source` `none (lockfile integrity mismatch)` (4.1, 5.1; C-19); NOTICE `Reason:` satır 15 `lockfile integrity does not match registry; license not verified` ve önceliği (4.3; C-23); `[registry]` uyuşmazlık sayısı `X` (8; C-21); SBOM `NOASSERTION`, yeni yorum satırı yok (6; C-22); `NOTICE format: 1` kalır (11; C-20); test yükümlülükleri (10). `match`/`not_comparable`/`NULL` çıktıları 1.1.0 ile aynı. | `docs/product/REQ-005.md` L-5 (AC-L5-1…4, D-103), ADR-007 Karar 12, 14 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.3.0 | 2026-10-10 | **L-2 (REQ-005 güvenlik incelemesi):** `REGISTRY_ENRICHMENT` F4 anahtarlarıyla aynı ayrıştırmaya bağlandı: `on/off/true/false/1/0/yes/no` (harf duyarsız), boş/tanımsız → açık, **diğer değer → kapalı** + yalnız ad içeren tek uyarı (4.2 notu; C-24). F3'teki "geçersiz → açık" davranışı değişti. Çıktı biçimleri, OpenAPI ve `NOTICE format: 1` değişmez. ADR-006 Karar 14 ve REQ-004 AC-P14-16 metinlerinin bu karara göre güncellenmesi solution-architect / product-analyst işidir. | `docs/quality/security-reports/REQ-005-security-review.md` (L-2); REQ-005 contract 1.1.0 bölüm 7.1 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
+| 1.4.0 | 2026-10-11 | **REQ-006 F5 (NuGet):** `license_source` += `registry:nuget` (4.1); yeni `scan_dependencies.license_unclassified` (`file`/`url`) ve gösterimi (4.5; C-25…C-27); Excel `License Source` öncelik zinciri ve iki yeni metin (4.1, 5.1); NOTICE etiketi `nuget`, sıralama `npm` < `nuget` < `pypi`, NuGet tekillik anahtarı (3.3; C-28), NuGet alan notları (3.4), `.nupkg` lisans dosyaları (3.5), satır 7a NuGet `no_candidate` metni (C-31), satır 14'ün `dotnet` için kalkması (C-13 daraltıldı), `license_unclassified` öneki (4.3); `lock_integrity` NuGet anlamı (4.4; C-32); SBOM NuGet `L` ve purl `pkg:nuget/<id>@<sürüm>` harf biçimi korunarak (6); proje formu `.NET (NuGet)` seçeneği (7.1; C-33); `[registry]` sayımlarına NuGet, şablonlar değişmeden (8); `Dependencies.License` kuralı değişmez (C-29); `NOTICE format: 1` kalır (11; C-30); test yükümlülükleri (10); OpenAPI `info.version` 1.1.0 (bilgi amaçlı `LicenseSource` enum'una additive `registry:nuget`, `LicenseUnclassified` şeması). NuGet'siz taramalarda çıktılar 1.3.0 ile bayt bayt aynı. | `docs/product/REQ-006.md` r1 (AC-P20-17, -18, AC-P21-5…14, D-130, D-133, D-134, D-137, D-139, D-144); ADR-008 Karar 4, 9–12, 14–16 ve netleştirmeler 1–3, 12, 13 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11 |

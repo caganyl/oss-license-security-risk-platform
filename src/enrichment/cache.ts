@@ -21,8 +21,18 @@ import { coordinateKey } from './coordinates';
 import type { DigestAlgorithm } from './integrity';
 import type { ArchiveCandidate, RegistryMetadata } from './types';
 
-/** Bump when metadata extraction changes (AC-P14-1/2/3 order, trove table, text rules). */
+/** Bump when metadata extraction changes (AC-P14-1/2/3 order, trove table, text rules). npm/PyPI value. */
 export const METADATA_EXTRACTOR_VERSION = 1;
+/**
+ * Metadata extractor version per registry (ADR-008 Karar 9): NuGet has its
+ * own counter (nuspec rules, `licenseUrl` table), so a NuGet change never
+ * invalidates npm/PyPI rows.
+ */
+export const METADATA_EXTRACTOR_VERSIONS: Readonly<Record<RegistryEcosystem, number>> = Object.freeze({
+  npm: METADATA_EXTRACTOR_VERSION,
+  pypi: METADATA_EXTRACTOR_VERSION,
+  nuget: 1,
+});
 /** Bump when archive extraction changes (readers, file selection, copyright rule). */
 export const ARCHIVE_EXTRACTOR_VERSION = 1;
 
@@ -70,7 +80,20 @@ interface MetadataRow {
   declared_license: string | null;
   license_text: string | null;
   archive_candidates: unknown;
+  license_unclassified: string | null;
+  license_file_path: string | null;
+  canonical_name: string | null;
   fresh: boolean;
+}
+
+/** NuGet-only optional fields of a cached row (migration 008); absent for npm/PyPI rows. */
+function nugetFields(row: MetadataRow): Partial<RegistryMetadata> {
+  if (row.ecosystem !== 'nuget') return {};
+  return {
+    licenseUnclassified: row.license_unclassified === 'file' || row.license_unclassified === 'url' ? row.license_unclassified : null,
+    licenseFilePath: typeof row.license_file_path === 'string' ? row.license_file_path : null,
+    canonicalName: typeof row.canonical_name === 'string' ? row.canonical_name : null,
+  };
 }
 
 /**
@@ -82,11 +105,17 @@ export async function readMetadataCache(db: CacheDb, keys: readonly MetadataKey[
   if (keys.length === 0) return result;
   const { rows } = await db.query<MetadataRow>(
     `SELECT c.ecosystem, c.name, c.version, c.outcome, c.declared_license, c.license_text, c.archive_candidates,
-            (c.extractor_version = $4 AND (c.expires_at IS NULL OR c.expires_at > NOW())) AS fresh
-       FROM unnest($1::text[], $2::text[], $3::text[]) AS k(ecosystem, name, version)
+            c.license_unclassified, c.license_file_path, c.canonical_name,
+            (c.extractor_version = k.extractor_version AND (c.expires_at IS NULL OR c.expires_at > NOW())) AS fresh
+       FROM unnest($1::text[], $2::text[], $3::text[], $4::int[]) AS k(ecosystem, name, version, extractor_version)
        JOIN registry_package_cache c
          ON c.ecosystem = k.ecosystem AND c.name = k.name AND c.version = k.version`,
-    [keys.map((k) => k.ecosystem), keys.map((k) => k.name), keys.map((k) => k.version), METADATA_EXTRACTOR_VERSION],
+    [
+      keys.map((k) => k.ecosystem),
+      keys.map((k) => k.name),
+      keys.map((k) => k.version),
+      keys.map((k) => METADATA_EXTRACTOR_VERSIONS[k.ecosystem]),
+    ],
   );
   for (const row of rows) {
     const key = coordinateKey(row.ecosystem, row.name, row.version);
@@ -94,6 +123,7 @@ export async function readMetadataCache(db: CacheDb, keys: readonly MetadataKey[
       declaredLicense: row.declared_license,
       licenseText: row.license_text,
       archiveCandidates: parseCandidates(row.archive_candidates),
+      ...nugetFields(row),
     };
     if (row.fresh) {
       result.set(key, { kind: 'hit', outcome: row.outcome === 'found' ? { kind: 'found', metadata } : { kind: 'not_found' } });
@@ -113,13 +143,18 @@ export async function writeMetadataCache(
   const found = outcome.kind === 'found';
   await db.query(
     `INSERT INTO registry_package_cache
-       (ecosystem, name, version, outcome, declared_license, license_text, archive_candidates, extractor_version, fetched_at, expires_at)
-     VALUES ($1, $2, $3, $4::text, $5, $6, $7::jsonb, $8, NOW(), CASE WHEN $4::text = 'not_found' THEN NOW() + INTERVAL '24 hours' END)
+       (ecosystem, name, version, outcome, declared_license, license_text, archive_candidates, extractor_version, fetched_at, expires_at,
+        license_unclassified, license_file_path, canonical_name)
+     VALUES ($1, $2, $3, $4::text, $5, $6, $7::jsonb, $8, NOW(), CASE WHEN $4::text = 'not_found' THEN NOW() + INTERVAL '24 hours' END,
+             $9, $10, $11)
      ON CONFLICT (ecosystem, name, version) DO UPDATE SET
        outcome = EXCLUDED.outcome,
        declared_license = EXCLUDED.declared_license,
        license_text = EXCLUDED.license_text,
        archive_candidates = EXCLUDED.archive_candidates,
+       license_unclassified = EXCLUDED.license_unclassified,
+       license_file_path = EXCLUDED.license_file_path,
+       canonical_name = EXCLUDED.canonical_name,
        extractor_version = EXCLUDED.extractor_version,
        expires_at = EXCLUDED.expires_at,
        fetched_at = NOW()
@@ -132,7 +167,11 @@ export async function writeMetadataCache(
       found ? outcome.metadata.declaredLicense : null,
       found ? outcome.metadata.licenseText : null,
       JSON.stringify(found ? outcome.metadata.archiveCandidates : []),
-      METADATA_EXTRACTOR_VERSION,
+      METADATA_EXTRACTOR_VERSIONS[key.ecosystem],
+      // Migration 008 columns: NuGet only, NULL for npm/PyPI and for `not_found`.
+      found && key.ecosystem === 'nuget' ? (outcome.metadata.licenseUnclassified ?? null) : null,
+      found && key.ecosystem === 'nuget' ? (outcome.metadata.licenseFilePath ?? null) : null,
+      found && key.ecosystem === 'nuget' ? (outcome.metadata.canonicalName ?? null) : null,
     ],
   );
 }

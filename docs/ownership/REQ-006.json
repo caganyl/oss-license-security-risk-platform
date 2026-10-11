@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-006",
+  "title": "REQ-006: F5 — .NET / NuGet (P-20, P-21, NuGet OSV)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (gece talimatı: \"ben yatıyorum sen çalışmaya devam et, bana soru sorma önerilen seçeneklerle devam et yapmaya. sabaha bitmiş olmasını istiyorum\"; kapsam: api.nuget.org erişimi (yalnız okuma), NuGet adlarının OSV'ye gönderilmesi, göç 008; Claude Code tarafından kaydedildi)",
+    "approved_at": "2026-10-11T03:00:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-006.md",
+    "acceptance_criteria": "docs/product/REQ-006.md",
+    "contracts": [
+      "docs/contracts/REQ-004-notice-and-outputs.md",
+      "docs/contracts/REQ-004-notice-api.openapi.yaml",
+      "docs/contracts/REQ-005-vulnerability-data.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md",
+      "docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md",
+      "docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md",
+      "docs/architecture/adr/ADR-005-typescript-ayristiricilar.md"
+    ]
+  },
+  "owners": [
+    { "agent": "database-engineer", "write_paths": ["db", "src/db"] },
+    { "agent": "backend-engineer",  "write_paths": ["src/app.ts", "src/main.ts", "src/runtime.ts", "src/config", "src/lib", "src/middleware", "src/controllers", "src/routes", "src/scanner", "src/reports", "src/types", "src/analysis", "src/sbom", "src/enrichment", "src/notice", "src/vulnerability", "README.md"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json", ".gitattributes"] }
+  ]
+}

@@ -285,11 +285,28 @@ describe('AC-G-7: migration 006 constraints', () => {
 
   it('AC-G-7: 006 down then up again restores the schema', async () => {
     const sql = (f: string) => fs.readFileSync(path.join(REPO_ROOT, 'db', 'migrations', f), 'utf8');
+    // `license_%` / `notice_%` columns of scan_dependencies: the seven 006 columns, plus
+    // license_unclassified when 008 (REQ-006) is applied. 006 down/up never touches the 008 column.
+    const F3_COLUMNS = ['license_enrichment_status', 'license_expression', 'license_hint_differs', 'license_lock_hint', 'license_source', 'notice_archive_id', 'notice_status'];
+    const licenseNoticeColumns = async () =>
+      (
+        await db.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'scan_dependencies' AND (column_name LIKE 'license\\_%' OR column_name LIKE 'notice\\_%')`,
+        )
+      )
+        .map((r) => r.column_name)
+        .sort();
+    const has008 = (await db.query(`SELECT 1 FROM schema_migrations WHERE version = '008_nuget_enrichment'`)).length === 1;
+    const expected = [...F3_COLUMNS, ...(has008 ? ['license_unclassified'] : [])].sort();
+    expect(await licenseNoticeColumns()).toEqual(expected);
+
     await db.query(sql('006_registry_enrichment.down.sql'));
     expect(await db.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('registry_package_cache', 'registry_archive_cache')`)).toEqual([]);
     expect(await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'scan_dependencies' AND column_name = 'license_source'`)).toEqual([]);
+    expect(await licenseNoticeColumns()).toEqual(has008 ? ['license_unclassified'] : []);
     await db.query(sql('006_registry_enrichment.up.sql'));
     expect(await db.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('registry_package_cache', 'registry_archive_cache')`)).toHaveLength(2);
-    expect(await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'scan_dependencies' AND (column_name LIKE 'license_%' OR column_name LIKE 'notice_%')`)).toHaveLength(7);
+    expect(await licenseNoticeColumns()).toEqual(expected);
   });
 });

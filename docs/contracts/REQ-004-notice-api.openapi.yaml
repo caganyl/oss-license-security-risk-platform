@@ -1,10 +1,17 @@
 openapi: 3.0.3
 info:
   title: OSS Risk Platform - REQ-004 NOTICE API Contract (F3 / P-15, D-69, D-70, D-74)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Status: Accepted - Onaylandi (kullanici daimi talimati, onerilen secenek), 2026-10-10.
     status: approved
+
+    1.1.0 (2026-10-11, insan okunur contract 1.4.0, REQ-006 F5 NuGet) - Onaylandi (kullanici daimi
+    talimati, onerilen secenek), 2026-10-11. Uc nokta yuzeyi, basliklar ve hata govdesi DEGISMEZ.
+    Yalniz bilgi amacli semalarda ADDITIVE degisiklik: LicenseSource enum'una 'registry:nuget',
+    yeni LicenseUnclassified semasi. NOTICE govdesinde NuGet girdileri "Ecosystem: nuget" etiketiyle
+    yer alir; NOTICE format: 1 kalir. Ek insan onayi kapilari: api.nuget.org dis hizmet entegrasyonu
+    ve goc 008 (docs/ownership/REQ-006.json status=approved olmadan implementation baslamaz).
 
     Insan okunur contract ve tum bicim kurallari: docs/contracts/REQ-004-notice-and-outputs.md
     (bu dosya yalniz F3'un tek yeni API yuzeyini tanimlar; NOTICE.txt biciminin tamami, durum
@@ -234,7 +241,19 @@ components:
         scan_dependencies.license_source saklanan degerleri (ADR-006 Karar 9 CHECK kumesi). NULL = F3
         oncesi tarama. Ciktidaki gosterimler icin insan okunur contract bolum 4.1.
         Bu sema bilgi amaclidir; hicbir JSON yanitinda donmez (D-74).
-      enum: ['registry:npm', 'registry:pypi', 'lockfile (unverified)', 'none']
+        1.4.0 (REQ-006, ADR-008 Karar 12/14, goc 008): 'registry:nuget' ADDITIVE olarak eklendi.
+      enum: ['registry:npm', 'registry:pypi', 'registry:nuget', 'lockfile (unverified)', 'none']
+
+    LicenseUnclassified:
+      type: string
+      nullable: true
+      description: |
+        1.4.0 (REQ-006 AC-P21-5/6, ADR-008 Karar 12/14, goc 008): scan_dependencies.license_unclassified.
+        Yalniz dotnet satirlarinda, durum no_license ve lock_integrity <> 'mismatch' iken dolu; aksi
+        halde NULL. file = lisans paket icindeki bir dosyada (siniflandirilmadi); url = licenseUrl
+        siniflandirilamadi. Durum degeri DEGILDIR (license_source = none). Gosterim: insan okunur
+        contract bolum 4.5. Bilgi amacli; hicbir JSON yanitinda donmez (AC-G-4).
+      enum: [file, url]
 
     LicenseEnrichmentStatus:
       type: string

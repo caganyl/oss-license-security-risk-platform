@@ -9,15 +9,23 @@
  *   PEP 503 (lower case; runs of `-`, `_`, `.` -> `-`). Used for the request
  *   and the cache key only; `packages.purl` and fingerprints are unchanged.
  *
- * Pure module (no imports, ADR-006 Karar 1).
+ * - NuGet (REQ-006, ADR-008 Karar 8): `dotnet` -> `nuget`; id and version
+ *   follow `nugetIdentity.ts` (the only parser-folder import allowed here);
+ *   the request name and version are ASCII lower case.
+ *
+ * Pure module (only the pure NuGet identity rules, ADR-008 Karar 1).
  */
+import { asciiLower, classifyNugetVersion, isValidNugetId } from '../scanner/parsers/nugetIdentity';
 
-export type RegistryEcosystem = 'npm' | 'pypi';
+export { asciiLower, classifyNugetVersion, isValidNugetId } from '../scanner/parsers/nugetIdentity';
+
+export type RegistryEcosystem = 'npm' | 'pypi' | 'nuget';
 
 /** Registry of a project ecosystem, or null when the ecosystem has no registry enrichment. */
 export function registryEcosystemOf(ecosystem: string): RegistryEcosystem | null {
   if (ecosystem === 'nodejs') return 'npm';
   if (ecosystem === 'python') return 'pypi';
+  if (ecosystem === 'dotnet') return 'nuget';
   return null;
 }
 
@@ -67,7 +75,34 @@ export function pep503Name(name: string): string {
 
 /** Request name: npm as-is (scoped names keep `@scope/name`; the path segment is built by `npmPathSegment`), PyPI PEP 503. */
 export function requestName(ecosystem: RegistryEcosystem, name: string): string {
-  return ecosystem === 'pypi' ? pep503Name(name) : name;
+  // Exhaustive (ADR-008 Karar 1): a new registry is a compile error here, never a silent default.
+  switch (ecosystem) {
+    case 'npm':
+      return name;
+    case 'pypi':
+      return pep503Name(name);
+    case 'nuget':
+      return asciiLower(name);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+function isValidRegistryName(ecosystem: RegistryEcosystem, name: string): boolean {
+  switch (ecosystem) {
+    case 'npm':
+      return isValidNpmName(name);
+    case 'pypi':
+      return isValidPypiName(name);
+    case 'nuget':
+      return isValidNugetId(name);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
 }
 
 /** npm request path segment: `@scope%2Fname` for scoped names, the name itself otherwise (AC-P14-5). */
@@ -86,7 +121,13 @@ export function checkCoordinates(ecosystem: string, name: string, version: strin
   const registry = registryEcosystemOf(ecosystem);
   if (registry === null) return { kind: 'unsupported' };
   if (version === null || version === undefined) return { kind: 'version_unknown' };
-  const validName = registry === 'npm' ? isValidNpmName(name) : isValidPypiName(name);
+  if (registry === 'nuget') {
+    // ADR-008 Karar 8: valid id, an exact normalized version and the F3 version rule; both ASCII lower case.
+    const classified = classifyNugetVersion(version);
+    if (!isValidNugetId(name) || classified.kind !== 'exact' || !isValidVersion(classified.version)) return { kind: 'invalid_coordinates' };
+    return { kind: 'ok', ecosystem: 'nuget', requestName: asciiLower(name), version: asciiLower(classified.version) };
+  }
+  const validName = isValidRegistryName(registry, name);
   if (!validName || !isValidVersion(version)) return { kind: 'invalid_coordinates' };
   return { kind: 'ok', ecosystem: registry, requestName: requestName(registry, name), version };
 }

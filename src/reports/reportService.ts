@@ -72,6 +72,8 @@ interface ReportDependency {
   licenseEnrichmentStatus: string | null;
   /** `scan_dependencies.lock_integrity` (REQ-004 contract 1.2.0 §4.4); internal, never in a JSON response. */
   lockIntegrity: string | null;
+  /** `scan_dependencies.license_unclassified` (REQ-004 contract 1.4.0 §4.5); internal like `lockIntegrity`, never in a JSON response. */
+  licenseUnclassified?: string | null;
   licenses: ReportLicenseFinding[];
   vulnerabilities: ReportSecurityFinding[];
 }
@@ -345,11 +347,12 @@ export class ReportService {
       license_hint_differs: boolean | null;
       license_enrichment_status: string | null;
       lock_integrity: string | null;
+      license_unclassified?: string | null;
     }>(
       `SELECT sd.id AS scan_dependency_id, p.ecosystem::text, p.name, p.version, p.purl,
               sd.scope::text, sd.manifest_file, sd.manifest_path, sd.depth,
               sd.license_expression, sd.license_source, sd.license_lock_hint,
-              sd.license_hint_differs, sd.license_enrichment_status, sd.lock_integrity
+              sd.license_hint_differs, sd.license_enrichment_status, sd.lock_integrity, sd.license_unclassified
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
        WHERE sd.scan_id = $1
@@ -468,6 +471,7 @@ export class ReportService {
         licenseHintDiffers: row.license_hint_differs,
         licenseEnrichmentStatus: row.license_enrichment_status,
         lockIntegrity: row.lock_integrity,
+        licenseUnclassified: row.license_unclassified ?? null,
         licenses: licensesByDependency.get(row.scan_dependency_id) ?? [],
         vulnerabilities: vulnerabilitiesByDependency.get(row.scan_dependency_id) ?? [],
       })),
@@ -661,10 +665,13 @@ const LOCK_HINT_MAX_CODE_POINTS = 200;
  * other rule and without the hint (contract 1.2.0 §4.1, C-19).
  */
 function licenseSourceCell(dep: Pick<ReportDependency,
-  'licenseSource' | 'licenseLockHint' | 'licenseHintDiffers' | 'licenseEnrichmentStatus'> & { lockIntegrity?: string | null }): string {
+  'licenseSource' | 'licenseLockHint' | 'licenseHintDiffers' | 'licenseEnrichmentStatus'> & { lockIntegrity?: string | null; licenseUnclassified?: string | null }): string {
   const source = dep.licenseSource;
   if (source === null || source === undefined || source === '') return '';
   if (dep.lockIntegrity === 'mismatch') return 'none (lockfile integrity mismatch)';
+  // Contract 1.4.0 §4.1 (2)/(3): fixed texts only; the URL or file path is never written.
+  if (source === 'none' && dep.licenseUnclassified === 'file') return 'none (license file in package, not classified)';
+  if (source === 'none' && dep.licenseUnclassified === 'url') return 'none (license URL not classified)';
   const hint = [...singleLine(dep.licenseLockHint)].slice(0, LOCK_HINT_MAX_CODE_POINTS).join('');
   if ((source === 'registry:npm' || source === 'registry:pypi') && dep.licenseHintDiffers === true && hint !== '') {
     return `${source} (lockfile differs: ${hint})`;

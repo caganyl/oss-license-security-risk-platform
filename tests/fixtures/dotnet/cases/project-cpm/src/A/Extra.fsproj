@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="foo" Version="1.0.0" />
+    <PackageReference Include="FSharp.Core" Version="8.0.100" />
+  </ItemGroup>
+</Project>

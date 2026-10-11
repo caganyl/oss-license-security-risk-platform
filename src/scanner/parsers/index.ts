@@ -11,11 +11,13 @@ import type { SandboxScanResult } from '../../types/scan';
 import { emptyResult, extendResult, pyStrip, walkTree, type ParseResult, type TreeWalk } from './common';
 import type { IntegrityCollector } from './lockIntegrityValue';
 import { parse as parseNodejs } from './nodejs';
+import { parse as parseNuget } from './nuget';
 import { parse as parsePython } from './python';
 
 const PARSERS: Readonly<Record<string, (walk: TreeWalk, collector?: IntegrityCollector) => ParseResult>> = {
   nodejs: parseNodejs,
   python: (walk) => parsePython(walk),
+  dotnet: parseNuget,
 };
 
 export interface ParseManifestsOptions {
@@ -47,15 +49,19 @@ export function parseManifests(
 ): SandboxScanResult {
   const result = emptyResult();
   let walk: TreeWalk | null = null;
+  const list = normalizeEcosystems(ecosystems);
+  // .NET names are recognised only when `dotnet` is requested; otherwise the
+  // walk is the unchanged F4 walk (golden guarantee, ADR-008 Karar 2).
+  const walkOptions = list.includes('dotnet') ? { dotnet: true } : {};
 
-  for (const ecosystem of normalizeEcosystems(ecosystems)) {
+  for (const ecosystem of list) {
     const parser = Object.prototype.hasOwnProperty.call(PARSERS, ecosystem) ? PARSERS[ecosystem] : undefined;
     if (!parser) {
       result.parse_errors.push({ ecosystem, file: '', error: `unsupported ecosystem '${ecosystem}'` });
       continue;
     }
     if (!walk) {
-      walk = walkTree(rootDir);
+      walk = walkTree(rootDir, walkOptions);
       result.parse_errors.push(...walk.errors);
     }
     extendResult(result, parser(walk, options.integrityCollector));

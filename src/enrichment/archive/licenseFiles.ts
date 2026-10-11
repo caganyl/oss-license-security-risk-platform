@@ -77,13 +77,35 @@ export function isLicenseFileName(baseName: string): boolean {
   return LICENSE_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }
 
-export type ArchiveLayout = 'top-folder' | 'wheel';
+export type ArchiveLayout = 'top-folder' | 'wheel' | 'nupkg';
+
+function asciiLowerPath(value: string): string {
+  return value.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
+}
+
+/** `.nupkg` packaging entries that are never candidates (ADR-008 Karar 11); their data is never opened. */
+function isNupkgPackagingEntry(lowerPath: string): boolean {
+  if (lowerPath === '[content_types].xml' || lowerPath === '.signature.p7s') return true;
+  if (lowerPath.startsWith('_rels/') || lowerPath.startsWith('package/')) return true;
+  return !lowerPath.includes('/') && lowerPath.endsWith('.nuspec');
+}
 
 /** Decides which normalized paths are license file candidates. */
 export class LicenseFileMatcher {
   private topFolder: string | null = null;
+  private readonly declaredLower: string | null;
 
-  constructor(private readonly layout: ArchiveLayout) {}
+  /**
+   * `options.declaredPath` (nupkg only): the `.nuspec` `<license type="file">`
+   * path, already normalized; matched ASCII case-insensitively whatever its name.
+   */
+  constructor(
+    private readonly layout: ArchiveLayout,
+    options: { declaredPath?: string | null } = {},
+  ) {
+    const declared = options.declaredPath ? normalizeArchivePath(options.declaredPath) : null;
+    this.declaredLower = declared === null ? null : asciiLowerPath(declared);
+  }
 
   /** Call for every regular file in archive order (sets the top folder on the first one). */
   observeRegularFile(path: string): void {
@@ -91,6 +113,12 @@ export class LicenseFileMatcher {
   }
 
   matches(path: string): boolean {
+    if (this.layout === 'nupkg') {
+      const lower = asciiLowerPath(path);
+      if (isNupkgPackagingEntry(lower)) return false;
+      if (this.declaredLower !== null && lower === this.declaredLower) return true;
+      return !path.includes('/') && isLicenseFileName(path);
+    }
     const components = path.split('/');
     if (!isLicenseFileName(components[components.length - 1])) return false;
     if (this.layout === 'top-folder') {

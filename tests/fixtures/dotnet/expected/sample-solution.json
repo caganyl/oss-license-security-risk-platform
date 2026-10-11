@@ -1,0 +1,273 @@
+{
+  "summary": {
+    "legacy/LegacyApp": {
+      "direct": 3,
+      "transitive": 0,
+      "transitivePurls": []
+    },
+    "src/App": {
+      "direct": 3,
+      "transitive": 3,
+      "transitivePurls": [
+        "pkg:nuget/Microsoft.Extensions.Logging.Abstractions@6.0.0",
+        "pkg:nuget/Microsoft.Extensions.Logging.Abstractions@8.0.0",
+        "pkg:nuget/Serilog@3.1.1"
+      ]
+    },
+    "src/Lib": {
+      "direct": 1,
+      "transitive": 1,
+      "transitivePurls": [
+        "pkg:nuget/Serilog@3.1.1"
+      ]
+    },
+    "src/Tools": {
+      "direct": 7,
+      "transitive": 0,
+      "transitivePurls": []
+    }
+  },
+  "result": {
+    "scan_id": "nuget-golden-sample-solution",
+    "status": "completed",
+    "total_deps": 18,
+    "dependencies": [
+      {
+        "ecosystem": "dotnet",
+        "name": "EntityFramework",
+        "version": "6.4.4",
+        "purl": "pkg:nuget/EntityFramework@6.4.4",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.config",
+        "manifest_path": "legacy/LegacyApp",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "log4net",
+        "version": "2.0.15",
+        "purl": "pkg:nuget/log4net@2.0.15",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.config",
+        "manifest_path": "legacy/LegacyApp",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "NUnit",
+        "version": "3.13.3",
+        "purl": "pkg:nuget/NUnit@3.13.3",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.config",
+        "manifest_path": "legacy/LegacyApp",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Microsoft.Extensions.Logging.Abstractions",
+        "version": "6.0.0",
+        "purl": "pkg:nuget/Microsoft.Extensions.Logging.Abstractions@6.0.0",
+        "scope": "transitive",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Microsoft.Extensions.Logging.Abstractions",
+        "version": "8.0.0",
+        "purl": "pkg:nuget/Microsoft.Extensions.Logging.Abstractions@8.0.0",
+        "scope": "transitive",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Newtonsoft.Json",
+        "version": "13.0.3",
+        "purl": "pkg:nuget/Newtonsoft.Json@13.0.3",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": "[13.0.3, )"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Serilog",
+        "version": "3.1.1",
+        "purl": "pkg:nuget/Serilog@3.1.1",
+        "scope": "transitive",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "System.Memory",
+        "version": "4.5.5",
+        "purl": "pkg:nuget/System.Memory@4.5.5",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": "[4.5.5, )"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "System.Text.Json",
+        "version": "8.0.0",
+        "purl": "pkg:nuget/System.Text.Json@8.0.0",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "packages.lock.json",
+        "manifest_path": "src/App",
+        "declared_range": "[8.0.0, )"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Serilog",
+        "version": "3.1.1",
+        "purl": "pkg:nuget/Serilog@3.1.1",
+        "scope": "transitive",
+        "licenses": [],
+        "manifest_file": "project.assets.json",
+        "manifest_path": "src/Lib",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Serilog.Sinks.Console",
+        "version": "5.0.1",
+        "purl": "pkg:nuget/Serilog.Sinks.Console@5.0.1",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "project.assets.json",
+        "manifest_path": "src/Lib",
+        "declared_range": "[5.0.1, )"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Dapper",
+        "version": null,
+        "purl": "pkg:nuget/Dapper",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": "2.1.*"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Humanizer",
+        "version": null,
+        "purl": "pkg:nuget/Humanizer",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": "$(LibVersion)"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Nerdbank.GitVersioning",
+        "version": "3.6.133",
+        "purl": "pkg:nuget/Nerdbank.GitVersioning@3.6.133",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Directory.Packages.props",
+        "manifest_path": "src/Tools",
+        "declared_range": "3.6.133"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Newtonsoft.Json",
+        "version": "13.0.3",
+        "purl": "pkg:nuget/Newtonsoft.Json@13.0.3",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": "13.0.3"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "NoVersion.Anywhere",
+        "version": null,
+        "purl": "pkg:nuget/NoVersion.Anywhere",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": null
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Polly",
+        "version": "8.2.0",
+        "purl": "pkg:nuget/Polly@8.2.0",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": "[8.2.0]"
+      },
+      {
+        "ecosystem": "dotnet",
+        "name": "Serilog",
+        "version": "3.0.1",
+        "purl": "pkg:nuget/Serilog@3.0.1",
+        "scope": "direct",
+        "licenses": [],
+        "manifest_file": "Tools.csproj",
+        "manifest_path": "src/Tools",
+        "declared_range": "3.0.1"
+      }
+    ],
+    "scan_files": [
+      {
+        "ecosystem": "dotnet",
+        "filename": "Directory.Packages.props",
+        "file_path": "Directory.Packages.props",
+        "file_hash": "6b77b75a2589f32efb7d94365ca7b0e454300d22f0fa3a3555f2aff40a1f2cd4",
+        "size_bytes": 579
+      },
+      {
+        "ecosystem": "dotnet",
+        "filename": "packages.config",
+        "file_path": "legacy/LegacyApp/packages.config",
+        "file_hash": "d94f84f87e1ee5e83a602f7fc726ae9cdb880561866c83861f2035b8b51efa85",
+        "size_bytes": 324
+      },
+      {
+        "ecosystem": "dotnet",
+        "filename": "packages.lock.json",
+        "file_path": "src/App/packages.lock.json",
+        "file_hash": "b5112144378360e6bab61c1d449195b9f3cae6e17aa5bd107aa1470d06a49dc2",
+        "size_bytes": 2957
+      },
+      {
+        "ecosystem": "dotnet",
+        "filename": "project.assets.json",
+        "file_path": "src/Lib/obj/project.assets.json",
+        "file_hash": "5f8d7209c1b676ea471bc25eb281290ad781eada8a16687eade6d55fd643e647",
+        "size_bytes": 1887
+      },
+      {
+        "ecosystem": "dotnet",
+        "filename": "Tools.csproj",
+        "file_path": "src/Tools/Tools.csproj",
+        "file_hash": "697cf05132f7498ee7c72c82697787443c75ab4c1ec26c6e8d9a91d78d75876a",
+        "size_bytes": 516
+      }
+    ],
+    "parse_errors": []
+  }
+}

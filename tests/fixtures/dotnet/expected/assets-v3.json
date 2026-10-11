@@ -1,0 +1,55 @@
+{
+  "scan_id": "nuget-golden-assets-v3",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "dotnet",
+      "name": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "purl": "pkg:nuget/Newtonsoft.Json@13.0.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "project.assets.json",
+      "manifest_path": ".",
+      "declared_range": "[13.0.3, )"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "System.Runtime",
+      "version": "4.3.0",
+      "purl": "pkg:nuget/System.Runtime@4.3.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "project.assets.json",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dotnet",
+      "filename": "project.assets.json",
+      "file_path": "obj/project.assets.json",
+      "file_hash": "081b018073b9b0d47a9f2541d6f2a1244f8dec97595d6b13356d85ae9eb052ee",
+      "size_bytes": 1396
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dotnet",
+      "file": "obj/project.assets.json",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "obj/project.assets.json",
+      "error": "Bilinmeyen bağımlılık türü içeren girdiler atlandı."
+    },
+    {
+      "ecosystem": "dotnet",
+      "file": "obj/project.assets.json",
+      "error": "Geçersiz paket kimliği içeren girdiler atlandı."
+    }
+  ]
+}

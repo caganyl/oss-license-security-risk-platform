@@ -231,4 +231,102 @@ Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını her
 
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 
+## Komut satırı istemcisi (`oss-risk` CLI)
+
+REQ-007 (F6) / ADR-009. CLI, çalışan bir sunucuya karşı mevcut bir projenin taramasını başlatır,
+bitmesini bekler ve `--fail-on` eşiğine göre çıkış kodu döner; CI'da kalite kapısı olarak
+kullanılır. Yalnız Node yerleşik modüllerini kullanır (yeni bağımlılık yok), `.env` okumaz,
+sunucu modüllerini içe aktarmaz.
+
+**Desteklenen çağrı:** `npm run build` sonrası `node dist/cli/index.js <komut> …`
+(`package.json` `bin` alanı `oss-risk` adını tanımlar; `npx oss-risk` repo içinde bir
+kolaylıktır ve doğrulanması gerekir). `--help`/`-h` ve `--version`/`-V` ağ isteği yapmaz.
+
+```bash
+# Tarama (anahtar yalnız ortam değişkeninden)
+OSS_RISK_API_KEY_FILE=~/.config/oss-risk.key \
+  node dist/cli/index.js scan --project my-service --fail-on high
+node dist/cli/index.js scan --project 0b6e2f1a-1c2d-4e5f-8a9b-0c1d2e3f4a5b --format json
+
+# Geçici CI veritabanında ilk kurulum + API anahtarı (yalnız YENİ veritabanı!)
+node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-risk.key" \
+  --project-name my-service --project-path .
+```
+
+`scan` seçenekleri: `--project <uuid|ad>` (zorunlu; UUID değilse birebir ad eşleşmesi),
+`--url <adres>`, `--fail-on none|low|medium|high|critical` (varsayılan `high`),
+`--format text|json` (varsayılan `text`), `--timeout <saniye>` (10–86400, varsayılan 1800),
+`--allow-incomplete`. `bootstrap` seçenekleri: `--new-database` (zorunlu), `--key-file <yol>`
+(zorunlu, dosya var olmamalı), `--url`, `--project-name` + `--project-path` (birlikte).
+
+**Ortam değişkenleri**
+
+| Değişken | Anlam |
+| --- | --- |
+| `OSS_RISK_API_KEY` | API anahtarı değeri (`scan`). |
+| `OSS_RISK_API_KEY_FILE` | API anahtarını içeren dosyanın yolu (en fazla 1 KiB, baştaki/sondaki boşluk atılır). İkisinden **tam olarak biri** verilmelidir. |
+| `OSS_RISK_URL` | Sunucu adresi; `--url` önce gelir; varsayılan `http://127.0.0.1:3001`. |
+
+Anahtar komut satırından **verilemez**: `--api-key`, `--key`, `--token` çıkış 2 ile reddedilir.
+Anahtar yalnız `Authorization: Bearer` başlığıyla gönderilir; çıktıya, log'a veya hata metnine
+yazılmaz. `bootstrap` anahtar ortam değişkenlerini okumaz.
+
+**Adres kuralları:** `http(s)://host[:port]` (kullanıcı bilgisi, yol, sorgu, parça yok).
+Loopback (`127.0.0.1`, `localhost`, `[::1]`) dışındaki adresler `https` olmalıdır; loopback dışı
+`http` hiç bağlantı kurmadan 2 ile reddedilir. CLI loopback isteklerinde `Host: <host>:<port>`
+başlığını açıkça gönderir. **Loopback dışı `https` sınırı:** sunucu yalnız kendi Host izin
+listesini kabul eder; loopback dışı `https` ancak TLS sonlandıran bir ara katman `Host`'u izin
+listesine uygun iletirse çalışır, aksi halde `403 host_rejected` → çıkış 2. Vekil sunucu
+(`HTTP(S)_PROXY`) kullanılmaz, yönlendirmeler izlenmez (çıkış 3), TLS doğrulaması kapatılamaz.
+
+**Çıkış kodları**
+
+| Kod | Anlam |
+| --- | --- |
+| `0` | Tarama tamamlandı; eşik aşılmadı ve veri tamlığı sağlandı (veya `--fail-on none`, `disabled`, `--allow-incomplete`). `--help`, `--version`, başarılı `bootstrap`. |
+| `1` | Tarama tamamlandı; `--fail-on` eşiği aşıldı. |
+| `2` | Kullanım/yapılandırma: argüman, `--api-key` ailesi, adres, anahtar kaynağı/biçimi, `--new-database` yok, proje bulunamadı/belirsiz/reddedildi, anahtar dosyası zaten var, `403 host_rejected`/`origin_rejected`. |
+| `3` | Tarama `failed`/`cancelled`/`timeout`, bekleme süresi doldu, bağlantı hatası/istek zaman aşımı (GET'lerde art arda 3), `3xx`, `429`, `5xx`, beklenmeyen yanıt, gövde > 32 MiB. |
+| `4` | Kimlik/yetki: `401`, diğer `403`; `bootstrap`'ta veritabanı zaten kurulmuş (`409`). |
+| `5` | Tarama tamamlandı, eşik aşılmadı ama güvenlik açığı verisi eksik (`partial`, `unavailable`, `not_checked`, `unknown`) ve `--allow-incomplete` yok. |
+
+Öncelik: 2/3/4 → 1 → 5 → 0. `--fail-on none` iken 1 ve 5 üretilmez.
+
+**`--fail-on` eşlemesi.** Yalnız `open`/`in_review` durumundaki `security` ve `license`
+bulguları sayılır. Etkin seviye ≥ eşik olan en az bir bulgu varsa eşik aşılır
+(`low < medium < high < critical`).
+
+| Tür | Girdi | Etkin seviye |
+| --- | --- | --- |
+| security | `severity` = `low`/`medium`/`high`/`critical` | aynen |
+| security | `severity` = `none` | yok (eşik tetiklenmez) |
+| security | `severity` boş veya tanınmayan | `high` |
+| license | `risk_level` = `safe` | yok (politika tabanı yoksa) |
+| license | `risk_level` = `low`/`medium`/`high`/`critical` | aynen |
+| license | `risk_level` = `unknown`, boş veya tanınmayan | `high` |
+| license | `applied_policy` = `prohibited` / `restricted` / `review_required` | taban `critical` / `high` / `medium` |
+| license | birleşim | max(risk seviyesi, politika tabanı) |
+
+**Veri tamlığı.** Tamamlanan taramada `GET /api/vulnerability-data/status` her zaman okunur;
+durum `complete` değilse uyarı yazılır. Bilinen sınırlar: durum listesi en fazla 500 proje
+döndürür (sonrakiler eşleşmez) ve aynı projenin daha yeni bir taraması okumadan önce biterse
+eşleşme kaybolur; her iki durumda sonuç `unknown` → 5'tir. Çözüm yeniden çalıştırmak veya
+bilinçli olarak `--allow-incomplete` kullanmaktır.
+
+**Çıktı.** `text`: özet stdout'a, ilerleme/uyarı/hata stderr'e. `json`: stdout'a tek JSON nesnesi
+(`schemaVersion: 1`; şema `docs/contracts/REQ-007-cli-and-exports.md` bölüm 5.6), stderr boş.
+Uzak kaynaklı tüm metinler tek satıra indirilir, kontrol karakterleri (ANSI dahil) silinir ve
+200 kod noktasıyla kesilir.
+
+**`bootstrap` uyarısı (ADR-001 Karar 12).** `bootstrap`, parolası olmayan bir veritabanına
+**bilinmeyen rastgele bir admin parolası** koyar ve API anahtarını `--key-file`'a (`wx`, POSIX'te
+0600; Windows'ta klasör ACL'i devralınır) yazar. Yalnız **yeni, boş, geçici** (CI) bir
+veritabanında çalıştırın; bu yüzden `--new-database` beyanı zorunludur. Sunucu setup'ı, parolası
+kurtarma için boşaltılmış (ADR-001 Karar 12 kurtarma durumundaki) bir veritabanında da kabul eder
+ve istemci bu iki durumu ayıramaz: gerçek veriye sahip, kurtarma durumundaki bir veritabanına karşı
+`bootstrap` çalıştırmak admin parolasını bilinmeyen bir değere ayarlar. Bu olursa kurtarma yeniden
+`db/README.md`'deki Karar 12 adımıyla yapılır. Veritabanı zaten kuruluysa `bootstrap` 4 ile
+çıkar; anahtar dosyası varsa hiç istek yapmadan 2 ile çıkar. Anahtar dosyasını kullanıcıya ait
+bir klasörde tutun.
+
 _Agentic Development Orchestrator ile oluşturuldu._

@@ -277,7 +277,14 @@ describe('AC-P22-1 / AC-P22-2 / AC-P22-4 / AC-G-8: compiled CLI as a real node p
       expect(api.requests.length).toBeGreaterThan(before);
       const refused = await cliRun(['scan', '--project', 'demo', '--url', 'http://example.com'], { ...proxyEnv, OSS_RISK_API_KEY: KEY.key });
       expect(refused.code).toBe(2);
-      expect(refused.stderr).toBe('oss-risk: error: a non-loopback server address must use https\n');
+      // Node 22 prints its own "[UNDICI-EHPA] EnvHttpProxyAgent is experimental"
+      // process warning when NODE_USE_ENV_PROXY is set (Node 26 does not); that is
+      // the runtime, not CLI output, so it is dropped before the exact comparison.
+      const cliStderr = refused.stderr
+        .split('\n')
+        .filter((l) => !/^\(node:\d+\) /.test(l) && !l.startsWith('(Use `node --trace-warnings'))
+        .join('\n');
+      expect(cliStderr).toBe('oss-risk: error: a non-loopback server address must use https\n');
       await new Promise((r) => setTimeout(r, 100));
       expect(trap.connections).toBe(0);
     } finally {

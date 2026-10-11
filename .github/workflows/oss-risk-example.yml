@@ -1,0 +1,180 @@
+# oss-risk example workflow (REQ-007 P-23, AC-P23-2...5; ADR-009 Karar 11).
+#
+# Starts the OSS Risk platform on the runner against a throw-away PostgreSQL
+# service container, initialises it with `oss-risk bootstrap --new-database`
+# (unknown random admin password + an API key file under RUNNER_TEMP) and gates
+# the build with `oss-risk scan` at the critical threshold.
+#
+# CLI exit codes: 0 pass, 1 threshold exceeded, 2 usage/configuration,
+# 3 scan/network/timeout, 4 authentication/authorisation, 5 vulnerability data
+# incomplete. Any non-zero code fails the step.
+#
+# Scan target in THIS repository (AC-P23-3): only a copy of the root
+# package.json + package-lock.json, so the deliberately risky manifests under
+# tests/fixtures are not scanned.
+#
+# Using it in YOUR repository: check out this platform (actions/checkout with
+# `repository: <owner>/<oss-risk-repo>` and `path: oss-risk`, then run the
+# npm/node steps with `working-directory: oss-risk`) next to your own code,
+# drop the "Prepare scan target" copy step and set SCAN_ROOTS and
+# --project-path to "$GITHUB_WORKSPACE" (or to the folder of a second
+# actions/checkout of the repository you want to scan). Tighten the gate by
+# lowering the fail-on threshold from critical to high.
+#
+# Network mode (AC-P23-4): push and pull_request runs are offline: registry
+# enrichment, vulnerability lookup and the daily recheck are off, the CLI
+# prints the `disabled` warning and the exit code is not affected. A manual
+# run (workflow_dispatch) with `online: true` turns on registry enrichment and
+# the OSV/NVD lookup; package names and versions are then sent to the public
+# registries and to api.osv.dev, and partial/unavailable vulnerability data
+# fails the run with exit code 5 (no --allow-incomplete).
+#
+# Hardening: read-only token, no secrets, first-party actions/* only, pinned
+# to full commit SHAs (tag in the trailing comment), no privileged PR trigger,
+# workflow inputs reach scripts only through env variables.
+
+name: oss-risk example
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      online:
+        description: 'Online mode: registry enrichment and OSV/NVD vulnerability lookup (package names leave the runner)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oss-risk-scan:
+    name: oss-risk scan (fail on critical)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        # Fixed major tag; pin a digest (postgres:17@sha256:...) for stricter
+        # supply-chain control (see README "GitHub Actions").
+        image: postgres:17
+        env:
+          POSTGRES_USER: ossrisk
+          POSTGRES_DB: ossrisk
+          # Example test value for this job-scoped container only; it is
+          # reachable only from the runner and is destroyed with the job. Not a
+          # real secret: never put a real database password in a workflow file.
+          POSTGRES_PASSWORD: example-ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ossrisk -d ossrisk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # No password in the URL; the pg driver reads PGPASSWORD (README).
+      DATABASE_URL: postgres://ossrisk@127.0.0.1:5432/ossrisk
+      PGPASSWORD: example-ci-test-only
+      HOST: 127.0.0.1
+      PORT: '3001'
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Choose network mode
+        env:
+          ONLINE: ${{ inputs.online }}
+        run: |
+          # Only the literal values below are written to GITHUB_ENV; the input
+          # itself is never echoed into it. The daily recheck stays off: the job
+          # lives for minutes and the scan itself does the lookup.
+          if [ "$ONLINE" = "true" ]; then
+            echo "Network mode: online (registry enrichment and OSV/NVD lookup on)"
+            {
+              echo "REGISTRY_ENRICHMENT=on"
+              echo "VULNERABILITY_LOOKUP=on"
+              echo "VULNERABILITY_RECHECK=off"
+            } >> "$GITHUB_ENV"
+          else
+            echo "Network mode: offline (no registry, OSV or NVD requests)"
+            {
+              echo "REGISTRY_ENRICHMENT=off"
+              echo "VULNERABILITY_LOOKUP=off"
+              echo "VULNERABILITY_RECHECK=off"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Prepare scan target
+        run: |
+          # This repository: scan only the root manifests (AC-P23-3).
+          # Your repository: delete this step and use "$GITHUB_WORKSPACE".
+          mkdir -p "$RUNNER_TEMP/oss-risk-target"
+          cp package.json package-lock.json "$RUNNER_TEMP/oss-risk-target/"
+          echo "SCAN_ROOTS=$RUNNER_TEMP/oss-risk-target" >> "$GITHUB_ENV"
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Start the server
+        run: |
+          nohup npm start > "$RUNNER_TEMP/server.log" 2>&1 &
+          echo "Server started in the background (log: $RUNNER_TEMP/server.log)."
+
+      - name: Wait for /health (max 60 s)
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:3001/health"; then
+              echo "Server is healthy after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not become healthy within 60 s." >&2
+          exit 1
+
+      - name: oss-risk bootstrap (new temporary database only)
+        run: |
+          node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-risk.key" \
+            --project-name oss-risk-self --project-path "$RUNNER_TEMP/oss-risk-target"
+
+      - name: oss-risk scan --fail-on critical
+        run: |
+          OSS_RISK_API_KEY_FILE="$RUNNER_TEMP/oss-risk.key" node dist/cli/index.js scan \
+            --project oss-risk-self --fail-on critical
+
+      - name: Server log (last 200 lines)
+        if: always()
+        run: |
+          # The server never logs the API key (REQ-007 AC-G-8).
+          if [ -f "$RUNNER_TEMP/server.log" ]; then
+            tail -n 200 "$RUNNER_TEMP/server.log"
+          else
+            echo "No server log (the server was not started)."
+          fi

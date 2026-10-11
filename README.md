@@ -369,4 +369,71 @@ ve istemci bu iki durumu ayıramaz: gerçek veriye sahip, kurtarma durumundaki b
 çıkar; anahtar dosyası varsa hiç istek yapmadan 2 ile çıkar. Anahtar dosyasını kullanıcıya ait
 bir klasörde tutun.
 
+## GitHub Actions
+
+REQ-007 (F6) P-23 / ADR-009 Karar 11. Repoda iki iş akışı vardır:
+
+| Dosya | Çalıştırıcı | Amaç |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | `windows-latest` | Bu reponun CI'ı: `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` → `npm run build`. Testler kendi `embedded-postgres` kümelerini başlatır (`--locale=C`); harici PostgreSQL hizmeti yoktur, ağ koruması (`tests/setup/networkGuard.ts`) CI'da da etkindir. |
+| `.github/workflows/oss-risk-example.yml` | `ubuntu-latest` | Kendi repoların için örnek kalite kapısı: `postgres:17` servis kapsayıcısı → `npm ci` → `npm run build` → `npm run db:migrate` → `npm start` (arka planda, `HOST=127.0.0.1`, `PORT=3001`, log `$RUNNER_TEMP/server.log`'a) → `/health` en fazla 60 sn beklenir → `bootstrap --new-database` → `scan --fail-on critical` → sunucu logunun son 200 satırı (her durumda). |
+
+Örnekteki CLI çağrıları:
+
+```bash
+node dist/cli/index.js bootstrap --new-database --key-file "$RUNNER_TEMP/oss-risk.key" \
+  --project-name oss-risk-self --project-path "$RUNNER_TEMP/oss-risk-target"
+OSS_RISK_API_KEY_FILE="$RUNNER_TEMP/oss-risk.key" node dist/cli/index.js scan \
+  --project oss-risk-self --fail-on critical
+```
+
+**Tetikleyiciler ve güvenlik.** Her iki iş akışı `push` (tüm branch'ler), `pull_request` (branch
+süzgeci yok; yığılı PR'larda da çalışır) ve `workflow_dispatch` ile tetiklenir; aynı ref'teki eski
+çalıştırma `concurrency` ile iptal edilir. İzinler iş akışı düzeyinde yalnız `contents: read`'dir;
+hiçbir GitHub secret'ı gerekmez. Yalnız GitHub'ın birinci taraf `actions/checkout` ve
+`actions/setup-node` eylemleri kullanılır, her biri tam 40 karakterlik commit SHA'sına sabitlidir
+(yanında sürüm yorumu); `actions/checkout` `persist-credentials: false` ile çalışır. Ayrıcalıklı PR
+tetikleyicisi (`pull_request_target`) yoktur. İş akışı girdileri betiklere yalnız `env:` üzerinden
+aktarılır. Eylemleri güncellerken yeni SHA'yı etiketten doğrulayın:
+`git ls-remote https://github.com/actions/checkout refs/tags/<etiket>` (açıklamalı etikette `^{}`
+satırındaki commit).
+
+**Test parolası.** Örnekteki `POSTGRES_PASSWORD`/`PGPASSWORD` değeri (`example-ci-test-only`)
+gerçek bir sır değildir: yalnız iş süresince yaşayan, yalnız çalıştırıcıdan erişilen ve iş bitince
+silinen geçici kapsayıcıya aittir. Gerçek bir veritabanı parolasını iş akışı dosyasına yazmayın.
+`postgres:17` sabit majör etikettir; daha sıkı tedarik zinciri denetimi için imajı digest ile
+sabitleyebilirsiniz (`postgres:17@sha256:…`).
+
+**Tarama hedefi.** Bu repoda örnek yalnız kök `package.json` + `package-lock.json` kopyasını
+(`$RUNNER_TEMP/oss-risk-target`) tarar; `tests/fixtures` altındaki bilerek riskli manifestler
+taranmaz.
+
+**Kendi reponuza uyarlama.**
+
+1. Platformu ve kendi kodunuzu çekin: ikinci bir `actions/checkout` adımıyla (`repository:
+   <sahip>/<oss-risk-reposu>`, `path: oss-risk`, `persist-credentials: false`) platformu alt
+   klasöre çekin; `npm ci`, `npm run build`, `npm run db:migrate`, `npm start` ve
+   `node dist/cli/index.js …` adımlarını `working-directory: oss-risk` ile çalıştırın.
+2. "Prepare scan target" kopyalama adımını silin; `SCAN_ROOTS` ve `--project-path` değerini
+   `$GITHUB_WORKSPACE`'e (veya taranacak repoyu ayrı bir `actions/checkout` ile çektiğiniz
+   klasöre) verin.
+3. **Eşik:** örnek `--fail-on critical` ile yalnız kritik bulguda kırmızı olur. Kapıyı
+   sıkılaştırmak için `--fail-on high` kullanın (CLI varsayılanı); çıkış kodları ve
+   `--fail-on` eşlemesi için yukarıdaki CLI bölümüne bakın.
+
+**Ağ kipi ve gizlilik.** `push` ve `pull_request` çalıştırmaları çevrimdışıdır:
+`REGISTRY_ENRICHMENT=off`, `VULNERABILITY_LOOKUP=off`, `VULNERABILITY_RECHECK=off`. CLI `disabled`
+uyarısını yazar, çıkış kodu etkilenmez; sonuç dış hizmet kesintisine veya günlük yeni CVE'lere
+bağlı değildir. GitHub arayüzünde **Actions → oss-risk example → Run workflow** ile `online`
+girdisi işaretlenerek elle başlatılan çalıştırmada kayıt defteri zenginleştirmesi ve OSV/NVD
+güvenlik açığı sorgusu açılır; bu durumda **paket adları ve sürümleri** `registry.npmjs.org`,
+`pypi.org`, `files.pythonhosted.org`, `api.nuget.org` ve `api.osv.dev`'e, CVE kimlikleri
+`services.nvd.nist.gov`'a gider (yukarıdaki "Dışarı giden bağlantıların tam listesi"). `online`
+kipte `--allow-incomplete` verilmez: güvenlik açığı verisi `partial`/`unavailable` ise iş 5 ile
+kırmızı biter. `workflow_dispatch` düğmesi yalnız iş akışı dosyası varsayılan branch'te
+(`main`) olduğunda görünür.
+
+**İlk Linux çalıştırması.** Uygulama şimdiye dek Windows'ta geliştirildi; örnek iş akışı onu
+ilk kez Linux'ta çalıştırır. Kırmızı biterse önce "Server log (last 200 lines)" adımına bakın.
+
 _Agentic Development Orchestrator ile oluşturuldu._

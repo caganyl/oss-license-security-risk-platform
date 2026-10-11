@@ -136,6 +136,30 @@
 
 Fix'ler ilgili implementer tarafından yapılmalı; Security Red Team fix sonrası yeniden inceler.
 
+## Takip doğrulaması (2026-10-11)
+
+- Kapsam: `b6bf7f6` (düzeltmeler) ve `1f9b3db` (testler). Doğrulama statik yapıldı (Read/Grep); testler bu oturumda çalıştırılmadı. Ana oturumun beyanı: tam suite 1246 geçti / 3 atlandı / 0 kırmızı, typecheck 0, lint 0 hata, `npm audit` 0. Bu beyan doğrulanmamış girdi olarak kabul edildi.
+
+| Bulgu | Durum | Kanıt |
+| --- | --- | --- |
+| L-1 | **Kapandı** | `common.ts:782` `NUGET_MAX_DEPENDENCIES_PER_SCAN = 100_000`. `nuget.ts:162-168` `fitsScanLimit` hem lock/assets yolunda (`nuget.ts:192`) hem proje dosyası yolunda (`nuget.ts:247`) çağrılıyor. Sınırı aşan klasör eklenmiyor (kayıt, `scan_files` ve hash yok). Kalan klasörler atlanıyor (`nuget.ts:306-309`). Sabit metinli, yolsuz tek bir `parse_errors` kaydı yazılıyor (`common.ts:771`). Reddedilen klasörün ayrıştırma belleği klasör sınırıyla (20 000) sınırlı. I-5 (tek dosyanın XML ağacı belleği) Info olarak açık kalıyor. |
+| L-3 | **Kapandı** | `nugetRegistry.ts:86-92, 109`: `<version>` NuGet normalizasyonundan geçiyor ve ASCII büyük/küçük harf duyarsız olarak istenen sürümle karşılaştırılıyor. Uyuşmazlık `BAD_NUSPEC` veriyor ve önbelleğe yazılmıyor. Testler `tests/unit/nugetEnrichmentPure.test.ts` ve `tests/integration/nugetEnrichment.test.ts` içinde. |
+| I-7 | **Kapandı** | `recheck.ts:126` `lower(regexp_replace(...) COLLATE "C")`. |
+| I-8 | **Kapandı** | `tests/unit/nugetGolden.test.ts`: `__proto__` id ve TFM senaryoları, ölçek sınırı. `tests/unit/nugetEnrichmentPure.test.ts` ve entegrasyon testi: `.signature.p7s`'i lisans dosyası olarak beyan eden nuspec NOTICE'a girmiyor (grep ile varlık doğrulandı; içerik çalıştırılmadı). |
+| L-2 | **Kabul (insan onayı gerekli)** | README'de belgelendi (`README.md:147`). Kod değişmedi. |
+| L-4 | **Kabul (insan onayı gerekli)** | README'de belgelendi (`README.md:149`). Down dosyası değişmedi. |
+| L-5 | **Kabul (insan onayı gerekli)** | README'de belgelendi (`README.md:146`). NuGet semantiğine uygun. |
+
+**QA notu: `<version>[1.0.0]</version>` değeri 1.0.0 ile eşleşiyor.** Değerlendirme: güvenlik etkisi yok (Info, I-9). `classifyNugetVersion` köşeli parantezi yalnız virgül içermeyen tek değerli tam sabitlemede kaldırıyor (`nugetIdentity.ts:126-128`). Aralık kabul edilmiyor. Parantez içindeki değer aynı normalizasyondan geçiyor. Bu nedenle `[x]` yalnız `x`'in kendisiyle eşleşebilir. L-3'ün saldırısı (başka bir sürümün nuspec'ine yönlendirme) bu yoldan geri açılmıyor. `1.0` = `1.0.0` = `1.0.0.0`, baştaki sıfırlar ve `+metadata` eşdeğerlikleri de NuGet kimlik semantiğiyle tutarlı. nuget.org bu biçimde bir nuspec yayınlamaz. İsteğe bağlı sıkılaştırma: nuspec karşılaştırması için parantezsiz, katı bir sürüm ayrıştırıcısı kullanılabilir. Merge için gerekli değil.
+
+**Handoff'a yazılması önerilen insan risk kabulü metinleri:**
+
+- **L-2:** "NuGet OSV sorgusunda paket adı olarak `.nuspec` `<id>` değerinin yayıncı tarafından seçilen büyük/küçük harf yazımı kullanılır. Bu yazım başka bir pakete yönlendiremez. OSV'nin NuGet ad eşlemesi büyük/küçük harfe duyarlıysa, yayıncının bilerek farklı harf düzeni kullandığı sürümlerde açıklar kaçabilir. Gerçek ağ smoke testinde bu adla açıklar bulunmuştur. Risk kabul edilmiştir; OSV davranışı değişirse yeniden değerlendirilecektir. — Onaylayan: ____ / Tarih: ____"
+- **L-4:** "Migration 008 geri alımı `registry:nuget` kaynaklı satırlarda `license_expression` değerini korur, kaynağı `none` yapar ve `license_unclassified` işaretlerini kalıcı olarak siler. Geri alım sonrası raporlar bu ifadeleri kaynaksız gösterir ve ilgili projeler yeniden taranmalıdır. Geri alım yalnız açık insan onayıyla, uygulama durdurulmuşken çalıştırılır. — Onaylayan: ____ / Tarih: ____"
+- **L-5:** "`.nuspec` `<license type="file">` ile beyan edilen yol, paketleme girişleri dışında paketteki ikili olmayan herhangi bir dosyayı NOTICE'a lisans metni olarak alabilir. Bu NuGet semantiğine uygundur. Dosya içerik hash'iyle doğrulanmış arşivden ve boyut sınırıyla okunur. Yayıncının yanıltıcı metin ekleme riski kabul edilmiştir. — Onaylayan: ____ / Tarih: ____"
+
+**Son karar: Go.** Critical, High veya Medium bulgu yok. L-1, L-3, I-7 ve I-8 kapandı. L-2, L-4 ve L-5 için merge öncesinde yukarıdaki kabul metinlerinin handoff'ta insan tarafından onaylanması gerekiyor. I-9 yalnız Info.
+
 ## Handoff notu
 
 Bu inceleme non-trivial'dır; `docs/handoffs/REQ-006.md` güncellenmelidir (bu rapor yolu, Go kararı ve L-1…L-5 takip listesi). Security Red Team handoff'u güncellemez; Delivery Lead / Integration-Release'e bildirilmiştir.

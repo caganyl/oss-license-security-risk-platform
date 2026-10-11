@@ -82,7 +82,10 @@ async function waitFor(cond: () => boolean, what: string): Promise<void> {
 }
 
 describe('AC-P15-15: NOTICE link in the scan list (contract section 7)', () => {
-  it('AC-P15-15: completed rows show SBOM then NOTICE (same style); href /api/scans/<id>/notice; none for running / failed / pending', async () => {
+  // REQ-004 contract 1.5.0 section 7 / C-36 (REQ-007 D-186, contract section 8):
+  // the NOTICE link keeps href, class, style and text, gains `download` (empty)
+  // and `aria-label`, and drops target/rel; it now sits between CSV and SBOM.
+  it('AC-P15-15 (1.5.0 C-36): completed rows show NOTICE (download, no target/rel) right before SBOM, same style; href /api/scans/<id>/notice; none for running / failed / pending', async () => {
     const { dom } = loadPage();
     const doc = dom.window.document;
     await waitFor(() => doc.querySelectorAll('a[href$="/notice"]').length >= 2, 'NOTICE links rendered');
@@ -92,15 +95,20 @@ describe('AC-P15-15: NOTICE link in the scan list (contract section 7)', () => {
     for (const a of links) {
       expect(a.textContent?.trim()).toBe('NOTICE');
       expect(a.className).toBe('btn btn-sm');
-      expect(a.getAttribute('target')).toBe('_blank');
-      expect(a.getAttribute('rel')).toBe('noopener');
-      const sbom = a.previousElementSibling as HTMLAnchorElement;
+      expect(a.hasAttribute('download')).toBe(true);
+      expect(a.getAttribute('download')).toBe('');
+      expect(a.getAttribute('aria-label')).toBe('Download NOTICE file');
+      expect(a.hasAttribute('target')).toBe(false);
+      expect(a.hasAttribute('rel')).toBe(false);
+      const sbom = a.nextElementSibling as HTMLAnchorElement;
       const id = a.getAttribute('href')!.split('/')[3];
       expect(sbom.tagName).toBe('A');
       expect(sbom.getAttribute('href')).toBe(`/api/scans/${id}/sbom/download`);
       expect(sbom.textContent?.trim()).toBe('SBOM');
+      expect(sbom.getAttribute('target')).toBe('_blank'); // SBOM link unchanged
+      expect(sbom.getAttribute('rel')).toBe('noopener');
       expect(a.getAttribute('style')).toBe(sbom.getAttribute('style'));
-      expect(a.parentElement!.children).toHaveLength(2);
+      expect(Array.from(a.parentElement!.children).map((c) => c.textContent?.trim())).toEqual(['PDF', 'Excel', 'CSV', 'NOTICE', 'SBOM']);
     }
     for (const id of [ID.running, ID.failed, ID.pending]) {
       expect(doc.querySelector(`a[href*="${id}"]`), id).toBeNull();

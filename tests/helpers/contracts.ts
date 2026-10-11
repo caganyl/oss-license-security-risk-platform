@@ -25,6 +25,8 @@ export interface AppDeps {
   host?: string;
   /** Allowed local scan roots (default: parseScanRoots(process.env.SCAN_ROOTS)). */
   scanRoots?: string[];
+  /** One-click export cap (REQ-007 AC-P24-7); tests inject their own `ExportLimiter`. */
+  exportLimiter?: object;
 }
 
 export interface AppModule {

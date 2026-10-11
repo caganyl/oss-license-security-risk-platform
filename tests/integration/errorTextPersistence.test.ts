@@ -41,6 +41,7 @@ const fake = (...parts: string[]) => parts.join('');
 const BASIC = Buffer.from(`x-access-token:${TEST_TOKEN}`, 'utf8').toString('base64');
 const HOME = os.homedir();
 const codePoints = (t: string) => Array.from(t).length;
+const IS_WINDOWS = process.platform === 'win32';
 
 beforeEach(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ossr-l5-'));
@@ -91,10 +92,13 @@ function expectClean(text: string, forbiddenPaths: string[], forbidden: string[]
   expect(codePoints(text)).toBeLessThanOrEqual(2000);
   expect(text).not.toMatch(CONTROL_EXCEPT_NL_TAB);
   expect(text).not.toContain('\r');
-  const lower = text.toLowerCase();
+  // Paths are case-insensitive only on Windows; the sanitizer matches them
+  // case-insensitively there and case-sensitively on POSIX (errorText.ts `maskPaths`).
+  const fold = (s: string) => (IS_WINDOWS ? s.toLowerCase() : s);
+  const haystack = fold(text);
   for (const p of forbiddenPaths) {
-    expect(lower, p).not.toContain(p.toLowerCase());
-    expect(lower, p).not.toContain(p.replace(/\\/g, '/').toLowerCase());
+    expect(haystack, p).not.toContain(fold(p));
+    expect(haystack, p).not.toContain(fold(p.replace(/\\/g, '/')));
   }
   for (const f of forbidden) expect(text, 'secret survived').not.toContain(f);
 }
@@ -116,7 +120,9 @@ describe('AC-T-4 / L-5: scan worker error_message', () => {
           `git clone failed (exit code 128): \x1b[31mfatal:\x1b[0m unable to access 'https://x-access-token:${token}@github.com/org/private.git/'\x07`,
           `trace: Authorization: Basic ${BASIC}\x00`,
           `error: could not lock ${dest}\\.git\\config`,
-          `warning: ${workspace.replace(/\\/g, '/').toUpperCase()}/hooks`,
+          // Windows: a case variant of the workspace is the same folder and must be masked.
+          // POSIX: an upper-cased path is a different path, so the real form is used there.
+          `warning: ${IS_WINDOWS ? workspace.replace(/\\/g, '/').toUpperCase() : workspace}/hooks`,
           `note: ${path.join(root, 'pkg', 'package.json')} and ${path.join(HOME, '.gitconfig')}`,
           `api key ${apiKey}`,
           'x'.repeat(3000),

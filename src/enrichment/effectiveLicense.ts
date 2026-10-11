@@ -86,6 +86,8 @@ function registryLicenseSourceOf(ecosystem: RegistryEcosystem): LicenseSource {
       return 'registry:npm';
     case 'pypi':
       return 'registry:pypi';
+    case 'nuget':
+      return 'registry:nuget';
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);

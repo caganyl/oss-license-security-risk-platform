@@ -18,7 +18,7 @@
 import crypto from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ARCHIVE_EXTRACTOR_VERSION } from '../enrichment/cache';
-import { registryEcosystemOf, requestName } from '../enrichment/coordinates';
+import { asciiLower, registryEcosystemOf, requestName } from '../enrichment/coordinates';
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
 import { KNOWN_SPDX_IDS } from '../analysis/licenseNormalizer';
 import { ENTRY_SEP, FILE_SEP, noticeTextLines, singleLine } from '../lib/outputText';
@@ -111,10 +111,19 @@ interface DependencyRow {
   notice_archive_id: string | null;
   /** `scan_dependencies.lock_integrity` (contract 1.2.0 §4.4); only selects the `Reason:` line. */
   lock_integrity: string | null;
+  /** `scan_dependencies.license_unclassified` (contract 1.4.0 §4.5); only prefixes the `Reason:` line. */
+  license_unclassified?: string | null;
 }
 
 /** Contract section 4.3, row 15 (1.2.0, REQ-005 L-5). */
 const REASON_LOCK_INTEGRITY_MISMATCH = 'lockfile integrity does not match registry; license not verified';
+/** Contract section 4.3, row 7a (1.4.0): NuGet `no_candidate`. */
+const REASON_NUGET_NO_CANDIDATE = 'package archive not downloaded (no lockfile integrity value)';
+/** Contract section 4.3 `license_unclassified` prefixes (1.4.0, C-26). */
+const UNCLASSIFIED_PREFIXES: Readonly<Record<string, string>> = {
+  file: 'license is a file inside the package (not classified)',
+  url: 'license URL not classified',
+};
 
 interface NoticeEntry {
   ecosystem: string;
@@ -211,8 +220,14 @@ function noticeSource(source: string | null): string {
   return singleLine(source);
 }
 
-/** Contract section 4.3: the `Reason:` text of an entry without license text. */
+/** Contract section 4.3: the `Reason:` text of an entry without license text (1.4.0: `license_unclassified` prefix). */
 function reasonOf(entry: NoticeEntry, preF3: boolean): string {
+  const reason = baseReasonOf(entry, preF3);
+  const prefix = own(UNCLASSIFIED_PREFIXES, entry.row.license_unclassified ?? null);
+  return prefix === undefined ? reason : `${prefix}; ${reason}`;
+}
+
+function baseReasonOf(entry: NoticeEntry, preF3: boolean): string {
   const { row, archive } = entry;
   if (registryEcosystemOf(entry.ecosystem) === null) return REASON_UNSUPPORTED_ECOSYSTEM;
   if (preF3) {
@@ -226,6 +241,7 @@ function reasonOf(entry: NoticeEntry, preF3: boolean): string {
   if (status === 'not_attempted' || status === null) {
     return own(NOT_ATTEMPTED_REASONS, row.license_enrichment_status) ?? REASON_NOT_COLLECTED;
   }
+  if (status === 'no_candidate' && entry.ecosystem === 'dotnet') return REASON_NUGET_NO_CANDIDATE;
   return own(NOTICE_STATUS_REASONS, status) ?? REASON_NOT_COLLECTED;
 }
 
@@ -309,7 +325,8 @@ export class NoticeService {
     const depResult = await q.query<DependencyRow>(
       `SELECT p.ecosystem::text AS ecosystem, p.name, p.version, p.purl, sd.scope::text AS scope,
               sd.license_expression, sd.license_source, sd.license_enrichment_status,
-              sd.notice_status, sd.notice_archive_id::text AS notice_archive_id, sd.lock_integrity
+              sd.notice_status, sd.notice_archive_id::text AS notice_archive_id, sd.lock_integrity,
+              sd.license_unclassified
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
        WHERE sd.scan_id = $1
@@ -339,10 +356,19 @@ export class NoticeService {
     for (const row of rows) {
       if (!isRuntimeScope(row.scope as DependencyScope | null)) continue;
       const version = row.version === null || row.version === '' ? null : row.version;
-      const key = JSON.stringify([row.ecosystem, row.name, version]);
+      // NuGet ids/versions are case-insensitive (contract 1.4.0 §3.3, C-28); npm/PyPI keys unchanged.
+      const nuget = row.ecosystem === 'dotnet';
+      const key = nuget
+        ? JSON.stringify([row.ecosystem, asciiLower(row.name), version === null ? null : asciiLower(version)])
+        : JSON.stringify([row.ecosystem, row.name, version]);
       const existing = byKey.get(key);
       if (existing) {
         if (row.purl !== null && (existing.purl === null || compareBytes(row.purl, existing.purl) < 0)) existing.purl = row.purl;
+        // NuGet: the shown Package/Version is the byte-smallest (name, version) of the key's rows.
+        if (nuget && (compareBytes(row.name, existing.name) || compareBytes(version ?? '', existing.version ?? '')) < 0) {
+          existing.name = row.name;
+          existing.version = version;
+        }
         continue;
       }
       byKey.set(key, {
@@ -403,7 +429,11 @@ export class NoticeService {
     for (const entry of entries) {
       const registry = registryEcosystemOf(entry.ecosystem);
       if (registry === null || entry.version === null) continue;
-      lookups.set(entry, { ecosystem: registry, name: requestName(registry, entry.name), version: entry.version });
+      lookups.set(entry, {
+        ecosystem: registry,
+        name: requestName(registry, entry.name),
+        version: registry === 'nuget' ? asciiLower(entry.version) : entry.version,
+      });
     }
     return lookups;
   }

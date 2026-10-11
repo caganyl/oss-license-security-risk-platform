@@ -644,9 +644,9 @@ export class ScanWorker {
         throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
       // Registry enrichment: after parsing, before OSV and the result transaction (ADR-006 Karar 2).
-      const enrichment = await this.enrichDependencies(job, result, parsed.lockIntegrity);
+      const enrichment = await this.enrichDependencies(job, result, parsed.lockIntegrity, parsed.nugetIntegrity);
       // Vulnerability lookup: after enrichment, outside the result transaction (ADR-007 Karar 5).
-      const vulnerability = await this.lookupVulnerabilities(job, result);
+      const vulnerability = await this.lookupVulnerabilities(job, result, canonicalNamesOf(enrichment));
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
       const stored = await this.persistResults(scanId, scanRow.project_id, result, {
         runId: this.runId,
@@ -678,6 +678,7 @@ export class ScanWorker {
     job: ClaimedJob,
     result: SandboxScanResult,
     lockIntegrity: ParserRunOutput['lockIntegrity'],
+    nugetIntegrity?: ParserRunOutput['nugetIntegrity'],
   ): Promise<EnrichmentResult | undefined> {
     const enricher = this.deps.enricher;
     if (!enricher) return undefined;
@@ -685,7 +686,9 @@ export class ScanWorker {
     const timeoutMs = job.settings.timeoutMinutes * 60_000;
     const budgetMs = computeBudgetMs(timeoutMs, job.deadlineMs - performance.now());
     try {
-      return await enricher.enrich(result.dependencies, { signal, budgetMs, lockIntegrity });
+      // NuGet side channel (ADR-008 Karar 6, 10.1): the only source of a NuGet archive candidate.
+      const options = nugetIntegrity && nugetIntegrity.length > 0 ? { signal, budgetMs, lockIntegrity, nugetIntegrity } : { signal, budgetMs, lockIntegrity };
+      return await enricher.enrich(result.dependencies, options);
     } catch (err) {
       if (signal.aborted) throw signal.reason ?? err;
       this.logger.warn(`Scan ${job.scanRow.id}: registry enrichment failed (${errorCode(err)}); continuing without it.`);
@@ -700,7 +703,11 @@ export class ScanWorker {
    * candidate becomes unchecked — the lookup never reaches
    * `handleScanFailure` and never causes a retry (ADR-007 Karar 5).
    */
-  private async lookupVulnerabilities(job: ClaimedJob, result: SandboxScanResult): Promise<VulnerabilityLookupResult | undefined> {
+  private async lookupVulnerabilities(
+    job: ClaimedJob,
+    result: SandboxScanResult,
+    canonicalNames?: ReadonlyMap<string, string>,
+  ): Promise<VulnerabilityLookupResult | undefined> {
     const engine = this.deps.vulnerabilityLookup;
     if (!engine) return undefined;
     const signal = job.controller.signal;
@@ -708,7 +715,9 @@ export class ScanWorker {
     const budgetMs = computeVulnerabilityBudgetMs(timeoutMs, job.deadlineMs - performance.now());
     const startedAt = new Date(this.deps.clock.now());
     try {
-      return await engine.lookup(result.dependencies, { signal, budgetMs });
+      // NuGet OSV body name (ADR-008 Karar 13.2): the `.nuspec` `<id>` of this scan's enrichment.
+      const options = canonicalNames && canonicalNames.size > 0 ? { signal, budgetMs, canonicalNames } : { signal, budgetMs };
+      return await engine.lookup(result.dependencies, options);
     } catch (err) {
       if (signal.aborted) throw signal.reason ?? err;
       this.logger.warn(`Scan ${job.scanRow.id}: vulnerability lookup failed (${errorCode(err)}); continuing without it.`);
@@ -849,8 +858,9 @@ export class ScanWorker {
           `
           INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range,
                                          license_expression, license_source, license_lock_hint, license_hint_differs,
-                                         license_enrichment_status, notice_status, notice_archive_id, lock_integrity)
-          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                         license_enrichment_status, notice_status, notice_archive_id, lock_integrity,
+                                         license_unclassified)
+          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           ON CONFLICT (scan_id, package_id, manifest_path, scope) DO NOTHING
           RETURNING id
           `,
@@ -869,6 +879,10 @@ export class ScanWorker {
             enriched?.noticeStatus ?? null,
             enriched?.noticeArchiveId ?? null,
             enriched?.lockIntegrity ?? null,
+            // ADR-008 Karar 12: only a NuGet `no_license` key without an L-5 mismatch keeps the reason.
+            enriched && enriched.registry === 'nuget' && enriched.status === 'no_license' && enriched.lockIntegrity !== 'mismatch'
+              ? (enriched.licenseUnclassified ?? null)
+              : null,
           ]
         );
 
@@ -1202,6 +1216,15 @@ export class ScanWorker {
 }
 
 /** Retry log line (AC-P13-8): attempt n/max, next attempt time, shortened error. */
+/** `.nuspec` `<id>` per NuGet enrichment key (= vulnerability key), for the OSV body name (ADR-008 Karar 13.2). */
+function canonicalNamesOf(enrichment: EnrichmentResult | undefined): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const [key, outcome] of enrichment?.outcomes ?? []) {
+    if (outcome.registry === 'nuget' && typeof outcome.canonicalName === 'string' && outcome.canonicalName !== '') names.set(key, outcome.canonicalName);
+  }
+  return names;
+}
+
 function retryLogLine(scanId: string, attempt: number, maxAttempts: number, nextAttemptAt: Date | undefined, message: string): string {
   const when = nextAttemptAt instanceof Date ? nextAttemptAt.toISOString() : String(nextAttemptAt ?? '?');
   return `Tarama ${scanId} deneme ${attempt}/${maxAttempts} başarısız; sonraki deneme ${when}: ${shortErrorForLog(message)}`;

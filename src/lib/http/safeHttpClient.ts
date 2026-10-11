@@ -84,8 +84,8 @@ export interface SafeHttpPurpose {
    * (security re-verification Y-2). Must not throw; reads headers only.
    */
   onResponse?(status: number, headers: IncomingHttpHeaders): void;
-  /** In-flight dedupe key prefix kind: `json` or `binary` (streamed digest). */
-  kind: 'json' | 'binary';
+  /** In-flight dedupe key prefix kind: `json`, `text` (NuGet `.nuspec`, ADR-008 Karar 8; no digest) or `binary` (streamed digest). */
+  kind: 'json' | 'text' | 'binary';
 }
 
 export interface SafeHttpLimits {
@@ -638,7 +638,8 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
         const base =
           requestOptions.dedupeKey ??
           (body !== undefined ? `${purposeName} ${url.href} ${crypto.createHash('sha256').update(body).digest('hex')}` : `${purposeName} ${url.href}`);
-        const key = purpose.kind === 'binary' ? `archive ${requestOptions.algorithm ?? 'none'} ${base}` : `json ${base}`;
+        const key =
+          purpose.kind === 'binary' ? `archive ${requestOptions.algorithm ?? 'none'} ${base}` : purpose.kind === 'text' ? `text ${base}` : `json ${base}`;
         const shared = await joinShared(key, (signal) => run(url, purposeName, body, requestOptions.algorithm, signal, breaker), requestOptions.signal);
         if (shared.breaker !== breaker) record(shared.host, shared.trace);
         if (shared.result === null) throw abortReason(requestOptions.signal);

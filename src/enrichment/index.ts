@@ -26,15 +26,17 @@ import { ARCHIVE_THREAD_RESOURCE_LIMITS, type ArchiveThreadOptions, runArchiveIn
 import { type ArchiveTask, type RunArchiveThreadFn, archiveCacheKey, collectArchive, errorCodeOf, triedCandidates } from './archiveStage';
 import { DownloadQuota, createBudgetSignal } from './budget';
 import { type CacheDb, type CachedArchive, type CachedMetadata, readArchiveCache, readMetadataCache, writeMetadataCache } from './cache';
-import { type RegistryEcosystem, checkCoordinates, coordinateKey, registryEcosystemOf, requestName } from './coordinates';
+import { type RegistryEcosystem, asciiLower, checkCoordinates, coordinateKey, registryEcosystemOf, requestName } from './coordinates';
 import { HINT_FALLBACK_STATUSES, type SummaryEntry, lockHintOf, registrySummaryLine } from './effectiveLicense';
 import { digestKey } from './integrity';
 import { type LockIntegrity, type LockIntegrityRecord, compareLockIntegrity } from './lockIntegrity';
 import { fetchNpmMetadata } from './npmRegistry';
+import { fetchNugetMetadata, nupkgUrl } from './nugetRegistry';
 import { fetchPypiMetadata } from './pypiRegistry';
 import { type RegistryClient, type RegistryClientLimits, type RegistryClock, type RegistryEndpoints, createRegistryClient } from './registryClient';
 import { sanitizeText } from './text';
-import type { EnrichmentStatus, MetadataOutcome, NoticeStatus, RegistryMetadata } from './types';
+import type { ArchiveCandidate, EnrichmentStatus, LicenseUnclassified, MetadataOutcome, NoticeStatus, RegistryMetadata } from './types';
+import { isNugetLockIntegrity } from '../scanner/parsers/lockIntegrityValue';
 
 /** The parts of a parsed dependency the enricher reads. */
 export interface EnrichmentDependency {
@@ -58,6 +60,13 @@ export interface DependencyEnrichment {
    * `null` when enrichment is off/not injected or the key is not npm.
    */
   lockIntegrity: LockIntegrity | null;
+  /**
+   * NuGet only (ADR-008 Karar 12): metadata `licenseUnclassified` of a
+   * `no_license` key; the worker stores it only when `lock_integrity <> 'mismatch'`.
+   */
+  licenseUnclassified?: LicenseUnclassified | null;
+  /** NuGet only: `.nuspec` `<id>` (OSV body name, ADR-008 Karar 13.2). */
+  canonicalName?: string | null;
 }
 
 export interface EnrichmentResult {
@@ -74,6 +83,12 @@ export interface EnrichOptions {
   budgetMs: number;
   /** L-5 side channel of the parser thread (npm lockfile `integrity` values); absent -> every npm key `not_comparable`. */
   lockIntegrity?: readonly LockIntegrityRecord[];
+  /**
+   * NuGet side channel (REQ-006 AC-P20-16, ADR-008 Karar 6, 10.1): lock/assets
+   * `sha512-<b64>` values; the only source of a NuGet archive candidate.
+   * Absent -> every NuGet key `no_candidate` / `not_comparable`.
+   */
+  nugetIntegrity?: readonly LockIntegrityRecord[];
 }
 
 export interface DependencyEnricher {
@@ -113,7 +128,13 @@ export function enrichmentKeyOf(dep: EnrichmentDependency): string | null {
   const registry = registryEcosystemOf(dep.ecosystem);
   if (registry === null) return null;
   const version = versionOf(dep);
-  return version === null ? `${registry}\u0000${requestName(registry, dep.name)}\u0000\u0001` : coordinateKey(registry, requestName(registry, dep.name), version);
+  if (version === null) return `${registry}\u0000${requestName(registry, dep.name)}\u0000\u0001`;
+  if (registry === 'nuget') {
+    // Same key as `checkCoordinates` (lower-case id and normalized version), so cache rows and side-channel records meet.
+    const check = checkCoordinates(dep.ecosystem, dep.name, version);
+    return check.kind === 'ok' ? coordinateKey(check.ecosystem, check.requestName, check.version) : coordinateKey(registry, asciiLower(dep.name), asciiLower(version));
+  }
+  return coordinateKey(registry, requestName(registry, dep.name), version);
 }
 
 interface KeyInfo {
@@ -172,6 +193,7 @@ function defaultLockIntegrity(info: KeyInfo, enabled: boolean): LockIntegrity | 
   // Exhaustive (ADR-008 Karar 1): a new registry never silently takes the PyPI branch.
   switch (info.registry) {
     case 'npm':
+    case 'nuget':
       return 'not_comparable';
     case 'pypi':
       return null;
@@ -189,6 +211,8 @@ function fetchMetadataOf(ecosystem: RegistryEcosystem): typeof fetchNpmMetadata 
       return fetchNpmMetadata;
     case 'pypi':
       return fetchPypiMetadata;
+    case 'nuget':
+      return fetchNugetMetadata;
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
@@ -217,6 +241,41 @@ function lockRecordsByKey(records: readonly LockIntegrityRecord[] | undefined): 
     const list = byKey.get(key);
     if (list) list.push(record);
     else byKey.set(key, [record]);
+  }
+  return byKey;
+}
+
+/**
+ * NuGet archive candidates by key (ADR-008 Karar 10.1): the distinct
+ * `sha512-…` side-channel values of a key. 0 -> no entry (`no_candidate`),
+ * 1 -> one `.nupkg` candidate, more -> `'mismatch'` (no download).
+ */
+function nugetCandidatesByKey(records: readonly LockIntegrityRecord[] | undefined, origin: string): Map<string, ArchiveCandidate[] | 'mismatch'> {
+  const digests = new Map<string, { lowerId: string; lowerVersion: string; values: Set<string> }>();
+  for (const record of records ?? []) {
+    if (!record.version || !isNugetLockIntegrity(record.integrity)) continue;
+    const check = checkCoordinates('dotnet', record.name, record.version);
+    if (check.kind !== 'ok') continue;
+    const key = coordinateKey(check.ecosystem, check.requestName, check.version);
+    const entry = digests.get(key) ?? { lowerId: check.requestName, lowerVersion: check.version, values: new Set<string>() };
+    entry.values.add(record.integrity.slice('sha512-'.length));
+    digests.set(key, entry);
+  }
+  const byKey = new Map<string, ArchiveCandidate[] | 'mismatch'>();
+  for (const [key, { lowerId, lowerVersion, values }] of digests) {
+    if (values.size > 1) {
+      byKey.set(key, 'mismatch');
+      continue;
+    }
+    byKey.set(key, [
+      {
+        url: nupkgUrl(origin, lowerId, lowerVersion),
+        algorithm: 'sha512',
+        digests: [...values],
+        size: null,
+        filename: `${lowerId}.${lowerVersion}.nupkg`,
+      },
+    ]);
   }
   return byKey;
 }
@@ -348,14 +407,19 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       if (outcome.kind === 'found') {
         found.set(info.key, outcome.metadata);
         const status = metadataStatus(outcome.metadata);
-        outcomes.set(info.key, {
+        const enrichment: DependencyEnrichment = {
           status,
           registry: info.registry,
           declaredLicense: status === 'ok' ? outcome.metadata.declaredLicense : null,
           noticeStatus: info.runtime ? 'not_attempted' : 'not_runtime',
           noticeArchiveId: null,
           lockIntegrity: defaultLockIntegrity(info, true),
-        });
+        };
+        if (info.registry === 'nuget') {
+          enrichment.licenseUnclassified = status === 'no_license' ? (outcome.metadata.licenseUnclassified ?? null) : null;
+          enrichment.canonicalName = outcome.metadata.canonicalName ?? null;
+        }
+        outcomes.set(info.key, enrichment);
         return;
       }
       outcomes.set(info.key, noRequestOutcome(info, outcome.kind, true));
@@ -408,13 +472,30 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       outcomes.set(info.key, { ...current, lockIntegrity });
     }
 
+    // 3c. NuGet (ADR-008 Karar 10.1): the candidate comes only from the scan's
+    // lock/assets hash; several distinct hashes make the key `mismatch` without a download.
+    const nugetCandidates = nugetCandidatesByKey(enrichOptions.nugetIntegrity, session.endpoints.nuget);
+    for (const info of requestable) {
+      const current = outcomes.get(info.key);
+      if (info.registry !== 'nuget' || !found.has(info.key) || current === undefined) continue;
+      if (nugetCandidates.get(info.key) === 'mismatch') {
+        mismatched.add(info.key);
+        outcomes.set(info.key, { ...current, lockIntegrity: 'mismatch', licenseUnclassified: null });
+      }
+    }
+    const candidatesOf = (info: KeyInfo): readonly ArchiveCandidate[] => {
+      if (info.registry !== 'nuget') return (found.get(info.key) as RegistryMetadata).archiveCandidates;
+      const list = nugetCandidates.get(info.key);
+      return Array.isArray(list) ? list : [];
+    };
+
     // 4. Archive stage: runtime keys whose metadata was found (L-5 mismatch keys excluded).
     const archiveInfos = requestable.filter((info) => info.runtime && found.has(info.key) && !mismatched.has(info.key));
     let cachedArchives = new Map<string, CachedArchive>();
     if (archiveInfos.length > 0 && !signal.aborted) {
       const keys = archiveInfos.flatMap((info) => {
         const c = info.check as Extract<KeyInfo['check'], { kind: 'ok' }>;
-        return triedCandidates(c.ecosystem, (found.get(info.key) as RegistryMetadata).archiveCandidates).flatMap((candidate) =>
+        return triedCandidates(c.ecosystem, candidatesOf(info)).flatMap((candidate) =>
           candidate.digests.map((value) => ({ ecosystem: c.ecosystem, name: c.requestName, version: c.version, digest: digestKey(candidate.algorithm, value) })),
         );
       });
@@ -432,8 +513,9 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
         ecosystem: c.ecosystem,
         requestName: c.requestName,
         version: c.version,
-        candidates: (found.get(info.key) as RegistryMetadata).archiveCandidates,
+        candidates: candidatesOf(info),
       };
+      if (info.registry === 'nuget') task.declaredLicensePath = (found.get(info.key) as RegistryMetadata).licenseFilePath ?? null;
       try {
         if (signal.aborted && triedCandidates(task.ecosystem, task.candidates).length > 0) {
           // Cached results are still used after the budget ran out (no request needed).
@@ -441,13 +523,18 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
             .flatMap((cand) => cand.digests.map((v) => cachedArchives.get(archiveCacheKey(c.ecosystem, c.requestName, c.version, digestKey(cand.algorithm, v)))))
             .find((h) => h !== undefined);
           if (hit) {
-            outcomes.set(info.key, { ...current, noticeStatus: hit.outcome, noticeArchiveId: hit.id });
+            const lockIntegrity = info.registry === 'nuget' ? 'match' : current.lockIntegrity;
+            outcomes.set(info.key, { ...current, noticeStatus: hit.outcome, noticeArchiveId: hit.id, lockIntegrity });
             return;
           }
           signal.throwIfAborted();
         }
         const result = await collectArchive(task, { session, db, signal, cached: cachedArchives, quota, threadOptions, runThread, warn });
-        outcomes.set(info.key, { ...current, noticeStatus: result.noticeStatus, noticeArchiveId: result.archiveId });
+        const next: DependencyEnrichment = { ...current, noticeStatus: result.noticeStatus, noticeArchiveId: result.archiveId };
+        if (result.lockIntegrity !== undefined) next.lockIntegrity = result.lockIntegrity;
+        // L-5 fail-safe (ADR-008 Karar 10.2): a mismatch drops the nuspec-derived `license_unclassified`.
+        if (next.lockIntegrity === 'mismatch') next.licenseUnclassified = null;
+        outcomes.set(info.key, next);
       } catch (err) {
         const kind = classify(err);
         outcomes.set(info.key, { ...current, noticeStatus: kind === 'budget' ? 'budget_exceeded' : 'processing_failed', noticeArchiveId: null });

@@ -37,7 +37,20 @@ export type ArchiveThreadOutcome =
   /** `processing_failed`; `code` is a fixed class (`OOM`, `CRASH`, `EXIT`, `TIMEOUT`, `BAD_RESULT`, `FAILED`). */
   | { kind: 'failed'; code: string }
   /** The signal aborted; the caller decides (budget vs job abort). */
-  | { kind: 'aborted' };
+  | { kind: 'aborted' }
+  /** NuGet: the signed-package content hash did not match (no entry opened; L-5 fail-safe, ADR-008 Karar 10.2). */
+  | { kind: 'integrity_mismatch' };
+
+/** Input of one archive thread run. */
+export interface ArchiveThreadInput {
+  kind: ArchiveKind;
+  filename: string | null;
+  bytes: Uint8Array;
+  /** NuGet `.nuspec` `<license type="file">` path. */
+  declaredLicensePath?: string | null;
+  /** NuGet: content-hash verification before extraction. */
+  verify?: { nugetContentHash: string[] };
+}
 
 const OUTCOMES: ReadonlySet<string> = new Set(['collected', 'no_license_file', 'unsupported_format', 'limit_exceeded']);
 const DETAIL_RE = /^[a-z0-9_]{1,32}$/;
@@ -127,7 +140,7 @@ type RawOutcome =
 
 /** Extracts the license files of one verified archive in a fresh thread. */
 export async function runArchiveInThread(
-  input: { kind: ArchiveKind; filename: string | null; bytes: Uint8Array },
+  input: ArchiveThreadInput,
   signal: AbortSignal,
   options: ArchiveThreadOptions,
 ): Promise<ArchiveThreadOutcome> {
@@ -138,6 +151,8 @@ export async function runArchiveInThread(
       ? { script: options.threadScript, eval: false, env: {} }
       : threadEntry(path.join(__dirname, 'thread.js'), path.join(__dirname, 'thread.ts'));
     const workerData: ArchiveThreadData = { kind: input.kind, filename: input.filename, limits: { ...options.limits } };
+    if (input.declaredLicensePath !== undefined && input.declaredLicensePath !== null) workerData.declaredLicensePath = input.declaredLicensePath;
+    if (input.verify !== undefined) workerData.verify = { nugetContentHash: [...input.verify.nugetContentHash] };
     const worker = new Worker(entry.script, {
       eval: entry.eval,
       workerData,
@@ -183,8 +198,10 @@ export async function runArchiveInThread(
         return { kind: 'failed', code: code === 'ERR_WORKER_OUT_OF_MEMORY' ? 'OOM' : 'CRASH' };
       }
       case 'message': {
-        const message = outcome.message as { ok?: unknown; result?: unknown } | null;
+        const message = outcome.message as { ok?: unknown; result?: unknown; integrityMismatch?: unknown } | null;
         if (!message || message.ok !== true) return { kind: 'failed', code: 'FAILED' };
+        // Only a verification run may report a mismatch; any other reply shape is a bad result.
+        if (message.integrityMismatch === true) return input.verify !== undefined ? { kind: 'integrity_mismatch' } : { kind: 'failed', code: 'BAD_RESULT' };
         const result = validateExtractResult(message.result, options.limits);
         return result === null ? { kind: 'failed', code: 'BAD_RESULT' } : { kind: 'ok', result };
       }

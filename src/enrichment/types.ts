@@ -18,7 +18,10 @@ export type EnrichmentStatus =
   | 'budget_exceeded';
 
 /** `scan_dependencies.license_source` (migration 006 CHECK). */
-export type LicenseSource = 'registry:npm' | 'registry:pypi' | 'lockfile (unverified)' | 'none';
+export type LicenseSource = 'registry:npm' | 'registry:pypi' | 'registry:nuget' | 'lockfile (unverified)' | 'none';
+
+/** `license_unclassified` (migration 008): NuGet `type="file"` license or an unclassified `licenseUrl`. */
+export type LicenseUnclassified = 'file' | 'url';
 
 /** `scan_dependencies.notice_status` (migration 006 CHECK). */
 export type NoticeStatus =
@@ -52,6 +55,12 @@ export interface RegistryMetadata {
   /** Long PyPI license text (NOTICE fallback), null otherwise. */
   licenseText: string | null;
   archiveCandidates: ArchiveCandidate[];
+  /** NuGet only (ADR-008 Karar 9): why no expression was derived; absent/null elsewhere. */
+  licenseUnclassified?: LicenseUnclassified | null;
+  /** NuGet only: normalized `<license type="file">` path inside the `.nupkg`. */
+  licenseFilePath?: string | null;
+  /** NuGet only: the `.nuspec` `<id>` (OSV body name, ADR-008 Karar 13.2). */
+  canonicalName?: string | null;
 }
 
 /** Outcome of one metadata lookup (cache or network). */

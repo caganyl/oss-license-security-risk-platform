@@ -145,6 +145,8 @@ export const ENRICHMENT_LIMITS = Object.freeze({
   client: Object.freeze({
     /** Metadata response (network and decompressed bytes). */
     metadataMaxBytes: 8 * MiB,
+    /** NuGet `.nuspec` response, decompressed body (REQ-006, ADR-008 Karar 8). */
+    nuspecMaxBytes: 1 * MiB,
     /** One package archive. */
     archiveMaxBytes: 64 * MiB,
     /** Archive download time floor: `max(REGISTRY_TIMEOUT_MS, 60 s)`. */

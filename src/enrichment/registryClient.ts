@@ -40,24 +40,52 @@ export interface RegistryEndpoints {
   npm: string;
   pypi: string;
   files: string;
+  /** NuGet flat container origin (REQ-006, ADR-008 Karar 8). */
+  nuget: string;
 }
 
 export const PRODUCTION_ENDPOINTS: Readonly<RegistryEndpoints> = Object.freeze({
   npm: 'https://registry.npmjs.org',
   pypi: 'https://pypi.org',
   files: 'https://files.pythonhosted.org',
+  nuget: 'https://api.nuget.org',
 });
 
 const PRODUCTION_ORIGINS: ReadonlySet<string> = new Set(Object.values(PRODUCTION_ENDPOINTS));
 
-export type RequestPurpose = 'metadata-npm' | 'metadata-pypi' | 'archive-npm' | 'archive-pypi';
+export type RequestPurpose = 'metadata-npm' | 'metadata-pypi' | 'metadata-nuget' | 'archive-npm' | 'archive-pypi' | 'archive-nuget';
 
 const PURPOSE_ENDPOINT: Readonly<Record<RequestPurpose, keyof RegistryEndpoints>> = {
   'metadata-npm': 'npm',
   'metadata-pypi': 'pypi',
+  'metadata-nuget': 'nuget',
   'archive-npm': 'npm',
   'archive-pypi': 'files',
+  'archive-nuget': 'nuget',
 };
+
+const FLAT_CONTAINER = 'v3-flatcontainer';
+
+/** `[id, ver, file]` of `/v3-flatcontainer/<id>/<ver>/<file>` (no query, no fragment), else null. */
+function flatContainerParts(url: URL): [string, string, string] | null {
+  if (url.search !== '' || url.hash !== '') return null;
+  const parts = url.pathname.split('/');
+  if (parts.length !== 5 || parts[0] !== '' || parts[1] !== FLAT_CONTAINER) return null;
+  const [, , id, ver, file] = parts;
+  return id.length > 0 && ver.length > 0 ? [id, ver, file] : null;
+}
+
+/** First `metadata-nuget` request: exactly `/v3-flatcontainer/<id>/<ver>/<id>.nuspec` (ADR-008 Karar 8). */
+export function isNuspecPath(url: URL): boolean {
+  const parts = flatContainerParts(url);
+  return parts !== null && parts[2] === `${parts[0]}.nuspec`;
+}
+
+/** `archive-nuget`: exactly `/v3-flatcontainer/<id>/<ver>/<id>.<ver>.nupkg` (ADR-008 Karar 8). */
+export function isNupkgPath(url: URL): boolean {
+  const parts = flatContainerParts(url);
+  return parts !== null && parts[2] === `${parts[0]}.${parts[1]}.nupkg`;
+}
 
 /** A URL outside the allowlist; no request is made. */
 export class RegistryUrlError extends Error {
@@ -83,6 +111,7 @@ export function resolveEndpoints(injected?: Partial<RegistryEndpoints>): Registr
     npm: injected?.npm !== undefined ? assertInjectableEndpoint(injected.npm) : PRODUCTION_ENDPOINTS.npm,
     pypi: injected?.pypi !== undefined ? assertInjectableEndpoint(injected.pypi) : PRODUCTION_ENDPOINTS.pypi,
     files: injected?.files !== undefined ? assertInjectableEndpoint(injected.files) : PRODUCTION_ENDPOINTS.files,
+    nuget: injected?.nuget !== undefined ? assertInjectableEndpoint(injected.nuget) : PRODUCTION_ENDPOINTS.nuget,
   };
 }
 
@@ -128,6 +157,13 @@ export type JsonFetchResult =
   | { kind: 'unreachable'; code: FailureCode }
   | { kind: 'error'; code: FailureCode };
 
+/** `metadata-nuget` result (ADR-008 Karar 8): the raw body; content type is not checked, the XML reader validates it. */
+export type TextFetchResult =
+  | { kind: 'ok'; body: Buffer }
+  | { kind: 'not_found' }
+  | { kind: 'unreachable'; code: FailureCode }
+  | { kind: 'error'; code: FailureCode };
+
 export type ArchiveFetchResult =
   | { kind: 'ok'; body: Buffer; digest: string; size: number }
   | { kind: 'download_failed'; code: FailureCode }
@@ -144,6 +180,8 @@ export const systemClock: RegistryClock = appSystemClock;
 
 export interface RegistryClientLimits {
   metadataMaxBytes: number;
+  /** NuGet `.nuspec` cap (decompressed body). */
+  nuspecMaxBytes: number;
   archiveMaxBytes: number;
   archiveMinTimeoutMs: number;
   maxRetries: number;
@@ -199,7 +237,9 @@ export interface ArchiveRequestOptions {
 export interface RegistrySession {
   readonly endpoints: RegistryEndpoints;
   getJson(target: string, purpose: 'metadata-npm' | 'metadata-pypi', options: JsonRequestOptions): Promise<JsonFetchResult>;
-  getArchive(target: string, purpose: 'archive-npm' | 'archive-pypi', options: ArchiveRequestOptions): Promise<ArchiveFetchResult>;
+  /** NuGet `.nuspec` (ADR-008 Karar 8); the first target must be the exact nuspec path, else `URL_NOT_ALLOWED` without a request. */
+  getText(target: string, purpose: 'metadata-nuget', options: JsonRequestOptions): Promise<TextFetchResult>;
+  getArchive(target: string, purpose: 'archive-npm' | 'archive-pypi' | 'archive-nuget', options: ArchiveRequestOptions): Promise<ArchiveFetchResult>;
   /** True when the host's consecutive failure threshold was reached in this scan. */
   isHostClosed(host: string): boolean;
 }
@@ -236,11 +276,26 @@ function registryPurposes(limits: RegistryClientLimits): Record<RequestPurpose, 
     minTimeoutMs: limits.archiveMinTimeoutMs,
     kind: 'binary',
   });
+  // NuGet (ADR-008 Karar 8): redirect hops stay under `/v3-flatcontainer/` without a query;
+  // the first request's exact nuspec path is checked by `getText` before the core runs.
+  const underFlatContainer = (url: URL, origin: string) =>
+    url.href.startsWith(`${origin}/${FLAT_CONTAINER}/`) && url.search === '' && url.hash === '';
   return {
     'metadata-npm': metadata('npm'),
     'metadata-pypi': metadata('pypi'),
+    'metadata-nuget': {
+      originKey: 'nuget',
+      method: 'GET',
+      redirect: { sameOriginMax: limits.maxRedirects },
+      maxBytes: limits.nuspecMaxBytes,
+      accept: 'application/xml, text/xml;q=0.9, */*;q=0.1',
+      acceptEncoding: 'gzip',
+      pathRule: underFlatContainer,
+      kind: 'text',
+    },
     'archive-npm': archive('npm'),
     'archive-pypi': archive('files'),
+    'archive-nuget': { ...archive('nuget'), pathRule: (url: URL, origin: string) => underOrigin(url, origin) && isNupkgPath(url) },
   };
 }
 
@@ -248,7 +303,7 @@ export function createRegistryClient(options: RegistryClientOptions): RegistryCl
   const endpoints = resolveEndpoints(options.endpoints);
   const limits: RegistryClientLimits = { ...ENRICHMENT_LIMITS.client, ...options.limits };
   const core = createSafeHttpClient({
-    origins: { npm: endpoints.npm, pypi: endpoints.pypi, files: endpoints.files },
+    origins: { npm: endpoints.npm, pypi: endpoints.pypi, files: endpoints.files, nuget: endpoints.nuget },
     purposes: registryPurposes(limits),
     timeoutMs: options.timeoutMs,
     concurrency: options.concurrency,
@@ -278,6 +333,28 @@ export function createRegistryClient(options: RegistryClientOptions): RegistryCl
             const parsed = parseJsonBody(result);
             return parsed.ok ? { kind: 'ok', json: parsed.json } : { kind: 'error', code: parsed.code };
           }
+          case 'not_found':
+            return { kind: 'not_found' };
+          case 'unreachable':
+            return { kind: 'unreachable', code: result.code };
+          case 'too_large':
+            return { kind: 'error', code: 'TOO_LARGE' };
+          default:
+            return { kind: 'error', code: result.code };
+        }
+      },
+      async getText(target, purpose, requestOptions) {
+        let first: URL;
+        try {
+          first = new URL(target);
+        } catch {
+          return { kind: 'error', code: 'URL_NOT_ALLOWED' };
+        }
+        if (!isNuspecPath(first)) return { kind: 'error', code: 'URL_NOT_ALLOWED' };
+        const result = await inner.request(purpose, target, { signal: requestOptions.signal, dedupeKey: requestOptions.dedupeKey });
+        switch (result.kind) {
+          case 'ok':
+            return { kind: 'ok', body: result.body };
           case 'not_found':
             return { kind: 'not_found' };
           case 'unreachable':

@@ -1,0 +1,78 @@
+{
+  "scan_id": "nuget-golden-packages-config",
+  "status": "completed",
+  "total_deps": 5,
+  "dependencies": [
+    {
+      "ecosystem": "dotnet",
+      "name": "Antlr",
+      "version": "3.5.0.2",
+      "purl": "pkg:nuget/Antlr@3.5.0.2",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.config",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Dev.Tool",
+      "version": "1.0.0",
+      "purl": "pkg:nuget/Dev.Tool@1.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.config",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "jQuery",
+      "version": "3.4.1",
+      "purl": "pkg:nuget/jQuery@3.4.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.config",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Missing.Version",
+      "version": null,
+      "purl": "pkg:nuget/Missing.Version",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.config",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Range.In.Config",
+      "version": null,
+      "purl": "pkg:nuget/Range.In.Config",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "packages.config",
+      "manifest_path": ".",
+      "declared_range": "[1.0,2.0)"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dotnet",
+      "filename": "packages.config",
+      "file_path": "packages.config",
+      "file_hash": "f2d684e1546d40d2cdd8426c2ca6a5866a58209ea5b6e148221624ddb349507c",
+      "size_bytes": 497
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dotnet",
+      "file": "packages.config",
+      "error": "Geçersiz paket kimliği içeren girdiler atlandı."
+    }
+  ]
+}

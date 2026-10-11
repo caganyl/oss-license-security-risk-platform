@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Foo" Version="9.0.0" />
+  </ItemGroup>
+</Project>

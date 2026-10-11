@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LibVersion>9.9.9</LibVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Polly" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Serilog" VersionOverride="3.0.1" />
+    <PackageReference Include="Humanizer" Version="$(LibVersion)" />
+    <PackageReference Include="NoVersion.Anywhere" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Foo" Version="1.0.0" />
+    <PackageVersion Include="Bar" Version="2.0.0" />
+    <PackageVersion Include="foo" Version="7.7.7" />
+    <PackageVersion Update="Bar" Version="3.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <GlobalPackageReference Include="Global.Analyzers" Version="1.0.0" />
+  </ItemGroup>
+</Project>

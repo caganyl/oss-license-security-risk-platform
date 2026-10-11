@@ -1,0 +1,5 @@
+<NotAProject>
+  <ItemGroup>
+    <PackageReference Include="Wrong.Root" Version="1.0.0" />
+  </ItemGroup>
+</NotAProject>

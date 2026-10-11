@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!DOCTYPE Project [ <!ENTITY xxe SYSTEM "file:///C:/Users/fixtureuser/secret.txt"> ]>
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Xxe.Payload" Version="&xxe;" />
+  </ItemGroup>
+</Project>

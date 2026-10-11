@@ -1,0 +1,161 @@
+{
+  "scan_id": "nuget-golden-project-cpm",
+  "status": "completed",
+  "total_deps": 10,
+  "dependencies": [
+    {
+      "ecosystem": "dotnet",
+      "name": "Bar",
+      "version": "2.5.0",
+      "purl": "pkg:nuget/Bar@2.5.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "2.5.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Exact.Pin",
+      "version": "2.0.0",
+      "purl": "pkg:nuget/Exact.Pin@2.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "[2.0.0]"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Foo",
+      "version": "1.0.0",
+      "purl": "pkg:nuget/Foo@1.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "1.0.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "FSharp.Core",
+      "version": "8.0.100",
+      "purl": "pkg:nuget/FSharp.Core@8.0.100",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Extra.fsproj",
+      "manifest_path": "src/A",
+      "declared_range": "8.0.100"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Global.Analyzers",
+      "version": "1.0.0",
+      "purl": "pkg:nuget/Global.Analyzers@1.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Directory.Packages.props",
+      "manifest_path": "src/A",
+      "declared_range": "1.0.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Lower.Case.Item",
+      "version": "3.0.0",
+      "purl": "pkg:nuget/Lower.Case.Item@3.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "3.0.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Otherwise.Pkg",
+      "version": "2.0.0",
+      "purl": "pkg:nuget/Otherwise.Pkg@2.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "2.0.0.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Range.Pkg",
+      "version": null,
+      "purl": "pkg:nuget/Range.Pkg",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "[1.0,2.0)"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "When.Pkg",
+      "version": "1.0.0",
+      "purl": "pkg:nuget/When.Pkg@1.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "A.csproj",
+      "manifest_path": "src/A",
+      "declared_range": "1.0"
+    },
+    {
+      "ecosystem": "dotnet",
+      "name": "Foo",
+      "version": "9.0.0",
+      "purl": "pkg:nuget/Foo@9.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "B.VbProj",
+      "manifest_path": "src/B",
+      "declared_range": "9.0.0"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dotnet",
+      "filename": "Directory.Packages.props",
+      "file_path": "Directory.Packages.props",
+      "file_hash": "de67f0a32c045710c64b92ec14a96227c99dcc1a87ee94ea165372dc6e9952ee",
+      "size_bytes": 364
+    },
+    {
+      "ecosystem": "dotnet",
+      "filename": "A.csproj",
+      "file_path": "src/A/A.csproj",
+      "file_hash": "2c5eaf655350115142b94458f5226b3502090bfc30c5a42336a416f663dc0223",
+      "size_bytes": 1172
+    },
+    {
+      "ecosystem": "dotnet",
+      "filename": "Extra.fsproj",
+      "file_path": "src/A/Extra.fsproj",
+      "file_hash": "a4182e2afc5da718690b90524f82b4583bba681bffddacdf00ce767d67b63875",
+      "size_bytes": 194
+    },
+    {
+      "ecosystem": "dotnet",
+      "filename": "B.VbProj",
+      "file_path": "src/B/B.VbProj",
+      "file_hash": "23ec1371771f834d624af40dcecdafbe6d5b826b25f1e76e0cdbeb078d34010b",
+      "size_bytes": 113
+    },
+    {
+      "ecosystem": "dotnet",
+      "filename": "Directory.Packages.props",
+      "file_path": "src/B/Directory.Packages.props",
+      "file_hash": "10b7db717283d6fd1f3040856489a8f37e138f71c9619c15189e3ea7a2fa480c",
+      "size_bytes": 103
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dotnet",
+      "file": "src/A/A.csproj",
+      "error": "Geçersiz paket kimliği içeren girdiler atlandı."
+    }
+  ]
+}

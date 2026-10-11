@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Foo" />
+    <PackageReference Include="Exact.Pin" Version="[2.0.0]" />
+    <PackageReference Include="Range.Pkg" Version="[1.0,2.0)" />
+  </ItemGroup>
+  <Choose>
+    <When Condition="'$(Configuration)' == 'Debug'">
+      <ItemGroup>
+        <PackageReference Include="When.Pkg" Version="1.0" />
+      </ItemGroup>
+    </When>
+    <Otherwise>
+      <ItemGroup>
+        <PackageReference Include="Otherwise.Pkg">
+          <Version>2.0.0.0</Version>
+        </PackageReference>
+      </ItemGroup>
+    </Otherwise>
+  </Choose>
+  <ItemGroup>
+    <PackageReference Update="Foo" Version="5.5.5" />
+    <PackageReference Remove="Bar" />
+    <PackageReference Include="Bar">
+      <VersionOverride>2.5.0</VersionOverride>
+    </PackageReference>
+    <packagereference include="Lower.Case.Item" version="3.0.0" />
+    <PackageReference Include="Bad/Id" Version="1.0.0" />
+  </ItemGroup>
+  <Target Name="AddAtBuild" BeforeTargets="Build">
+    <ItemGroup>
+      <PackageReference Include="Target.Pkg" Version="1.0.0" />
+    </ItemGroup>
+  </Target>
+</Project>

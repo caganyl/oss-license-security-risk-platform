@@ -1133,6 +1133,45 @@ tanımlı yedek veya uygulama sırasında teyit adımı vardır (Karar 3, 5, 13)
 >   seçenek), contract 1.1.0 ile aynı dayanak. ADR durumu `Accepted` kalır;
 >   kayıt kullanıcının commit'iyle kesinleşir.
 
+## ADR-007 notu (2026-10-10)
+
+> **ADR-007 ile kısmen superseded (2026-10-10).** REQ-005 (F4) için
+> `registryClient.ts`'teki güvenli HTTP çekirdeği `src/lib/http/safeHttpClient.ts`'e
+> çıkarılır; `proxy.ts` `src/lib/http/proxy.ts`'e taşınır ve
+> `src/enrichment/proxy.ts` onu yeniden dışa aktarır. Karar 1'deki
+> "`src/enrichment/` içinde ağ erişimi yalnız `registryClient.ts`'tedir" kuralı
+> "`src/` içinde ağ bağlantısı açan tek modül `src/lib/http/safeHttpClient.ts`'tir;
+> `registryClient.ts` onun üzerinde ince adaptördür" olarak okunur. Karar 4–5'in
+> kuralları (izin listesi, yönlendirme, sınırlar, deneme, devre kesici, vekil,
+> TLS) ve `registryClient.ts`'in dışa aktarılan API'si **değişmez**; kayıt
+> defteri istemcisi çekirdeğin ayrı bir örneğidir (kendi semaforu). F3 testleri
+> değiştirilmeden yeşil kalmalıdır. L-5 (yukarıdaki notta F4'e bırakılan takip)
+> ADR-007 Karar 12 ile kapatılır; N-1 ADR-007 Karar 13 ile. Ayrıntı:
+> `docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md`
+> Karar 1–2, 12–13.
+
+## REQ-005 güvenlik düzeltmesi notu (2026-10-11)
+
+> **Karar 14, `REGISTRY_ENRICHMENT` fail-closed (2026-10-11).** REQ-005
+> güvenlik incelemesinin L-2 bulgusu
+> (`docs/quality/security-reports/REQ-005-security-review.md`; yeniden
+> doğrulama: Go, I-10 kabul edildi), `docs/contracts/REQ-005-vulnerability-data.md`
+> 1.1.0 §7.1 (V-17) ve `docs/contracts/REQ-004-notice-and-outputs.md` 1.3.0
+> (C-24) gereği `REGISTRY_ENRICHMENT` artık F4 açma/kapama anahtarlarıyla
+> aynı tek ayrıştırıcıyı kullanır (commit `3fdb538`). Değer baş/son boşlukları
+> kırpılarak, harf duyarsız okunur: `on`/`true`/`1`/`yes` → açık;
+> `off`/`false`/`0`/`no` → kapalı; boş veya tanımsız → açık (varsayılan
+> değişmez); **başka her değer → kapalı** (fail-closed). Bu durumda yalnız
+> ayar adını içeren tek uyarı yazılır, değer loglanmaz. Karar 14'teki
+> "başka değer → varsayılan" maddesi bu kadar superseded; `REGISTRY_TIMEOUT_MS`,
+> `REGISTRY_CONCURRENCY`, sabitler ve Vitest kurulumu değişmez. Etki: geçersiz
+> değerde zenginleştirme Karar 14'ün `off` kipinde çalışır (ağ istemcisi yok,
+> önbellek okunmaz, `disabled` + tek `[registry]` özet satırı). Lisanslar
+> doğrulanmamış lock ipucundan gelir. Lisans doğruluğundaki düşüş görünürdür;
+> gizlilik açısından doğru yön budur. REQ-004 AC-P14-16 metninin güncellenmesi
+> product-analyst'tedir. Ayrıntı: ADR-007 "REQ-005 güvenlik düzeltmesi
+> (2026-10-11)" notu.
+
 ## Onay (Approval)
 
 - **Karar veren:** kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10.

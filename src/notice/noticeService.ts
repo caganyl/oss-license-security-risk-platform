@@ -109,7 +109,12 @@ interface DependencyRow {
   license_enrichment_status: string | null;
   notice_status: string | null;
   notice_archive_id: string | null;
+  /** `scan_dependencies.lock_integrity` (contract 1.2.0 §4.4); only selects the `Reason:` line. */
+  lock_integrity: string | null;
 }
+
+/** Contract section 4.3, row 15 (1.2.0, REQ-005 L-5). */
+const REASON_LOCK_INTEGRITY_MISMATCH = 'lockfile integrity does not match registry; license not verified';
 
 interface NoticeEntry {
   ecosystem: string;
@@ -214,6 +219,8 @@ function reasonOf(entry: NoticeEntry, preF3: boolean): string {
     if (archive === null) return REASON_PRE_F3;
     return own(NOTICE_STATUS_REASONS, archive.outcome) ?? REASON_NOT_COLLECTED;
   }
+  // Row 15: the key's archive was never used (notice_status 'not_attempted', no archive id).
+  if (row.lock_integrity === 'mismatch') return REASON_LOCK_INTEGRITY_MISMATCH;
   const status = row.notice_status;
   if (row.notice_archive_id === null && status !== null && CACHED_OUTCOMES.has(status)) return REASON_CACHE_CLEARED;
   if (status === 'not_attempted' || status === null) {
@@ -302,7 +309,7 @@ export class NoticeService {
     const depResult = await q.query<DependencyRow>(
       `SELECT p.ecosystem::text AS ecosystem, p.name, p.version, p.purl, sd.scope::text AS scope,
               sd.license_expression, sd.license_source, sd.license_enrichment_status,
-              sd.notice_status, sd.notice_archive_id::text AS notice_archive_id
+              sd.notice_status, sd.notice_archive_id::text AS notice_archive_id, sd.lock_integrity
        FROM scan_dependencies sd
        JOIN packages p ON p.id = sd.package_id
        WHERE sd.scan_id = $1

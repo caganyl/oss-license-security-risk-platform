@@ -87,13 +87,38 @@ export interface SandboxScanResult {
   parse_errors: Array<{ ecosystem: string; file: string; error: string }>;
 }
 
+/** One npm lockfile `integrity` record of the parser side channel (REQ-005 L-5, ADR-007 Karar 12). */
+export interface ParserLockIntegrityRecord {
+  manifestPath: string;
+  name: string;
+  version: string;
+  integrity: string;
+}
+
+/**
+ * Parse result plus the L-5 side channel (`runParserInThreadWithSideChannel`).
+ * `result` is the unchanged golden shape; `lockIntegrity` never enters it.
+ */
+export interface ParserRunOutput {
+  result: SandboxScanResult;
+  lockIntegrity: ParserLockIntegrityRecord[];
+}
+
 /**
  * Parser injection point of the scan worker. `signal` (optional, ADR-004
  * Karar 7) aborts the parse; three-argument implementations stay valid.
+ * An implementation returns either the bare result (no L-5 side channel:
+ * every key `not_comparable`) or a `ParserRunOutput`.
  */
 export type RunParserFn = (
   workDir: string,
   ecosystems: string[],
   scanId: string,
   signal?: AbortSignal,
-) => Promise<SandboxScanResult>;
+) => Promise<SandboxScanResult | ParserRunOutput>;
+
+/** Normalizes a `RunParserFn` return value to `ParserRunOutput`. */
+export function toParserRunOutput(value: SandboxScanResult | ParserRunOutput): ParserRunOutput {
+  if ('result' in value && 'lockIntegrity' in value) return value;
+  return { result: value as SandboxScanResult, lockIntegrity: [] };
+}

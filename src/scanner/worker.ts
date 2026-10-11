@@ -6,7 +6,7 @@ import { errorCode } from '../db/advisoryLock';
 import { createRunId } from '../lib/runId';
 import { ScanSourceError, canonicalizeScanRoots, parseScanRoots, resolveScanSource } from '../lib/scanSource';
 import { sandboxRunnerConfig } from './sandbox/runner.config';
-import { ParserFailedError, createThreadParser } from './parsers/threadParser';
+import { ParserFailedError, createLockAwareThreadParser } from './parsers/threadParser';
 import { type ErrorTextContext, scanErrorMessage, scanErrorText, shortErrorForLog } from './errorMessage';
 import { type GitVersionProvider, assertGitForRemoteScan, getGitVersion } from './gitVersion';
 import {
@@ -30,19 +30,30 @@ import {
   sweepStaleWorkspaces,
   withTempWorkspace,
 } from './workspace';
-import { isRuntimeScope, type RunParserFn, type SandboxScanResult } from '../types/scan';
+import { isRuntimeScope, toParserRunOutput, type ParserRunOutput, type RunParserFn, type SandboxScanResult } from '../types/scan';
 import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import { type DependencyEnricher, type EnrichmentResult, disabledEnrichment, enrichmentKeyOf } from '../enrichment';
 import { computeBudgetMs } from '../enrichment/budget';
 import { resolveEffectiveLicense } from '../enrichment/effectiveLicense';
 import { sanitizeText } from '../enrichment/text';
+import { localDateString, systemClock, type AppClock } from '../lib/clock';
+import { normalizeLegacyVulnerability } from '../vulnerability/normalize';
 import {
-  normalizeLegacyVulnerability,
-  vulnerabilityLookupService,
-  type NormalizedVulnerability,
-  type VulnerabilitySeverity,
-} from '../analysis/vulnerabilityLookup';
+  computeVulnerabilityBudgetMs,
+  normalizeResolved,
+  vulnerabilityKeyOf,
+  type VulnerabilityLookup,
+  type VulnerabilityLookupResult,
+} from '../vulnerability/lookup';
+import {
+  insertFinding,
+  insertSecurityFinding,
+  loadSlaDays,
+  mergeVulnerabilities,
+  upsertVulnerability,
+  type NewFinding,
+} from '../vulnerability/findingWriter';
 
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
@@ -125,6 +136,15 @@ export interface ScanWorkerDeps {
    * `[registry]` line — the result equals F2.
    */
   enricher: DependencyEnricher | null;
+  /**
+   * Vulnerability lookup engine (REQ-005 P-17, ADR-007 Karar 5). The runtime
+   * always passes one (`VULNERABILITY_LOOKUP=off` -> disabled mode). `null`
+   * (tests, `saveScanResults`): no lookup, `vulnerability_data_status` stays
+   * NULL, no `[osv]`/`[nvd]` line — the result equals F3 (AC-G-8).
+   */
+  vulnerabilityLookup: VulnerabilityLookup | null;
+  /** Application clock (default `systemClock`). */
+  clock: AppClock;
 }
 
 export { NonRetryableScanError };
@@ -139,33 +159,12 @@ interface PersistOptions {
   errorContext?: ErrorTextContext;
   /** Enrichment result (effective license, NOTICE fields, `[registry]` line); absent -> all `disabled`, no line. */
   enrichment?: EnrichmentResult;
+  /** Vulnerability lookup result (status, `[osv]`/`[nvd]` lines); absent -> no lookup (F3). */
+  vulnerability?: VulnerabilityLookupResult;
 }
 
 /** normalized_license of a runtime package whose license could not be found (AC-P06-1). */
 const NO_ASSERTION = 'NOASSERTION';
-
-interface NewFinding {
-  scanId: string;
-  projectId: string;
-  scanDependencyId: string;
-  findingType: 'license' | 'security';
-  fingerprint: string;
-}
-
-interface CarriedDecision {
-  findingId: string;
-  status: 'false_positive' | 'accepted';
-  reviewId: string;
-}
-
-interface StoredVulnerability {
-  id: string;
-  severity: VulnerabilitySeverity;
-  cvssScore: number | null;
-  osvId: string | null;
-  ghsaId: string | null;
-  cveId: string | null;
-}
 
 /**
  * A claimed scan job. It is in the worker's active set from the claim commit
@@ -217,13 +216,15 @@ export class ScanWorker {
       db: deps.db,
       cloneRepo: deps.cloneRepo ?? defaultCloneRepo,
       // TypeScript parsers in a worker_threads thread (REQ-003 P-10, ADR-005 Karar 5).
-      runParser: deps.runParser ?? createThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
+      runParser: deps.runParser ?? createLockAwareThreadParser({ resourceLimits: sandboxRunnerConfig.parser.resourceLimits }),
       scanRoots: deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS),
       tmpRoot: deps.tmpRoot ?? os.tmpdir(),
       logger: deps.logger ?? console,
       runId: deps.runId ?? createRunId(),
       gitVersion: deps.gitVersion !== undefined ? deps.gitVersion : deps.cloneRepo ? null : getGitVersion,
       enricher: deps.enricher ?? null,
+      vulnerabilityLookup: deps.vulnerabilityLookup ?? null,
+      clock: deps.clock ?? systemClock,
     };
   }
 
@@ -609,10 +610,10 @@ export class ScanWorker {
       }
 
       const ecosystems = await this.loadEcosystems(scanRow.project_id);
-      let result: SandboxScanResult;
+      let parsed: ParserRunOutput;
       signal.throwIfAborted();
       if (source.kind === 'local') {
-        result = await this.deps.runParser(source.path, ecosystems, scanId, signal);
+        parsed = toParserRunOutput(await this.deps.runParser(source.path, ecosystems, scanId, signal));
       } else {
         const ref = scanRow.ref || scanRow.default_branch || null;
         if (ref !== null && !isValidRef(ref)) {
@@ -623,7 +624,7 @@ export class ScanWorker {
         // Git missing/older than 2.32: permanent, before any temp folder (AC-T-3).
         if (this.deps.gitVersion) await assertGitForRemoteScan(this.deps.gitVersion);
         signal.throwIfAborted();
-        result = await withTempWorkspace(
+        parsed = await withTempWorkspace(
           async (workspace) => {
             job.workspaceDirs.push(workspace);
             const repoDir = path.join(workspace, 'repo');
@@ -631,24 +632,28 @@ export class ScanWorker {
             // abort) before withTempWorkspace removes the folder.
             await this.deps.cloneRepo(remoteUrl, ref, repoDir, token, signal);
             signal.throwIfAborted();
-            return this.deps.runParser(repoDir, ecosystems, scanId, signal);
+            return toParserRunOutput(await this.deps.runParser(repoDir, ecosystems, scanId, signal));
           },
           { tmpRoot: this.deps.tmpRoot, logger: this.logger },
         );
       }
+      const result: SandboxScanResult = parsed.result;
 
       if (result.status === 'failed') {
         // Permanent (D-41): the same input fails the same way.
         throw new ParserFailedError('Dependency parser reported a parsing failure.');
       }
       // Registry enrichment: after parsing, before OSV and the result transaction (ADR-006 Karar 2).
-      const enrichment = await this.enrichDependencies(job, result);
+      const enrichment = await this.enrichDependencies(job, result, parsed.lockIntegrity);
+      // Vulnerability lookup: after enrichment, outside the result transaction (ADR-007 Karar 5).
+      const vulnerability = await this.lookupVulnerabilities(job, result);
       this.logger.log(`Scan ${scanId} parsed. Writing ${result.total_deps} dependencies to the database...`);
       const stored = await this.persistResults(scanId, scanRow.project_id, result, {
         runId: this.runId,
         signal,
         errorContext: this.errorContext(job),
         enrichment,
+        vulnerability,
       });
       if (stored) this.logger.log(`Scan ${scanId} results stored.`);
     } catch (err) {
@@ -669,18 +674,45 @@ export class ScanWorker {
    * and the scan continues with `error` outcomes — enrichment never reaches
    * `handleScanFailure` and never causes a retry (AC-P14-13).
    */
-  private async enrichDependencies(job: ClaimedJob, result: SandboxScanResult): Promise<EnrichmentResult | undefined> {
+  private async enrichDependencies(
+    job: ClaimedJob,
+    result: SandboxScanResult,
+    lockIntegrity: ParserRunOutput['lockIntegrity'],
+  ): Promise<EnrichmentResult | undefined> {
     const enricher = this.deps.enricher;
     if (!enricher) return undefined;
     const signal = job.controller.signal;
     const timeoutMs = job.settings.timeoutMinutes * 60_000;
     const budgetMs = computeBudgetMs(timeoutMs, job.deadlineMs - performance.now());
     try {
-      return await enricher.enrich(result.dependencies, { signal, budgetMs });
+      return await enricher.enrich(result.dependencies, { signal, budgetMs, lockIntegrity });
     } catch (err) {
       if (signal.aborted) throw signal.reason ?? err;
       this.logger.warn(`Scan ${job.scanRow.id}: registry enrichment failed (${errorCode(err)}); continuing without it.`);
       return enricher.failed(result.dependencies);
+    }
+  }
+
+  /**
+   * Runs the injected vulnerability lookup within the budget
+   * `min(T/4, remaining - T/8)` (AC-P17-14). A job abort is rethrown as is
+   * (ADR-004 Karar 8); every other error is logged by class/code and every
+   * candidate becomes unchecked — the lookup never reaches
+   * `handleScanFailure` and never causes a retry (ADR-007 Karar 5).
+   */
+  private async lookupVulnerabilities(job: ClaimedJob, result: SandboxScanResult): Promise<VulnerabilityLookupResult | undefined> {
+    const engine = this.deps.vulnerabilityLookup;
+    if (!engine) return undefined;
+    const signal = job.controller.signal;
+    const timeoutMs = job.settings.timeoutMinutes * 60_000;
+    const budgetMs = computeVulnerabilityBudgetMs(timeoutMs, job.deadlineMs - performance.now());
+    const startedAt = new Date(this.deps.clock.now());
+    try {
+      return await engine.lookup(result.dependencies, { signal, budgetMs });
+    } catch (err) {
+      if (signal.aborted) throw signal.reason ?? err;
+      this.logger.warn(`Scan ${job.scanRow.id}: vulnerability lookup failed (${errorCode(err)}); continuing without it.`);
+      return engine.failed(result.dependencies, startedAt);
     }
   }
 
@@ -729,7 +761,7 @@ export class ScanWorker {
     const { runId, signal, errorContext = this.errorContext() } = options;
     // No enricher (tests, saveScanResults): every key `disabled`, no `[registry]` line (D-82).
     const enrichment = options.enrichment ?? disabledEnrichment(result.dependencies, false);
-    const vulnerabilityLookup = await vulnerabilityLookupService.lookupDependencies(result.dependencies, signal);
+    const vulnerability = options.vulnerability;
     signal?.throwIfAborted();
     const client = await this.db.connect();
     try {
@@ -755,25 +787,15 @@ export class ScanWorker {
       let licenseViolations = 0;
 
       // Fetch SLA settings
-      const slaResult = await client.query(
-        `SELECT key, value FROM system_settings WHERE key LIKE 'sla.%'`
-      );
-      const slaDays: Record<string, number> = {
-        critical: 7,
-        high: 30,
-        medium: 90,
-        low: 180,
-      };
-      for (const row of slaResult.rows) {
-        const severity = row.key.split('.')[1];
-        slaDays[severity] = Number(row.value);
-      }
+      const slaDays = await loadSlaDays(client);
 
       // One finding per fingerprint per scan (ADR-003 c, AC-P08-2): the same
       // package in several manifests stays in the inventory but is reported once.
       const seenFingerprints = new Set<string>();
+      // "Today" of the carry-over check from the injected clock, not CURRENT_DATE (ADR-007 Karar 9).
+      const today = localDateString(this.deps.clock.now());
       const openFinding = (spec: Omit<NewFinding, 'scanId' | 'projectId' | 'scanDependencyId'>, scanDependencyId: string) =>
-        this.insertFinding(client, seenFingerprints, { ...spec, scanId, projectId, scanDependencyId });
+        insertFinding(client, seenFingerprints, { ...spec, scanId, projectId, scanDependencyId }, { today });
 
       // Process dependencies
       for (const dep of result.dependencies) {
@@ -788,7 +810,7 @@ export class ScanWorker {
         // D-73); a `disabled` key with a lock hint gives exactly `dep.licenses` (F2).
         const enrichKey = enrichmentKeyOf(dep);
         const enriched = enrichKey === null ? undefined : enrichment.outcomes.get(enrichKey);
-        const effective = enriched
+        const resolved = enriched
           ? resolveEffectiveLicense({
               status: enriched.status,
               ecosystem: enriched.registry,
@@ -798,6 +820,14 @@ export class ScanWorker {
               sanitize: sanitizeText,
             })
           : null;
+        // L-5 fail-safe (ADR-007 Karar 12): on a lock integrity mismatch neither
+        // the registry license nor the lock hint enters the policy; the hint is
+        // kept stored but never shown. A runtime package then gets the
+        // NOASSERTION ("unknown") finding below.
+        const effective =
+          resolved && enriched?.lockIntegrity === 'mismatch'
+            ? { ...resolved, licenseExpression: null, licenseSource: 'none' as const, hintDiffers: false, policyInput: [] as string[] }
+            : resolved;
         const policyInput: string[] = effective ? effective.policyInput : [...(dep.licenses ?? [])];
 
         // Insert package (deduplicated). purl is a deterministic function of
@@ -820,8 +850,8 @@ export class ScanWorker {
           `
           INSERT INTO scan_dependencies (scan_id, package_id, scope, manifest_file, manifest_path, depth, declared_range,
                                          license_expression, license_source, license_lock_hint, license_hint_differs,
-                                         license_enrichment_status, notice_status, notice_archive_id)
-          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13)
+                                         license_enrichment_status, notice_status, notice_archive_id, lock_integrity)
+          VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           ON CONFLICT (scan_id, package_id, manifest_path, scope) DO NOTHING
           RETURNING id
           `,
@@ -839,6 +869,7 @@ export class ScanWorker {
             enriched?.status ?? null,
             enriched?.noticeStatus ?? null,
             enriched?.noticeArchiveId ?? null,
+            enriched?.lockIntegrity ?? null,
           ]
         );
 
@@ -947,8 +978,9 @@ export class ScanWorker {
           }
         }
 
-        const lookupKey = vulnerabilityLookupService.dependencyKey(dep);
-        const lookedUpVulnerabilities = vulnerabilityLookup.get(lookupKey) || [];
+        const vulnKey = vulnerability ? vulnerabilityKeyOf(dep) : null;
+        const lookedUpVulnerabilities =
+          vulnKey === null ? [] : (vulnerability?.byKey.get(vulnKey) ?? []).map((resolved) => normalizeResolved(resolved, dep));
         const legacyVulnerabilities = (dep.vulnerabilities || [])
           .map((vuln) => normalizeLegacyVulnerability(vuln, dep));
         // No vulnerability matching without an exact version (ADR-003 a): a range
@@ -961,7 +993,7 @@ export class ScanWorker {
         // Process vulnerabilities and generate security findings
         if (vulnerabilities.length > 0) {
           for (const vuln of vulnerabilities) {
-            const storedVuln = await this.upsertVulnerability(client, vuln);
+            const storedVuln = await upsertVulnerability(client, vuln);
             const vulnId = storedVuln.id;
             const severity = storedVuln.severity;
             const cvssScore = storedVuln.cvssScore;
@@ -984,20 +1016,14 @@ export class ScanWorker {
             else if (severity === 'medium') mediumVulns++;
             else if (severity === 'low') lowVulns++;
 
-            const days = slaDays[severity] ?? 90;
-            const slaDeadline = new Date();
-            slaDeadline.setDate(slaDeadline.getDate() + days);
-
-            const fixVersion = vuln.fixedVersion;
-            const fixAvailable = Boolean(vuln.fixedVersion);
-
-            await client.query(
-              `
-              INSERT INTO security_findings (finding_id, vulnerability_id, severity, cvss_score, fix_version, sla_deadline, fix_available)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-              `,
-              [findingId, vulnId, severity, cvssScore, fixVersion, slaDeadline, fixAvailable]
-            );
+            await insertSecurityFinding(client, {
+              findingId,
+              vulnerabilityId: vulnId,
+              severity,
+              cvssScore,
+              fixVersion: vuln.fixedVersion,
+              slaDays,
+            });
           }
         }
       }
@@ -1019,6 +1045,8 @@ export class ScanWorker {
       let warningMsg: string | null = null;
       const warningLines = (result.parse_errors ?? []).map((pe) => `[${pe.ecosystem}] File ${pe.file}: ${pe.error}`);
       if (enrichment.summaryLine !== null) warningLines.push(enrichment.summaryLine);
+      // `[osv]` then `[nvd]` after `[registry]` (contract REQ-005 section 3.4).
+      if (vulnerability) warningLines.push(...vulnerability.summaryLines);
       if (warningLines.length > 0) {
         warningMsg = scanErrorText(warningLines.join('\n'), errorContext);
       }
@@ -1039,6 +1067,8 @@ export class ScanWorker {
             license_violations = $7,
             error_message = COALESCE(error_message, $8),
             next_attempt_at = NULL,
+            vulnerability_data_status = $11::text,
+            vulnerability_checked_at = $12::timestamptz,
             updated_at = NOW()
         WHERE id = $9
           AND ($10::text IS NULL OR (status = 'running' AND worker_id = $10::text))
@@ -1054,6 +1084,8 @@ export class ScanWorker {
           warningMsg,
           scanId,
           runId ?? null,
+          vulnerability?.status ?? null,
+          vulnerability?.checkedAt ?? null,
         ]
       );
       if (runId !== undefined && updated.rowCount !== 1) {
@@ -1079,231 +1111,6 @@ export class ScanWorker {
     } finally {
       client.release();
     }
-  }
-
-  private async upsertVulnerability(
-    client: PoolClient,
-    vuln: NormalizedVulnerability
-  ): Promise<StoredVulnerability> {
-    const identifiers = Array.from(new Set([
-      vuln.cveId,
-      vuln.ghsaId,
-      vuln.osvId,
-      vuln.sourceId,
-      ...vuln.aliases,
-    ].filter(Boolean))) as string[];
-
-    const existing = await client.query(
-      `
-      SELECT v.id
-      FROM vulnerabilities v
-      LEFT JOIN vulnerability_aliases va ON va.vulnerability_id = v.id
-      WHERE v.cve_id = ANY($1::text[])
-         OR v.ghsa_id = ANY($1::text[])
-         OR v.osv_id = ANY($1::text[])
-         OR va.alias_id = ANY($1::text[])
-      LIMIT 1
-      `,
-      [identifiers]
-    );
-
-    let vulnerabilityId: string;
-    // The identifiers as stored (COALESCE keeps older values): the fingerprint
-    // must use the same columns as the SQL backfill.
-    let storedIds: { osv_id: string | null; ghsa_id: string | null; cve_id: string | null };
-
-    if (existing.rows.length > 0) {
-      vulnerabilityId = existing.rows[0].id;
-      const updated = await client.query(
-        `
-        UPDATE vulnerabilities
-        SET cve_id = COALESCE(vulnerabilities.cve_id, $2),
-            ghsa_id = COALESCE(vulnerabilities.ghsa_id, $3),
-            osv_id = COALESCE(vulnerabilities.osv_id, $4),
-            title = $5,
-            description = COALESCE($6, vulnerabilities.description),
-            severity = $7,
-            cvss_score = $8,
-            cvss_vector = $9,
-            cvss_version = $10,
-            affected_ecosystem = $11,
-            affected_package = $12,
-            affected_versions = $13,
-            fixed_version = $14,
-            published_at = COALESCE($15, vulnerabilities.published_at),
-            last_modified_at = COALESCE($16, vulnerabilities.last_modified_at),
-            advisory_data = $17::jsonb,
-            source = 'osv',
-            source_url = $18,
-            updated_at = NOW()
-        WHERE id = $1
-        RETURNING osv_id, ghsa_id, cve_id
-        `,
-        [
-          vulnerabilityId,
-          vuln.cveId,
-          vuln.ghsaId,
-          vuln.osvId,
-          vuln.title,
-          vuln.description,
-          vuln.severity,
-          vuln.cvssScore,
-          vuln.cvssVector,
-          vuln.cvssVersion,
-          vuln.affectedEcosystem,
-          vuln.affectedPackage,
-          vuln.affectedVersions,
-          vuln.fixedVersion,
-          vuln.publishedAt,
-          vuln.lastModifiedAt,
-          JSON.stringify(vuln.advisoryData),
-          vuln.sourceUrl,
-        ]
-      );
-      storedIds = updated.rows[0];
-    } else {
-      const inserted = await client.query(
-        `
-        INSERT INTO vulnerabilities (
-          cve_id, ghsa_id, osv_id, title, description, severity, cvss_score,
-          cvss_vector, cvss_version, affected_ecosystem, affected_package,
-          affected_versions, fixed_version, published_at, last_modified_at,
-          advisory_data, source, source_url
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, 'osv', $17)
-        RETURNING id, osv_id, ghsa_id, cve_id
-        `,
-        [
-          vuln.cveId,
-          vuln.ghsaId,
-          vuln.osvId,
-          vuln.title,
-          vuln.description,
-          vuln.severity,
-          vuln.cvssScore,
-          vuln.cvssVector,
-          vuln.cvssVersion,
-          vuln.affectedEcosystem,
-          vuln.affectedPackage,
-          vuln.affectedVersions,
-          vuln.fixedVersion,
-          vuln.publishedAt,
-          vuln.lastModifiedAt,
-          JSON.stringify(vuln.advisoryData),
-          vuln.sourceUrl,
-        ]
-      );
-      vulnerabilityId = inserted.rows[0].id;
-      storedIds = inserted.rows[0];
-    }
-
-    for (const alias of identifiers) {
-      const aliasType = alias.startsWith('CVE-')
-        ? 'cve'
-        : alias.startsWith('GHSA-')
-          ? 'ghsa'
-          : alias.startsWith('SNYK-')
-            ? 'snyk'
-            : 'osv';
-
-      await client.query(
-        `
-        INSERT INTO vulnerability_aliases (vulnerability_id, alias_id, alias_type)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (vulnerability_id, alias_id) DO NOTHING
-        `,
-        [vulnerabilityId, alias, aliasType]
-      );
-    }
-
-    return {
-      id: vulnerabilityId,
-      severity: vuln.severity,
-      cvssScore: vuln.cvssScore,
-      osvId: storedIds.osv_id,
-      ghsaId: storedIds.ghsa_id,
-      cveId: storedIds.cve_id,
-    };
-  }
-
-  /**
-   * Inserts a finding with its fingerprint unless one with the same
-   * fingerprint was already opened in this scan (returns null then).
-   * Decision carry-over (ADR-003 c): the latest finding of the same project
-   * with the same fingerprint from another scan decides the initial status —
-   * false_positive and an unexpired risk acceptance (accepted_until >=
-   * CURRENT_DATE) are carried with a copy of their review; an expired or
-   * open-ended acceptance, wont_fix and every other status open a new `open`
-   * finding and leave the old one untouched.
-   */
-  private async insertFinding(client: PoolClient, seen: Set<string>, finding: NewFinding): Promise<string | null> {
-    if (seen.has(finding.fingerprint)) return null;
-    seen.add(finding.fingerprint);
-
-    const carry = await this.findCarriedDecision(client, finding);
-    const inserted = await client.query<{ id: string }>(
-      `
-      INSERT INTO findings (scan_id, scan_dependency_id, finding_type, status, fingerprint, carried_from_finding_id)
-      VALUES ($1, $2, $3::finding_type, $4::finding_status, $5, $6)
-      RETURNING id
-      `,
-      [
-        finding.scanId,
-        finding.scanDependencyId,
-        finding.findingType,
-        carry ? carry.status : 'open',
-        finding.fingerprint,
-        carry ? carry.findingId : null,
-      ]
-    );
-    const findingId = inserted.rows[0].id;
-
-    if (carry) {
-      await client.query(
-        `
-        INSERT INTO finding_reviews (finding_id, decision, reviewer_id, accepted_until, target_version, notes)
-        SELECT $1, decision, reviewer_id, accepted_until, target_version, $3
-        FROM finding_reviews
-        WHERE id = $2
-        `,
-        [findingId, carry.reviewId, `${carry.findingId} bulgusundan taşındı`]
-      );
-    }
-    return findingId;
-  }
-
-  private async findCarriedDecision(client: PoolClient, finding: NewFinding): Promise<CarriedDecision | null> {
-    // project_id is part of the fingerprint; the scans join is a defensive filter.
-    const previous = await client.query<{ id: string; status: string }>(
-      `
-      SELECT f.id, f.status::text AS status
-      FROM findings f
-      JOIN scans s ON s.id = f.scan_id
-      WHERE f.fingerprint = $1 AND s.project_id = $2 AND f.scan_id <> $3
-      ORDER BY f.created_at DESC, s.created_at DESC
-      LIMIT 1
-      `,
-      [finding.fingerprint, finding.projectId, finding.scanId]
-    );
-    const last = previous.rows[0];
-    if (!last || (last.status !== 'false_positive' && last.status !== 'accepted')) return null;
-
-    const decision = last.status === 'false_positive' ? 'false_positive' : 'accept_risk';
-    const review = await client.query<{ id: string; still_valid: boolean }>(
-      `
-      SELECT id, (accepted_until IS NOT NULL AND accepted_until >= CURRENT_DATE) AS still_valid
-      FROM finding_reviews
-      WHERE finding_id = $1 AND decision = $2::review_decision
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-      [last.id, decision]
-    );
-    const source = review.rows[0];
-    // A closed status without its review has no auditable reason: do not carry.
-    if (!source) return null;
-    if (decision === 'accept_risk' && !source.still_valid) return null;
-    return { findingId: last.id, status: last.status as 'false_positive' | 'accepted', reviewId: source.id };
   }
 
   /**
@@ -1401,31 +1208,3 @@ function retryLogLine(scanId: string, attempt: number, maxAttempts: number, next
   return `Tarama ${scanId} deneme ${attempt}/${maxAttempts} başarısız; sonraki deneme ${when}: ${shortErrorForLog(message)}`;
 }
 
-function mergeVulnerabilities(vulnerabilities: NormalizedVulnerability[]): NormalizedVulnerability[] {
-  const merged = new Map<string, NormalizedVulnerability>();
-
-  for (const vuln of vulnerabilities) {
-    const key = vuln.cveId || vuln.ghsaId || vuln.osvId || vuln.sourceId;
-    if (!merged.has(key)) {
-      merged.set(key, vuln);
-      continue;
-    }
-
-    const existing = merged.get(key)!;
-    merged.set(key, {
-      ...existing,
-      ...vuln,
-      aliases: Array.from(new Set([...existing.aliases, ...vuln.aliases])),
-      fixedVersion: vuln.fixedVersion || existing.fixedVersion,
-      cvssScore: vuln.cvssScore ?? existing.cvssScore,
-      cvssVector: vuln.cvssVector || existing.cvssVector,
-      cvssVersion: vuln.cvssVersion || existing.cvssVersion,
-      description: vuln.description || existing.description,
-      affectedVersions: vuln.affectedVersions || existing.affectedVersions,
-      publishedAt: vuln.publishedAt || existing.publishedAt,
-      lastModifiedAt: vuln.lastModifiedAt || existing.lastModifiedAt,
-    });
-  }
-
-  return Array.from(merged.values());
-}

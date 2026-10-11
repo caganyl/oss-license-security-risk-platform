@@ -487,6 +487,155 @@ function animateNumber(id, target) {
   requestAnimationFrame(step);
 }
 
+// ── Dashboard "Vulnerability data" panel (REQ-005 contract section 6).
+// Read-only: one GET, no write request. Every API value reaches the DOM
+// as text only (el()/textContent); none goes into style/href/className.
+const VULN_RUN_LABELS = {
+  completed: 'Completed',
+  partial: 'Partial',
+  failed: 'Failed',
+  interrupted: 'Interrupted',
+  disabled: 'Skipped (lookup disabled)',
+};
+
+const VULN_PROJECT_STATUS_TEXT = {
+  partial: 'vulnerability data partial',
+  unavailable: 'vulnerability data unavailable',
+  disabled: 'vulnerability lookup disabled',
+};
+
+// Guards against an older response overwriting a newer one (load + 30 s refresh can overlap).
+let vulnDataRequestSeq = 0;
+
+function hasOwn(obj, key) {
+  return obj !== null && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/** Locale time for an ISO timestamp; null/invalid -> `fallback`. */
+function vulnTime(iso, fallback) {
+  if (typeof iso !== 'string' || iso === '') return fallback;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? fallback : d.toLocaleString();
+}
+
+function vulnNumber(value) {
+  return Number(value).toLocaleString();
+}
+
+function vulnMutedParagraph(text) {
+  return el('p', { style: 'color: var(--text-muted);', text });
+}
+
+function setVulnDataBody(state, children) {
+  const body = byId('vuln-data-body');
+  if (!body) return;
+  clear(body);
+  body.dataset.state = state;
+  append(body, children);
+}
+
+function vulnRecheckValue(settings) {
+  if (settings.recheck_enabled === false) return 'Disabled (VULNERABILITY_RECHECK=off)';
+  if (settings.lookup_enabled === false) return 'Disabled (VULNERABILITY_LOOKUP=off)';
+  return `Every ${vulnNumber(settings.interval_hours)} h`;
+}
+
+function vulnLastRunValue(scheduler, lastRun) {
+  if (scheduler.current_run) return `Running since ${vulnTime(scheduler.current_run.started_at, '—')}`;
+  if (lastRun === null || lastRun === undefined) return 'Never run';
+  const label = hasOwn(VULN_RUN_LABELS, lastRun.status) ? VULN_RUN_LABELS[lastRun.status] : String(lastRun.status ?? '—');
+  return `${label} · ${vulnTime(lastRun.finished_at, '—')}`;
+}
+
+function vulnNextCheckValue(scheduler, generatedAt) {
+  if (scheduler.paused === true) return 'Paused';
+  const next = scheduler.next_check_earliest_at;
+  if (next === null || next === undefined) return '—';
+  const nextMs = new Date(next).getTime();
+  const nowMs = new Date(generatedAt).getTime();
+  if (Number.isNaN(nextMs)) return '—';
+  if (!Number.isNaN(nowMs) && nextMs <= nowMs) return 'Due now';
+  return vulnTime(next, '—');
+}
+
+function vulnDataRows(data) {
+  const settings = data.settings || {};
+  const scheduler = data.scheduler || {};
+  const lastRun = data.last_run ?? null;
+  const expiry = data.risk_acceptance_expiry || {};
+
+  const rows = [
+    ['Daily recheck', vulnRecheckValue(settings)],
+    ['Last recheck', vulnLastRunValue(scheduler, lastRun)],
+    ['New findings (last recheck)', lastRun === null ? '—' : vulnNumber(lastRun.findings_opened)],
+  ];
+  if (lastRun !== null && Number(lastRun.packages_unchecked) > 0) {
+    rows.push(['Packages not checked (last recheck)', vulnNumber(lastRun.packages_unchecked)]);
+  }
+  rows.push(
+    ['Next check', vulnNextCheckValue(scheduler, data.generated_at)],
+    ['Risk acceptances reopened (last 7 days)', vulnNumber(expiry.reopened_last_7_days)],
+    ['Last expiry check', vulnTime(expiry.last_evaluated_at, 'Not yet evaluated')],
+  );
+
+  return el('table', null,
+    el('tbody', null, rows.map(([label, value]) => el('tr', null,
+      el('th', { scope: 'row', style: 'width: 45%; padding: 0.75rem 1rem;', text: label }),
+      el('td', { style: 'padding: 0.75rem 1rem;', text: value })))));
+}
+
+function vulnDataWarnings(data) {
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const incomplete = projects.filter((p) => p && p.vulnerability_data_status !== 'complete');
+  const counts = data.project_status_counts || {};
+  let total = 0;
+  for (const [key, value] of Object.entries(counts)) {
+    if (key !== 'complete') total += Number(value) || 0;
+  }
+
+  const nodes = [];
+  if (incomplete.length === 0 && total === 0) {
+    nodes.push(el('p', { style: 'margin-top: 1rem;', text: 'All projects have complete vulnerability data.' }));
+  } else {
+    nodes.push(el('p', { style: 'margin-top: 1rem; font-weight: 600;', text: `Projects with incomplete vulnerability data (${vulnNumber(total)})` }));
+    nodes.push(el('ul', { id: 'vuln-data-warnings', style: 'margin: 0.5rem 0 0 1.25rem;' },
+      incomplete.map((p) => {
+        const status = p.vulnerability_data_status;
+        let description;
+        if (status === null || status === undefined) description = 'not checked yet';
+        else if (hasOwn(VULN_PROJECT_STATUS_TEXT, status)) description = VULN_PROJECT_STATUS_TEXT[status];
+        else description = String(status);
+        return el('li', { text: `${String(p.project_name ?? '')}: ${description}` });
+      })));
+  }
+  if (data.projects_truncated === true) {
+    nodes.push(vulnMutedParagraph('Showing the first 500 projects.'));
+  }
+  return nodes;
+}
+
+async function loadVulnerabilityDataStatus() {
+  const body = byId('vuln-data-body');
+  if (!body) return;
+  const seq = ++vulnDataRequestSeq;
+  // Loading text only until the first successful render; a refresh keeps the current panel.
+  if (body.dataset.state !== 'ready') {
+    setVulnDataBody('loading', [vulnMutedParagraph('Loading vulnerability data status...')]);
+  }
+  try {
+    const { data } = await api('/api/vulnerability-data/status');
+    if (seq !== vulnDataRequestSeq) return;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('malformed body');
+    const content = [vulnDataRows(data), ...vulnDataWarnings(data)];
+    setVulnDataBody('ready', content);
+  } catch (err) {
+    if (seq !== vulnDataRequestSeq) return;
+    if (err && err.authRedirect) return; // the auth form already explains what happened
+    // Server message is intentionally not shown (contract 6.3); previous content is dropped.
+    setVulnDataBody('error', [vulnMutedParagraph('Vulnerability data status could not be loaded.')]);
+  }
+}
+
 // ── Load Scan History Tab
 async function loadAllScansHistory() {
   const loading = byId('scans-list-loading');
@@ -903,8 +1052,8 @@ const VIEWS = {
     title: 'OSS License & Security Dashboard',
     subtitle: 'Real-time open source package compliance metrics',
     headerActions: true,
-    load: () => Promise.all([loadScans(), updateStats()]),
-    refresh: () => Promise.all([loadScans(), updateStats()]),
+    load: () => Promise.all([loadScans(), updateStats(), loadVulnerabilityDataStatus()]),
+    refresh: () => Promise.all([loadScans(), updateStats(), loadVulnerabilityDataStatus()]),
   },
   scans: {
     title: 'Scan History',
@@ -1213,5 +1362,6 @@ setInterval(fire(async () => {
   if (currentUser && currentActiveView === 'dashboard') {
     await loadScans();
     await updateStats();
+    await loadVulnerabilityDataStatus();
   }
 }), 30000);

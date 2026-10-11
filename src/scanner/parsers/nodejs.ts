@@ -3,6 +3,10 @@
  * v2/v3 `packages` map) and Yarn v1 `yarn.lock`. Line-by-line port of
  * the legacy Python `nodejs.py` (frozen as golden output, REQ-003 D-26;
  * P-10, ADR-005 Karar 2, 4).
+ *
+ * L-5 (REQ-005, ADR-007 Karar 12): with an optional `IntegrityCollector` the
+ * lock parsers also report each locked entry's `integrity` value through that
+ * side channel; dependency objects never get a new field (golden unchanged).
  */
 import type { DependencyScope, ScannedDependency } from '../../types/scan';
 import {
@@ -33,6 +37,7 @@ import {
   type TreeWalk,
   type WalkedFile,
 } from './common';
+import type { IntegrityCollector } from './lockIntegrityValue';
 
 const PACKAGE_SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const;
 type PackageSection = (typeof PACKAGE_SECTIONS)[number];
@@ -50,7 +55,7 @@ function readJson(data: Buffer, relPath: string): unknown {
   return JSON.parse(decodeStrict(data, relPath));
 }
 
-export function parse(walk: TreeWalk): ParseResult {
+export function parse(walk: TreeWalk, collector?: IntegrityCollector): ParseResult {
   const result = emptyResult();
   result.parse_errors.push(...linkErrors(walk, 'nodejs', NODEJS_MANIFEST_NAMES));
 
@@ -70,14 +75,14 @@ export function parse(walk: TreeWalk): ParseResult {
       if (lockfile) {
         const lock = readManifest(lockfile, 'nodejs');
         result.scan_files.push(lock.record);
-        locked.push(...dependenciesFromPackageLock(lock.data, lockfile, manifestPath, declaredScopes));
+        locked.push(...dependenciesFromPackageLock(lock.data, lockfile, manifestPath, declaredScopes, collector));
       }
 
       const yarnLock = siblingFile(walk, packageJson, 'yarn.lock');
       if (yarnLock) {
         const yarn = readManifest(yarnLock, 'nodejs');
         result.scan_files.push(yarn.record);
-        locked.push(...dependenciesFromYarnLock(yarn.data, manifestPath, declaredScopes));
+        locked.push(...dependenciesFromYarnLock(yarn.data, manifestPath, declaredScopes, collector));
       }
 
       // With a lock file the version comes from the lock, the range from package.json.
@@ -121,6 +126,7 @@ function dependenciesFromPackageLock(
   lockfile: WalkedFile,
   manifestPath: string,
   declaredScopes: ScopeMap,
+  collector?: IntegrityCollector,
 ): ScannedDependency[] {
   const lock = readJson(data, lockfile.relPath);
   const dependencies: ScannedDependency[] = [];
@@ -134,23 +140,23 @@ function dependenciesFromPackageLock(
       const version = pyGet(pkg, 'version');
       if (pyTruthy(name) && pyTruthy(version)) {
         const nameText = pyStr(name);
-        dependencies.push(
-          dependency(
-            nameText,
-            pyStr(version),
-            manifestPath,
-            'package-lock.json',
-            declaredScopes.get(nameText) ?? lockScope(pkg),
-            licensesOf(pkg),
-          ),
+        const dep = dependency(
+          nameText,
+          pyStr(version),
+          manifestPath,
+          'package-lock.json',
+          declaredScopes.get(nameText) ?? lockScope(pkg),
+          licensesOf(pkg),
         );
+        dependencies.push(dep);
+        collectIntegrity(collector, dep, pyGet(pkg, 'integrity'));
       }
     }
   }
 
   const legacyDependencies = pyGet(lock, 'dependencies');
   if (isPyDict(legacyDependencies)) {
-    dependencies.push(...dependenciesFromLegacyLock(legacyDependencies, manifestPath, declaredScopes));
+    dependencies.push(...dependenciesFromLegacyLock(legacyDependencies, manifestPath, declaredScopes, 'transitive', collector));
   }
 
   return dependencies;
@@ -161,6 +167,7 @@ function dependenciesFromLegacyLock(
   manifestPath: string,
   declaredScopes: ScopeMap,
   inheritedScope: DependencyScope = 'transitive',
+  collector?: IntegrityCollector,
 ): ScannedDependency[] {
   const dependencies: ScannedDependency[] = [];
   for (const [name, pkg] of Object.entries(entries)) {
@@ -168,27 +175,35 @@ function dependenciesFromLegacyLock(
     const version = pyGet(pkg, 'version');
     const scope = declaredScopes.get(name) ?? (pyTruthy(pyGet(pkg, 'dev')) ? 'dev' : inheritedScope);
     if (pyTruthy(version)) {
-      dependencies.push(dependency(name, pyStr(version), manifestPath, 'package-lock.json', scope, licensesOf(pkg)));
+      const dep = dependency(name, pyStr(version), manifestPath, 'package-lock.json', scope, licensesOf(pkg));
+      dependencies.push(dep);
+      collectIntegrity(collector, dep, pyGet(pkg, 'integrity'));
     }
     const nested = pyGet(pkg, 'dependencies');
     if (isPyDict(nested)) {
-      dependencies.push(...dependenciesFromLegacyLock(nested, manifestPath, declaredScopes, scope));
+      dependencies.push(...dependenciesFromLegacyLock(nested, manifestPath, declaredScopes, scope, collector));
     }
   }
   return dependencies;
 }
 
-function dependenciesFromYarnLock(data: Buffer, manifestPath: string, declaredScopes: ScopeMap): ScannedDependency[] {
+function dependenciesFromYarnLock(
+  data: Buffer,
+  manifestPath: string,
+  declaredScopes: ScopeMap,
+  collector?: IntegrityCollector,
+): ScannedDependency[] {
   const dependencies: ScannedDependency[] = [];
   let currentNames: string[] = [];
   let currentVersion: string | null = null;
+  let currentIntegrity: string | null = null;
 
   const flush = () => {
     if (currentNames.length > 0 && currentVersion) {
       for (const name of currentNames) {
-        dependencies.push(
-          dependency(name, currentVersion, manifestPath, 'yarn.lock', declaredScopes.get(name) ?? 'transitive'),
-        );
+        const dep = dependency(name, currentVersion, manifestPath, 'yarn.lock', declaredScopes.get(name) ?? 'transitive');
+        dependencies.push(dep);
+        collectIntegrity(collector, dep, currentIntegrity);
       }
     }
   };
@@ -200,17 +215,30 @@ function dependenciesFromYarnLock(data: Buffer, manifestPath: string, declaredSc
       flush();
       currentNames = namesFromYarnKey(line);
       currentVersion = null;
+      currentIntegrity = null;
       continue;
     }
     const stripped = pyStrip(line);
     if (stripped.startsWith('version ')) {
       const rest = stripped.slice(stripped.indexOf(' ') + 1);
       currentVersion = pyStripChars(pyStrip(rest), '"');
+    } else if (collector && stripped.startsWith('integrity ')) {
+      const rest = stripped.slice(stripped.indexOf(' ') + 1);
+      currentIntegrity = pyStripChars(pyStrip(rest), '"');
     }
   }
   flush();
 
   return dependencies;
+}
+
+/**
+ * L-5 side channel: one record per emitted lock entry with an exact version
+ * (the comparison key needs one). The collector checks the value bounds.
+ */
+function collectIntegrity(collector: IntegrityCollector | undefined, dep: ScannedDependency, integrity: unknown): void {
+  if (!collector || dep.version === null) return;
+  collector.add(dep.manifest_path, dep.name, dep.version, integrity);
 }
 
 function namesFromYarnKey(line: string): string[] {

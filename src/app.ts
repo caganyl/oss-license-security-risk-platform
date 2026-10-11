@@ -24,6 +24,10 @@ import createReportRouter from './routes/reportRoutes';
 import createWorkflowRouter from './routes/workflowRoutes';
 import createProjectRouter from './routes/projectRoutes';
 import createScanRouter from './routes/scanRoutes';
+import createVulnerabilityStatusRouter from './routes/vulnerabilityStatusRoutes';
+import type { AppClock } from './lib/clock';
+import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
+import type { VulnerabilitySchedulerView } from './vulnerability/scheduler';
 
 export interface AppDeps {
   /** Required; the app never falls back to the global pool. */
@@ -34,6 +38,15 @@ export interface AppDeps {
   host?: string;
   /** Allowed local scan roots (P-04); default: parseScanRoots(process.env.SCAN_ROOTS). */
   scanRoots?: string[];
+  /**
+   * Read-only scheduler view for `GET /api/vulnerability-data/status`
+   * (ADR-007 Karar 10). A getter, because the runtime creates the scheduler
+   * after the HTTP server; absent or returning null (tests) -> `paused = true`
+   * and null scheduler values.
+   */
+  vulnerabilityScheduler?: () => VulnerabilitySchedulerView | null;
+  /** Injected application clock of the status endpoint (default: system clock). */
+  clock?: AppClock;
 }
 
 const PUBLIC_DIR = path.join(__dirname, '../public');
@@ -97,6 +110,14 @@ export function createApp(deps: AppDeps): express.Express {
   api.use('/findings', createWorkflowRouter(db));
   api.use(createProjectRouter(db, scanRoots));
   api.use(createScanRouter(db, scanRoots));
+  api.use(
+    createVulnerabilityStatusRouter({
+      db,
+      config: sandboxRunnerConfig.vulnerability,
+      scheduler: deps.vulnerabilityScheduler,
+      clock: deps.clock,
+    }),
+  );
   api.use(apiNotFound());
 
   app.use('/api', api);

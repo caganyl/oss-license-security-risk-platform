@@ -117,7 +117,7 @@ export interface WorkerConfig {
  * limit is a fixed constant (`ENRICHMENT_LIMITS`).
  */
 export interface EnrichmentConfig {
-  /** `REGISTRY_ENRICHMENT`: `on` (default) / `off`. */
+  /** `REGISTRY_ENRICHMENT`: section 7.1 switch (default on; invalid -> off). */
   enabled: boolean;
   /** `REGISTRY_TIMEOUT_MS`: total time of one request attempt (1 ms – 24 h, default 15 000). */
   timeoutMs: number;
@@ -132,6 +132,7 @@ export interface SandboxRunnerConfig {
   worker: WorkerConfig;
   parser: ParserConfig;
   enrichment: EnrichmentConfig;
+  vulnerability: VulnerabilityConfig;
 }
 
 /** Upper bound of `REGISTRY_CONCURRENCY`. */
@@ -182,14 +183,32 @@ export const ENRICHMENT_LIMITS = Object.freeze({
   }),
 });
 
-/** `REGISTRY_ENRICHMENT`: `on`/`off` (case-insensitive); anything else -> default `on` and one warning naming the setting. */
-export function parseEnrichmentSwitch(raw: unknown, warn: (message: string) => void = console.warn): boolean {
-  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return true;
+const SWITCH_ON = new Set(['on', 'true', '1', 'yes']);
+const SWITCH_OFF = new Set(['off', 'false', '0', 'no']);
+
+/**
+ * The single on/off switch parser (REQ-005 contract 1.1.0 section 7.1,
+ * security review L-2; REQ-004 contract 1.3.0 C-24) used by
+ * `VULNERABILITY_LOOKUP`, `VULNERABILITY_RECHECK`, `NVD_ENABLED` and
+ * `REGISTRY_ENRICHMENT`.
+ *
+ * Trimmed, case-insensitive: `on/true/1/yes` -> on, `off/false/0/no` -> off,
+ * empty/unset -> default (on). Any other value fails closed (privacy: these
+ * switches gate outbound requests) with one warning naming only the variable;
+ * the value is never logged.
+ */
+export function parseSwitch(name: string, raw: unknown, warn: (message: string) => void = console.warn, defaultValue = true): boolean {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return defaultValue;
   const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (value === 'on') return true;
-  if (value === 'off') return false;
-  warn('REGISTRY_ENRICHMENT geçersiz (on/off); varsayılan on kullanılıyor.');
-  return true;
+  if (SWITCH_ON.has(value)) return true;
+  if (SWITCH_OFF.has(value)) return false;
+  warn(`${name} geçersiz (on/off/true/false/1/0/yes/no); kapalı (off) kullanılıyor.`);
+  return false;
+}
+
+/** `REGISTRY_ENRICHMENT` (section 7.1 parser; invalid -> off + one warning). */
+export function parseEnrichmentSwitch(raw: unknown, warn: (message: string) => void = console.warn): boolean {
+  return parseSwitch('REGISTRY_ENRICHMENT', raw, warn);
 }
 
 /** Enrichment settings from an environment (range-checked like the queue settings, REQ-003 I-3). */
@@ -208,6 +227,134 @@ export function enrichmentConfigFrom(source: Readonly<Record<string, string | un
       max: MAX_REGISTRY_CONCURRENCY,
       integer: true,
     }),
+  };
+}
+
+/**
+ * Vulnerability lookup and recheck (REQ-005 P-17/P-18, ADR-007 Karar 11,
+ * D-88, D-91, D-98). `NVD_API_KEY` is deliberately **not** part of this
+ * (loggable) object: only `src/vulnerability/client.ts` reads it, once.
+ * `OSV_API_URL` / `NVD_API_URL` are not read anywhere (D-88).
+ */
+export interface VulnerabilityConfig {
+  /** `VULNERABILITY_LOOKUP`: `on` (default) / `off`. */
+  lookupEnabled: boolean;
+  /** `VULNERABILITY_RECHECK`: `on` (default) / `off`. */
+  recheckEnabled: boolean;
+  /** `VULNERABILITY_RECHECK_INTERVAL_HOURS`: integer 1–168 (default 24). */
+  intervalHours: number;
+  /** `OSV_TIMEOUT_MS`: total time of one OSV/NVD attempt (1 ms – 24 h, default 15 000). */
+  timeoutMs: number;
+  /** `OSV_CONCURRENCY`: OSV detail request slots (1–32, default 4). */
+  concurrency: number;
+  /** `NVD_ENABLED`: section 7.1 switch (default on; invalid -> off); off disables only NVD (OSV and the local CVSS v3 score continue). */
+  nvdEnabled: boolean;
+}
+
+/** Fixed vulnerability lookup limits (ADR-007 Karar 3, 4, 6, 7, 8, 9, 11); no environment override. */
+export const VULNERABILITY_LIMITS = Object.freeze({
+  /** Queries per OSV querybatch request (sequential batches). */
+  osvBatchMax: 1000,
+  /** Pages per package (initial result included). */
+  osvMaxPages: 10,
+  /** Vulnerability ids per package result; more -> package unchecked (first ones processed). */
+  osvMaxVulnsPerResult: 1000,
+  /** M-1 (contract 1.1.0 section 3.5.1): distinct ids per package over all pages; more -> package unchecked, none of its ids processed. */
+  osvMaxIdsPerPackage: 200,
+  /** M-1: distinct ids per lookup; a package that would add new ids beyond this -> unchecked. */
+  osvMaxDistinctIds: 5_000,
+  /** M-1: network detail requests per lookup (cache hits not counted; retries count once). */
+  osvMaxDetailRequests: 2_000,
+  client: Object.freeze({
+    querybatchMaxBytes: 16 * MiB,
+    detailMaxBytes: 8 * MiB,
+    nvdMaxBytes: 2 * MiB,
+    maxRetries: 2,
+    retryBackoffMs: Object.freeze([1_000, 2_000]) as readonly number[],
+    maxRetryAfterMs: 30_000,
+    failureThreshold: 5,
+  }),
+  nvd: Object.freeze({
+    /**
+     * NVD publishes 5 / 50 requests per rolling 30 s; the limiter counts
+     * starts, NVD counts arrivals, so the window has a 5 s safety margin
+     * (security re-verification Y-2).
+     */
+    windowMs: 35_000,
+    requestsWithoutKey: 5,
+    requestsWithKey: 50,
+    /** Y-2: minimum spacing between two NVD request starts without an API key (NVD guidance ~6 s). */
+    minSpacingWithoutKeyMs: 6_000,
+    foundTtlMs: 7 * 24 * 60 * 60_000,
+    noCvssTtlMs: 24 * 60 * 60_000,
+  }),
+  recheck: Object.freeze({
+    maxPackages: 10_000,
+    runTimeoutMs: 30 * 60_000,
+    /** Y-1: the lookup gets at most this share of the run limit; the rest (>= 5 of 30 min) is reserved for the write phase. */
+    lookupBudgetShare: 5 / 6,
+    tickIntervalMs: 10 * 60_000,
+    firstCheckDelayMs: 60_000,
+    failureBackoffMs: 60 * 60_000,
+  }),
+  expiry: Object.freeze({
+    intervalMs: 60 * 60_000,
+    batchSize: 500,
+  }),
+  /** Trimming of stored OSV records (ADR-007 Karar 4). */
+  record: Object.freeze({
+    maxAliases: 64,
+    summaryCodePoints: 1000,
+    detailsBytes: 64 * 1024,
+    maxSeverity: 8,
+    severityFieldChars: 256,
+    maxAffected: 256,
+    maxRanges: 16,
+    maxEvents: 64,
+    maxVersions: 1000,
+    maxReferences: 64,
+    referenceUrlChars: 2048,
+  }),
+});
+
+/** Upper bound of `OSV_CONCURRENCY`. */
+export const MAX_OSV_CONCURRENCY = 32;
+
+/** Alias of `parseSwitch` (section 7.1) kept for existing callers. */
+export function parseOnOffSwitch(name: string, raw: unknown, warn: (message: string) => void = console.warn): boolean {
+  return parseSwitch(name, raw, warn);
+}
+
+/** Vulnerability settings from an environment (range-checked; invalid -> default + one warning naming the setting). */
+export function vulnerabilityConfigFrom(
+  source: Readonly<Record<string, string | undefined>>,
+  warn: (message: string) => void = console.warn,
+): VulnerabilityConfig {
+  return {
+    lookupEnabled: parseOnOffSwitch('VULNERABILITY_LOOKUP', source.VULNERABILITY_LOOKUP, warn),
+    recheckEnabled: parseOnOffSwitch('VULNERABILITY_RECHECK', source.VULNERABILITY_RECHECK, warn),
+    intervalHours: boundedNumber(source.VULNERABILITY_RECHECK_INTERVAL_HOURS, 24, {
+      name: 'VULNERABILITY_RECHECK_INTERVAL_HOURS',
+      warn,
+      min: 1,
+      max: 168,
+      integer: true,
+    }),
+    timeoutMs: boundedNumber(source.OSV_TIMEOUT_MS, 15_000, {
+      name: 'OSV_TIMEOUT_MS',
+      warn,
+      min: 1,
+      max: MAX_JOB_TIMEOUT_MS,
+      integer: true,
+    }),
+    concurrency: boundedNumber(source.OSV_CONCURRENCY, 4, {
+      name: 'OSV_CONCURRENCY',
+      warn,
+      min: 1,
+      max: MAX_OSV_CONCURRENCY,
+      integer: true,
+    }),
+    nvdEnabled: parseSwitch('NVD_ENABLED', source.NVD_ENABLED, warn),
   };
 }
 
@@ -275,4 +422,6 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
   },
 
   enrichment: enrichmentConfigFrom(env),
+
+  vulnerability: vulnerabilityConfigFrom(env),
 } as const;

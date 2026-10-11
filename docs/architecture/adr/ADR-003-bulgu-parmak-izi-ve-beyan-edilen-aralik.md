@@ -135,7 +135,15 @@ Yeni bulgu eklenmeden önce aynı projede aynı parmak izli, başka taramaya ait
 - Taşınmayan durumlarda eski bulguya dokunulmaz. `reopen` sonrası en son bulgu
   `open` olduğu için kullanıcının yeniden açma kararı korunur.
 - `CURRENT_DATE`, DB oturumunun saat dilimine göre değerlendirilir (tek makine).
-- Mevcut kabullerin süre dolunca otomatik yeniden açılması P-19/F4'tür.
+  > **ADR-007 ile superseded (2026-10-10):** bu madde ve tablodaki
+  > `CURRENT_DATE` karşılaştırmaları, uygulama sürecinin yerel saat dilimindeki
+  > takvim tarihiyle (`localDateString(clock.now())`, enjekte saat) parametre
+  > olarak yapılır: `accepted_until >= $today::date`. P-19 süre değerlendirmesi
+  > aynı tanımı kullanır (REQ-005 D-99, ADR-007 Karar 9). Taşıma tablosunun
+  > kendisi ve parmak izi formülü değişmez; aynı kurallar yeniden kontrolde
+  > (P-18) açılan bulgular için de geçerlidir.
+- Mevcut kabullerin süre dolunca otomatik yeniden açılması P-19/F4'tür
+  (ADR-007 Karar 9).
 
 #### Backfill (AC-P08-5)
 

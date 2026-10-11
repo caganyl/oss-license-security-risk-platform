@@ -27,8 +27,9 @@ import { type ArchiveTask, type RunArchiveThreadFn, archiveCacheKey, collectArch
 import { DownloadQuota, createBudgetSignal } from './budget';
 import { type CacheDb, type CachedArchive, type CachedMetadata, readArchiveCache, readMetadataCache, writeMetadataCache } from './cache';
 import { type RegistryEcosystem, checkCoordinates, coordinateKey, registryEcosystemOf, requestName } from './coordinates';
-import { HINT_FALLBACK_STATUSES, lockHintOf, registrySummaryLine } from './effectiveLicense';
+import { HINT_FALLBACK_STATUSES, type SummaryEntry, lockHintOf, registrySummaryLine } from './effectiveLicense';
 import { digestKey } from './integrity';
+import { type LockIntegrity, type LockIntegrityRecord, compareLockIntegrity } from './lockIntegrity';
 import { fetchNpmMetadata } from './npmRegistry';
 import { fetchPypiMetadata } from './pypiRegistry';
 import { type RegistryClient, type RegistryClientLimits, type RegistryClock, type RegistryEndpoints, createRegistryClient } from './registryClient';
@@ -52,6 +53,11 @@ export interface DependencyEnrichment {
   declaredLicense: string | null;
   noticeStatus: NoticeStatus;
   noticeArchiveId: string | null;
+  /**
+   * L-5 (REQ-005, ADR-007 Karar 12): stored as `scan_dependencies.lock_integrity`.
+   * `null` when enrichment is off/not injected or the key is not npm.
+   */
+  lockIntegrity: LockIntegrity | null;
 }
 
 export interface EnrichmentResult {
@@ -66,6 +72,8 @@ export interface EnrichOptions {
   signal: AbortSignal;
   /** `computeBudgetMs(...)`; `<= 0` means no request at all. */
   budgetMs: number;
+  /** L-5 side channel of the parser thread (npm lockfile `integrity` values); absent -> every npm key `not_comparable`. */
+  lockIntegrity?: readonly LockIntegrityRecord[];
 }
 
 export interface DependencyEnricher {
@@ -141,16 +149,51 @@ function groupKeys(dependencies: readonly EnrichmentDependency[]): Map<string, K
 }
 
 function buildResult(infos: Iterable<KeyInfo>, outcomes: Map<string, DependencyEnrichment>, summary: 'enabled' | 'disabled' | 'none'): EnrichmentResult {
-  const entries: Array<{ status: EnrichmentStatus; usedHint: boolean }> = [];
+  const entries: SummaryEntry[] = [];
   for (const info of infos) {
     const outcome = outcomes.get(info.key);
-    if (outcome) entries.push({ status: outcome.status, usedHint: HINT_FALLBACK_STATUSES.has(outcome.status) && info.hasHint });
+    if (outcome) {
+      entries.push({
+        status: outcome.status,
+        usedHint: HINT_FALLBACK_STATUSES.has(outcome.status) && info.hasHint,
+        integrityMismatch: outcome.lockIntegrity === 'mismatch',
+      });
+    }
   }
   return { outcomes, summaryLine: summary === 'none' ? null : registrySummaryLine(entries, summary === 'enabled') };
 }
 
-function noRequestOutcome(info: KeyInfo, status: EnrichmentStatus): DependencyEnrichment {
-  return { status, registry: info.registry, declaredLicense: null, noticeStatus: info.runtime ? 'not_attempted' : 'not_runtime', noticeArchiveId: null };
+/**
+ * `lock_integrity` of a key without a comparison: enrichment on and npm ->
+ * `not_comparable` (no registry `found` side); off/not injected or PyPI -> null.
+ */
+function defaultLockIntegrity(info: KeyInfo, enabled: boolean): LockIntegrity | null {
+  return enabled && info.registry === 'npm' ? 'not_comparable' : null;
+}
+
+function noRequestOutcome(info: KeyInfo, status: EnrichmentStatus, enabled = status !== 'disabled'): DependencyEnrichment {
+  return {
+    status,
+    registry: info.registry,
+    declaredLicense: null,
+    noticeStatus: info.runtime ? 'not_attempted' : 'not_runtime',
+    noticeArchiveId: null,
+    lockIntegrity: defaultLockIntegrity(info, enabled),
+  };
+}
+
+/** Groups the side-channel records by enrichment key (npm only; records without an exact-version key are dropped). */
+function lockRecordsByKey(records: readonly LockIntegrityRecord[] | undefined): Map<string, LockIntegrityRecord[]> {
+  const byKey = new Map<string, LockIntegrityRecord[]>();
+  for (const record of records ?? []) {
+    if (!record.version) continue;
+    const key = enrichmentKeyOf({ ecosystem: 'nodejs', name: record.name, version: record.version });
+    if (key === null) continue;
+    const list = byKey.get(key);
+    if (list) list.push(record);
+    else byKey.set(key, [record]);
+  }
+  return byKey;
 }
 
 /**
@@ -286,10 +329,11 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
           declaredLicense: status === 'ok' ? outcome.metadata.declaredLicense : null,
           noticeStatus: info.runtime ? 'not_attempted' : 'not_runtime',
           noticeArchiveId: null,
+          lockIntegrity: defaultLockIntegrity(info, true),
         });
         return;
       }
-      outcomes.set(info.key, noRequestOutcome(info, outcome.kind));
+      outcomes.set(info.key, noRequestOutcome(info, outcome.kind, true));
     };
 
     // 3. Metadata (cache hit, else request; stale row only on a transient failure).
@@ -328,8 +372,22 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       setMetadataOutcome(info, outcome);
     });
 
-    // 4. Archive stage: runtime keys whose metadata was found.
-    const archiveInfos = requestable.filter((info) => info.runtime && found.has(info.key));
+    // 3b. L-5 lock integrity (ADR-007 Karar 12): after metadata, before archives.
+    // A `mismatch` key never reaches the archive stage (no download, no cached
+    // archive): it keeps `notice_status = 'not_attempted'`/`'not_runtime'`.
+    const lockRecords = lockRecordsByKey(enrichOptions.lockIntegrity);
+    const mismatched = new Set<string>();
+    for (const info of requestable) {
+      const metadata = found.get(info.key);
+      const current = outcomes.get(info.key);
+      if (info.registry !== 'npm' || metadata === undefined || current === undefined) continue;
+      const lockIntegrity = compareLockIntegrity(lockRecords.get(info.key) ?? [], metadata.archiveCandidates);
+      if (lockIntegrity === 'mismatch') mismatched.add(info.key);
+      outcomes.set(info.key, { ...current, lockIntegrity });
+    }
+
+    // 4. Archive stage: runtime keys whose metadata was found (L-5 mismatch keys excluded).
+    const archiveInfos = requestable.filter((info) => info.runtime && found.has(info.key) && !mismatched.has(info.key));
     let cachedArchives = new Map<string, CachedArchive>();
     if (archiveInfos.length > 0 && !signal.aborted) {
       const keys = archiveInfos.flatMap((info) => {
@@ -384,7 +442,7 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       if (client === null) return disabledEnrichment(dependencies, true);
       const infos = groupKeys(dependencies);
       const outcomes = new Map<string, DependencyEnrichment>();
-      for (const info of infos.values()) outcomes.set(info.key, noRequestOutcome(info, classified(info) ?? 'error'));
+      for (const info of infos.values()) outcomes.set(info.key, noRequestOutcome(info, classified(info) ?? 'error', true));
       return buildResult(infos.values(), outcomes, 'enabled');
     },
     close() {

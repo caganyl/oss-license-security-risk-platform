@@ -2,12 +2,16 @@
 
 - **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10
 - **status:** approved
-- **Sürüm:** 1.1.0 (revizyon: bkz. bölüm 13)
+- **Sürüm:** 1.3.0 (revizyon: bkz. bölüm 13)
 - **Tarih:** 2026-10-10
 - **Makine okunur contract:** `docs/contracts/REQ-004-notice-api.openapi.yaml` (OpenAPI 3.0.3;
-  `info.version` 1.0.0 kalır — 1.1.0 revizyonu uç nokta yüzeyini değiştirmez)
+  `info.version` 1.0.0 kalır — 1.1.0 ve 1.2.0 revizyonları uç nokta yüzeyini değiştirmez)
 - **Revizyon dayanağı (1.1.0):** `docs/quality/security-reports/REQ-004-security-review.md`
   bulguları L-1, L-2, I-3 ve M-1
+- **Revizyon dayanağı (1.2.0):** `docs/product/REQ-005.md` L-5 (AC-L5-1…4, D-103),
+  `docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md` Karar 12 ve 14
+  (`scan_dependencies.lock_integrity`); ilgili F4 contract'ı
+  `docs/contracts/REQ-005-vulnerability-data.md`
 - **İlgili:** `docs/product/REQ-004.md` (AC-G-4, AC-P14-13, AC-P14-17, AC-P14-18,
   AC-P14-19, AC-L6-2…4, AC-P15-11…15, AC-P16-1…7; kararlar D-62, D-63,
   D-69…D-74), `docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md`
@@ -41,6 +45,19 @@
 > arayüz (bölüm 7) ve API yüzeyi (bölüm 2, OpenAPI) değişmez. Mevcut kod
 > 1.1.0'a uyana kadar bu bölümlerde contract'tan sapmaktadır; backend-engineer
 > ve qa-automation düzeltmeyi bu sürüme göre yapar (bölüm 13).
+>
+> **1.2.0 revizyonu (REQ-005 L-5, lock `integrity` uyuşmazlığı)** — Onaylandı
+> (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10. Yeni saklanan kolon
+> `scan_dependencies.lock_integrity` (`match` / `mismatch` / `not_comparable` /
+> `NULL`; göç `007`) çıktı gösterimini belirler (bölüm 4.4). Değişiklikler yalnız
+> `mismatch` satırlarının Excel `License Source` metnini (4.1, 5.1), NOTICE
+> `Reason:` seçimini (4.3), `[registry]` satırındaki uyuşmazlık sayısını (8) ve
+> SBOM'daki `NOASSERTION` davranışını (6) tanımlar. `license_source` ve
+> `notice_status` değer kümeleri **değişmez**; API yüzeyi, arayüz (bölüm 7) ve
+> `NOTICE format: 1` değişmez. `match`, `not_comparable` ve `NULL` satırlarında
+> tüm çıktılar 1.1.0 ile bayt bayt aynıdır (AC-L5-4; NOTICE golden'ı değişmez).
+> Bu revizyon REQ-005 implementation'ıyla birlikte uygulanır; kapıları REQ-005
+> contract'ındadır (`docs/ownership/REQ-005.json`, göç `007`).
 
 ## İçindekiler
 
@@ -71,6 +88,9 @@ Bu contract F3'ün dışarıdan görünen yüzeyini sabitler:
 - Arayüzdeki "NOTICE" bağlantısı (AC-P15-15).
 - Taramanın uyarı metnine eklenen `[registry]` satırının şablonu (AC-P14-13,
   ADR-006 Karar 11).
+- (1.2.0) L-5 lock `integrity` uyuşmazlığının (`scan_dependencies.lock_integrity`)
+  Excel, NOTICE, SBOM ve `[registry]` gösterimi (REQ-005 AC-L5-2, ADR-007 Karar 12).
+  Uyuşmazlık olmayan taramalarda çıktılar 1.1.0 ile bayt bayt aynıdır.
 
 **Geriye uyumluluk (AC-G-4, D-74):**
 
@@ -483,15 +503,23 @@ gerektirir.
 | `registry:npm` | npm kayıt defteri lisansı | `registry:npm`; uyuşmazlıkta `registry:npm (lockfile differs: <ipucu>)` | `registry:npm` |
 | `registry:pypi` | PyPI lisansı | `registry:pypi`; uyuşmazlıkta `registry:pypi (lockfile differs: <ipucu>)` | `registry:pypi` |
 | `lockfile (unverified)` | Lock ipucu, doğrulanmadı (AC-L6-3) | `lockfile (unverified)` | `lockfile (unverified)` |
-| `none` | Etkin lisans yok | `none`; durum `no_license` ve ipucu varsa `none (lockfile hint ignored: <ipucu>)` | `none` |
+| `none` | Etkin lisans yok | `none`; `lock_integrity = 'mismatch'` ise `none (lockfile integrity mismatch)` (1.2.0, öncelikli); aksi hâlde durum `no_license` ve ipucu varsa `none (lockfile hint ignored: <ipucu>)` | `none` |
 | `NULL` | F3 öncesi tarama | boş hücre | `not recorded` |
 
+- **L-5 (1.2.0):** `lock_integrity = 'mismatch'` satırında `license_source` her zaman
+  `none`, `license_expression` `NULL`'dır (ADR-007 Karar 12); Excel hücresi tam olarak
+  `none (lockfile integrity mismatch)` olur — ipucu ve kayıt defteri lisansı metne
+  **yazılmaz** (doğrulanmamış veri). Bu metin `none (lockfile hint ignored: …)` metnine
+  göre önceliklidir. NOTICE `License source:` değeri `none` kalır; uyuşmazlık NOTICE'ta
+  `Reason:` satırıyla görünür (bölüm 4.3).
 - Uyuşmazlık: `license_hint_differs = true` (yalnız durum `ok` iken dolu).
 - `<ipucu>` = `license_lock_hint`; tek satırlık alan kuralı (bölüm 9) ve 200
   kod noktası kesimi (saklanırken zaten kesilmiştir; çıktıda yeniden
   uygulanır).
-- NOTICE'ta uyuşmazlık ve yok sayılan ipucu gösterilmez (NOTICE dağıtım
-  belgesidir; L-6 görünürlüğü raporun işidir).
+- NOTICE'ta lisans ipucu uyuşmazlığı (`license_hint_differs`) ve yok sayılan
+  ipucu gösterilmez (NOTICE dağıtım belgesidir; L-6 görünürlüğü raporun işidir).
+  L-5 bütünlük uyuşmazlığı (`lock_integrity = 'mismatch'`) ise NOTICE'ta yalnız
+  `Reason:` satırıyla görünür (bölüm 4.3 satır 15; 1.2.0).
 
 ### 4.2 `license_enrichment_status`
 
@@ -512,10 +540,21 @@ Bu değer bugün hiçbir çıktıda **ham olarak** gösterilmez; NOTICE `Reason:
 metnine (bölüm 4.3) ve `[registry]` sayımına (bölüm 8) dönüşür. Excel'e durum
 sütunu eklenmez (D-63).
 
+**`REGISTRY_ENRICHMENT` ayrıştırması (1.3.0; C-24).** F4 açma/kapama anahtarlarıyla
+aynı ayrıştırıcı kullanılır (REQ-005 contract 1.1.0 bölüm 7.1): büyük/küçük harf duyarsız,
+baştaki ve sondaki boşluk kırpılır. `on|true|1|yes` → açık; `off|false|0|no` → kapalı
+(`disabled`); boş veya tanımsız → varsayılan (açık); **başka her değer → kapalı**. Kapalıya
+düşüldüğünde tek uyarı yazılır ve uyarı yalnız değişken adını içerir (değer loglanmaz).
+**F3'ten davranış farkı:** F3'te (1.0.0–1.2.0, ADR-006 Karar 14) geçersiz değer varsayılana,
+yani **açık**a düşüyordu; artık gizlilik gereği kapalıya düşer (fail-closed). `off`, boş ve
+tanımsız değerlerin anlamı değişmez. Etkin değer kapalıysa çıktılar mevcut `disabled`
+satırının kurallarıyla üretilir; çıktı biçimi değişmez.
+
 ### 4.3 `notice_status` ve NOTICE `Reason:` metni
 
 `Reason:` yalnız metinsiz girdide yazılır. Seçim sırası: önce satır 14, sonra
-satır 1–2, sonra `notice_status` (satır 3–13); ilk eşleşen satır kazanır.
+satır 15 (1.2.0), sonra satır 1–2, sonra `notice_status` (satır 3–13); ilk eşleşen
+satır kazanır.
 
 | # | Koşul | `Reason:` metni |
 | --- | --- | --- |
@@ -541,11 +580,55 @@ satır 1–2, sonra `notice_status` (satır 3–13); ilk eşleşen satır kazan�
 | | diğer | `package archive not collected` |
 | 13 | `not_runtime` | NOTICE'ta yer almaz (runtime değil) |
 | 14 | Ekosistem `nodejs`/`python` dışında | `license enrichment not supported for this ecosystem` |
+| 15 | `lock_integrity = 'mismatch'` (1.2.0; bu durumda `notice_status = 'not_attempted'`, `notice_archive_id = NULL`) | `lockfile integrity does not match registry; license not verified` |
 
+- Satır 15 aynı anahtarın tüm runtime satırları için geçerlidir (`lock_integrity`
+  anahtar düzeyinde hesaplanır, aynı anahtarın satırları aynı değeri taşır; ADR-007
+  Karar 12). Uyuşmazlıklı girdide arşiv kaydı kullanılmadığı için girdi her zaman
+  metinsizdir: `License: NOASSERTION`, `License source: none`,
+  `Copyright: (none found)`, `License files: 0`, `Reason:` satır 15, `SPDX license:`
+  satırı yok (ifade boş). Önbellekte aynı anahtarın arşiv kaydı bulunsa bile
+  NOTICE onu **okumaz** (AC-L5-2).
 - Arşiv kaydının `outcome_detail` değeri NOTICE'a yazılmaz.
 - Önbelleğe yazılan sonuçlar: `collected`, `no_license_file`,
   `unsupported_format`, `limit_exceeded`. Diğerleri geçicidir; tarama satırında
   durur, önbellekte yoktur (ADR-006 Karar 7, 10).
+
+### 4.4 `lock_integrity` (1.2.0, REQ-005 L-5)
+
+Saklama yeri `scan_dependencies.lock_integrity` (göç `007`, `TEXT NULL` + CHECK).
+Anahtar `(npm, istek adı, sürüm)`; karşılaştırma kuralı ADR-007 Karar 12.
+
+| Değer | Anlamı | Çıktı etkisi |
+| --- | --- | --- |
+| `match` | Her karşılaştırılabilir lock `sha512` değeri kayıt defteri `dist.integrity` `sha512` kümesiyle en az bir öğe paylaşıyor | Yok — F3 ile aynı (AC-L5-4) |
+| `not_comparable` | Bir tarafta `sha512` yok (lock değeri yok/bozuk/yalnız `sha1`/sınır dışı; meta veri `found` değil veya `sha512` arşiv adayı yok) | Yok — F3 ile aynı |
+| `mismatch` | En az bir lock kaydı kayıt defteri kümesiyle hiç öğe paylaşmıyor | Fail-safe (aşağıda) |
+| `NULL` | Zenginleştirme kapalı/enjekte edilmemiş, npm dışı ekosistem, F4 öncesi tarama | Yok — F3 ile aynı |
+
+**`mismatch` satırının saklanan değerleri (ADR-007 Karar 12):**
+`license_expression = NULL`, `license_source = 'none'`, `license_hint_differs = false`,
+`notice_status = 'not_attempted'` (runtime) veya `'not_runtime'` (`dev`),
+`notice_archive_id = NULL`. `license_enrichment_status` meta verinin sonucunu korur
+(`ok` veya `no_license`); `license_lock_hint` saklı kalır ama hiçbir çıktıya yazılmaz.
+Runtime paket için `NOASSERTION` (`unknown`) lisans bulgusu açılır (ADR-003 c
+parmak izi anahtarı `NOASSERTION`).
+
+**Çıktı özeti:**
+
+| Çıktı | `mismatch` gösterimi | Bölüm |
+| --- | --- | --- |
+| Excel `Dependencies.License` | boş metin | 5.1 |
+| Excel `Dependencies.License Source` | `none (lockfile integrity mismatch)` | 4.1, 5.1 |
+| Excel `Licenses` | `NOASSERTION` bulgusu mevcut satır kuralıyla (yapı değişmez) | 5.1a |
+| PDF `License` | `n/a` | 5.2 |
+| NOTICE | metinsiz girdi, `Reason: lockfile integrity does not match registry; license not verified` | 4.3 |
+| SPDX 2.3 | `licenseDeclared` `NOASSERTION`, `copyrightText` `NOASSERTION`, `licenseComments` yok (L-6 lock satırı da yok, kaynak `none`) | 6.1 |
+| CycloneDX 1.5 | `licenses` ve `copyright` yazılmaz | 6.2, 6.3 |
+| `[registry]` | uyuşmazlık sayısı `X` | 8 |
+
+`lock_integrity` hiçbir JSON yanıtında dönmez (AC-G-4) ve Excel'e ayrı sütun olarak
+eklenmez (D-63).
 
 ## 5. Excel ve PDF raporları
 
@@ -558,7 +641,7 @@ Mevcut 7 sütun aynen kalır (1.1.0: formül kalkanı öneki hariç, bölüm
 | --- | --- | --- | --- | --- |
 | 1–7 | `Name`, `Version`, `Ecosystem`, `Scope`, `Manifest`, `Depth`, `PURL` | mevcut | mevcut | mevcut |
 | 8 | `License` | `license` | 32 | `license_expression`; boş/`NULL` → boş metin |
-| 9 | `License Source` | `licenseSource` | 48 | bölüm 4.1 "Excel" sütunu; F3 öncesi → boş metin |
+| 9 | `License Source` | `licenseSource` | 48 | bölüm 4.1 "Excel" sütunu (1.2.0: `lock_integrity = 'mismatch'` → `none (lockfile integrity mismatch)`); F3 öncesi → boş metin |
 
 - Satır başına bir `scan_dependencies` satırı (mevcut). Başlık satırı kalın,
   donuk ve otomatik filtreli (mevcut döngü; filtre 9 sütunu kapsar).
@@ -637,6 +720,14 @@ satırları `notice_archive_id` → `registry_archive_cache.copyright_lines`
 **Etkin lisans girdisi (`L`):**
 
 - F3 sonrası tarama: `license_expression` (boş/`NULL` → yok).
+- **L-5 (1.2.0):** `lock_integrity = 'mismatch'` satırında `license_expression`
+  `NULL` olduğu için `L` yoktur → SPDX `licenseDeclared`/`PackageLicenseDeclared`
+  `NOASSERTION`, CycloneDX `licenses` yazılmaz. `notice_archive_id` `NULL` olduğu
+  için telif satırı yoktur → SPDX `copyrightText` `NOASSERTION`, CycloneDX
+  `copyright` yazılmaz. `license_source = 'none'` olduğu için `licenseComments`
+  satırı (b) oluşmaz; uyuşmazlık için yeni `licenseComments` satırı **eklenmez**
+  (SBOM'da `NOASSERTION` yeterli fail-safe sinyalidir; CycloneDX'te karşılığı yok).
+  Uyuşmazlıklı anahtar için F3 öncesi kaynağa (`license_findings`) geri düşülmez.
 - F3 öncesi tarama (`license_source IS NULL`): bugünkü kaynak — paketin
   `license_findings` değerlerinden (`normalizedLicense`, yoksa
   `detectedLicense`) tekrarsız, ilk görülme sırasıyla ` AND ` ile birleşik
@@ -789,6 +880,33 @@ bir anahtar varsa:
 - Etkilenen anahtar yoksa ve zenginleştirme açıksa satır yoktur.
   Zenginleştirici enjekte edilmemişse (yalnız testler) satır yazılmaz.
 
+**L-5 uyuşmazlık sayısı (1.2.0).** `X` = `lock_integrity = 'mismatch'` olan
+benzersiz `(npm, istek adı, sürüm)` anahtar sayısı. Uyuşmazlıklı anahtarların
+zenginleştirme durumu `ok`/`no_license` olduğundan `T`'ye girmezler. Satır yine
+**tek** satırdır:
+
+- Zenginleştirme açık, `T > 0` ve `X > 0` → "incomplete" şablonunun sonuna bir
+  boşluk ve şu metin eklenir:
+
+  ```
+  Lockfile integrity mismatch: <X> package(s) (registry license and lockfile hint not used).
+  ```
+
+  Tam örnek:
+  `[registry] Registry lookup incomplete for 3 package(s) (unreachable: 3, error: 0, time budget exceeded: 0); license from lockfile (unverified): 1, no license: 2. Lockfile integrity mismatch: 1 package(s) (registry license and lockfile hint not used).`
+- Zenginleştirme açık, `T = 0` ve `X > 0` → üçüncü şablon:
+
+  ```
+  [registry] Lockfile integrity mismatch for <X> package(s); registry license and lockfile hint not used.
+  ```
+
+- `X = 0` → satır 1.1.0 ile bayt bayt aynıdır (veya yoktur). Zenginleştirme
+  kapalıyken karşılaştırma yapılmaz (`lock_integrity` `NULL`, `X = 0`); kapalı
+  şablon değişmez.
+- Satır sırası ve arındırma değişmez: `parse_errors` → `[registry]`; REQ-005 ile
+  ardından `[osv]` → `[nvd]` gelir (`docs/contracts/REQ-005-vulnerability-data.md`
+  bölüm 3.4).
+
 ## 9. Ortak metin kuralları
 
 Güvenilmeyen her metin (paket adı, sürüm, purl, proje adı, lisans ifadesi,
@@ -837,11 +955,13 @@ sütunlarına adım 1–3 uygulanmaz.
 | qa-automation | **Uç nokta (contract testi):** `200` başlıkları (`Content-Type`, `Content-Disposition`, `Content-Length`, `X-Checksum-SHA256` = gövde özeti, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`); büyük harfli `scanId` ile istekte dosya adının küçük harf olması; `400`/`401`/`403`/`404` (tarama yok ve `running`/`failed` tarama) gövdeleri ve kodları, hata yanıtında `Content-Disposition` olmaması; API anahtarıyla erişim; istek sırasında ağ isteği yapılmaması ve `sbom_documents`/`reports`/disk yazımı olmaması. **Biçim:** golden NOTICE (`tests/fixtures/notice/*.txt`, `-text`) bayt bayt; iki istekte aynı bayt; BOM yok, CR yok, son satır LF; sıralama (büyük/küçük harfli adlar, sürümsüz paket); runtime tekilliği (girdi sayısı = tekil runtime anahtar sayısı; `dev`+runtime paket bir kez, yalnız `dev` yok); ayraç kalkanı (lisans metninde `ENTRY_SEP` ve `FILE_SEP` satırları); atlanmış dosya; `Reason:` tablosunun en az `no_license_file`, `limit_exceeded`, `version_unknown`, `unreachable`, F3 öncesi satırları; SPDX bağlantıları; PyPI meta veri metni bloğu; 64 MiB kesimi (test sırasında üretilen büyük metinle); F3 öncesi tarama notu. **Raporlar:** `.xlsx` geri okuma — `Dependencies` başlıkları 9 sütun ve sırası, değerler, uyuşmazlık ve `none (lockfile hint ignored: …)` hücreleri, formül kalkanı, F3 öncesi boş hücreler, `Licenses` sayfasının yapısının (sütunlar, sıra, satır kümesi) değişmediği; PDF üretiminin hatasız olduğu. **SBOM:** AC-P16-1…7; `licenseComments` iki satır kuralı; tag-value enjeksiyon testi; CycloneDX JSON tek girdi; XML öğe sırası ve geçersiz karakter. **Arayüz (jsdom):** `completed` satırda `a[href="/api/scans/<id>/notice"]` vardır, metni `NOTICE`, SBOM bağlantısı korunur; diğer durumlarda yoktur. **`[registry]`:** iki şablonun birebir metni. **Geriye uyumluluk:** mevcut contract testleri değiştirilmeden yeşil. |
 | backend-engineer (1.1.0) | L-1: tag-value tek satırlık değerlerde `<text>`/`</text>` kaçışı (6.1). L-2: Excel kalkanının tüm sayfalardaki metin hücrelerine uygulanması, sayı hücrelerinin tipinin korunması (5.1a). I-3: adım 3'e U+0085/U+2028/U+2029 eklenmesi ve NOTICE ayraç kalkanının bu karakterlerden sonra da uygulanması (3.6, 9). M-1: NOTICE metinlerinin parti parti okunması ve kesimden sonra hiç okunmaması (3.7). Lint, typecheck ve hedef test sonuçları raporlanır. |
 | qa-automation (1.1.0) | **L-1:** lock'ta adı `<text>gizli` (ve `<TEXT>…`, içinde `</text>` geçen ad/sürüm/yazar/ana sayfa) olan paketle SPDX tag-value: hiçbir tek satırlık değer ham `<text>` ile başlamaz ve ham `<text>`/`</text>` içermez; değer `&lt;text&gt;gizli`; ham `<text>` ve `</text>` sayısı yalnız üreticinin `PackageLicenseComments`/`PackageCopyrightText` blok sayısına eşit; sonraki paketin `PackageName` satırı belgede ayrı satır olarak bulunur; SPDX JSON ve CycloneDX çıktıları değişmez. **L-2:** `.xlsx` geri okuma — `Dependencies` `Name`/`Version`/`PURL`/`Manifest`, `Licenses` `Detected License`/`Normalized License`/`Package`, `Vulnerabilities` `Title`/`Advisory` ve `Summary` `Project` hücrelerinde `=`, `+`, `-`, `@`, `\t`, `\r` ile başlayan değerler `'` önekli; bu karakterlerle başlamayan değerler değişmemiş; `Depth`, `CVSS` ve `Summary` sayaçları sayı tipinde; hiçbir hücre formül değil. **I-3:** NOTICE tek satırlık alanlarında (ad, telif) U+2028/U+2029 → boşluk; lisans metninde U+2028 + `ENTRY_SEP` ve U+2029 + `FILE_SEP` → ayırıcıdan sonra tek boşluk; ayırıcı korunur; SPDX tag-value tek satırlık değerde U+2028 yok. **M-1:** çok sayıda büyük önbellek satırıyla (ör. 200 × 4 MiB) NOTICE üretiminde tepe heap kullanımının sınırlı kalması (güvenlik raporu hedefi < ~300 MB) ve çıktının 64 MiB kesim kuralına uyması; mevcut golden NOTICE'lar değişmeden geçer. |
-| security-red-team | NOTICE ayraç sahteciliği, tag-value/XML/Excel enjeksiyonu, uç noktada yetki ve hata gövdesi sızıntısı incelemesi. 1.1.0 sonrası M-1 ve L-1 düzeltmelerinin merge öncesi yeniden incelenmesi (güvenlik raporu "Merge kararı"). |
+| security-red-team | NOTICE ayraç sahteciliği, tag-value/XML/Excel enjeksiyonu, uç noktada yetki ve hata gövdesi sızıntısı incelemesi. 1.1.0 sonrası M-1 ve L-1 düzeltmelerinin merge öncesi yeniden incelenmesi (güvenlik raporu "Merge kararı"). 1.2.0: L-5 fail-safe'inin bulgu gizlemeye yol açmadığı (saldırgan lock değeri yalnız daha muhafazakâr çıktı üretir). |
+| backend-engineer (1.2.0) | `lock_integrity` saklama (4.4); Excel `none (lockfile integrity mismatch)` metni ve önceliği (4.1, 5.1); NOTICE satır 15 seçimi ve uyuşmazlıklı anahtarda arşiv önbelleğinin okunmaması (4.3); `[registry]` `X` eki ve üçüncü şablon (8); SBOM'da `NOASSERTION` ve yeni `licenseComments` satırı olmaması (6). Lint, typecheck, hedef testler raporlanır. |
+| qa-automation (1.2.0) | Lock'ta kayıt defterinden farklı `sha512` taşıyan npm paketiyle (sahte kayıt defteri): `lock_integrity = 'mismatch'`, arşiv isteği **sıfır** (önbellekte kayıt olsa bile NOTICE onu kullanmaz), Excel `License` boş ve `License Source` = `none (lockfile integrity mismatch)` (lock ipucu ve kayıt defteri lisansı metinde yok), NOTICE girdisi satır 15 nedeni ve `License: NOASSERTION`, SPDX `licenseDeclared`/`copyrightText` `NOASSERTION` ve `licenseComments` yok, CycloneDX `licenses`/`copyright` yok, PDF `n/a`, runtime pakette `NOASSERTION` lisans bulgusu, `[registry]` satırında `X` (yalnız uyuşmazlık → üçüncü şablon; erişilemeyen paketle birlikte → ekli "incomplete" şablonu). Eşleşen, yalnız `sha1`, bozuk, 1025 karakterlik lock değerinde ve PyPI paketinde çıktılar 1.1.0 ile aynı; mevcut NOTICE golden'ı ve P-10 golden'ları değişmeden yeşil (AC-L5-3, AC-L5-4). |
 
 ## 11. Sürümleme
 
-- Contract sürümü **1.1.0** (minor: güvenlik sertleştirmesi; uç nokta,
+- Güncel contract sürümü **1.2.0** (aşağıda). 1.1.0 notu: (minor: güvenlik sertleştirmesi; uç nokta,
   şema, sütun ve değer kümeleri değişmez). API yolu sürümlenmez (`/api/...`,
   mevcut desen). OpenAPI `info.version` 1.0.0 kalır.
 - **NOTICE biçim sürümü 1.1.0'da `1` kalır.** I-3 kalkan genişletmesi ve
@@ -851,6 +971,16 @@ sütunlarına adım 1–3 uygulanmaz.
   (karar C-17). Aşağıdaki kural F3 merge edildikten sonraki değişikliklere
   uygulanır. Golden dosyalar bu karakterleri içermiyorsa değişmez; içeriyorsa
   güncellenir.
+- **1.2.0 (L-5):** contract sürümü minor artar (yeni saklanan kolon ve yeni çıktı
+  metinleri; mevcut değer kümeleri ve anlamları değişmez). **`NOTICE format: 1`
+  kalır** (karar C-20): bölüm 3'teki biçim — üst bilgi, girdi alanları, sıralama,
+  ayraçlar, blok yapısı — değişmez; yalnız bölüm 4.3 `Reason:` tablosuna yeni bir
+  **değer** (satır 15) eklenir ve bu değer yalnız F4 sonrası, uyuşmazlıklı
+  girdilerde görünür. Mevcut tüm girdiler için çıktı baytları değişmez (golden
+  değişmez). Aşağıdaki "her bayt değişikliği" kuralı bu nedenle **biçim**
+  değişikliklerine (bölüm 3 yapısı, mevcut girdilerin baytları) uygulanır;
+  bölüm 4 değer tablolarına yalnız yeni koşul için yeni değer eklemek minor
+  contract revizyonudur ve biçim numarasını artırmaz. Excel'de yeni sütun yoktur.
 - NOTICE biçim sürümü üst bilgideki `NOTICE format: 1` satırıdır. Bölüm 3'te
   çıktı baytlarını değiştiren her değişiklik bu sayıyı artırır, golden
   dosyayı günceller ve bu contract'ın yeni sürümünü gerektirir.
@@ -885,6 +1015,11 @@ Tümü "kullanıcı daimi talimatı (önerilen seçenek), 2026-10-10".
 | C-16 | Unicode satır ayırıcıları (1.1.0) | U+0085/U+2028/U+2029 tek satırlık değerlerde boşluk; çok satırlı NOTICE metninde korunur ama ayraç kalkanı için satır sonu sayılır | Güvenlik raporu I-3 |
 | C-17 | NOTICE biçim numarası (1.1.0) | `NOTICE format: 1` kalır | F3 yayımlanmadı; numarayı artırmak tüketicisi olmayan bir sürüm farkı yaratırdı |
 | C-18 | NOTICE bellek sınırı (1.1.0) | Metinler parti parti okunur, ilk kesimden sonra hiç okunmaz; çıktı biçimi değişmez | Güvenlik raporu M-1 |
+| C-19 | L-5 Excel metni (1.2.0) | `none (lockfile integrity mismatch)`; ipucu/kayıt defteri lisansı yazılmaz; `none (lockfile hint ignored: …)`'a göre öncelikli | AC-L5-2 "hücre uyuşmazlığı belirtir"; doğrulanmamış lisansı rapora taşımamak |
+| C-20 | NOTICE biçim numarası (1.2.0) | `NOTICE format: 1` kalır; yeni `Reason:` değeri (satır 15) minor değer eklemesidir | Biçim/yapı değişmez, mevcut girdilerin baytları değişmez (AC-L5-4); F3 merge edildiği için kural netleştirildi (bölüm 11) |
+| C-21 | `[registry]` uyuşmazlık sayısı (1.2.0) | Tek satır: "incomplete" şablonuna ek cümle veya yalnız uyuşmazlık için üçüncü şablon; `X = 0` iken 1.1.0 ile aynı | AC-L5-2, ADR-007 Karar 12; tek satır kuralı (ADR-006 Karar 11) |
+| C-22 | SBOM'da uyuşmazlık açıklaması (1.2.0) | Yeni `licenseComments` satırı yok; yalnız `NOASSERTION` | AC-L5-2 yalnız `NOASSERTION` ister; CycloneDX'te karşılığı yok; değişiklik yüzeyini küçük tutmak |
+| C-23 | NOTICE `Reason:` önceliği (1.2.0) | Satır 15, satır 14'ten sonra ve satır 1–2'den önce | Uyuşmazlık yalnız F4 sonrası taramalarda oluşur; `not_attempted` genel nedeninden daha belirgin |
 
 **Handoff:** Bu contract non-trivial'dir. Implementation ve doğrulama sonunda
 `docs/handoffs/REQ-004.md` güncellenmelidir (integration-release; Delivery Lead
@@ -892,7 +1027,9 @@ takip eder). Handoff'a yazılacaklar: golden NOTICE dosyasının yolu, CycloneDX
 XSD sırası teyidi (bölüm 6.3) ve bu contract'tan sapma varsa gerekçesi.
 1.1.0 için ek olarak: contract revizyonunun güvenlik bulgularına (L-1, L-2,
 I-3, M-1) atfı, düzeltmelerin durumu ve M-1 kapatılmadan merge edilecekse
-insan risk kabulü.
+insan risk kabulü. 1.2.0 (L-5) uygulaması REQ-005 kapsamında yapıldığı için
+kanıtı `docs/handoffs/REQ-005.md`'ye yazılır (uyuşmazlık testleri, golden'ların
+değişmediği).
 
 **ADR uyumu (1.1.0):** C-14 ve C-15, ADR-006 Karar 13 tablosundaki SPDX
 tag-value ve Excel satırlarından daha sıkıdır. Bu bir gevşetme değil güvenlik
@@ -913,3 +1050,5 @@ ADR-006 ve repo kodu (`src/controllers/sbomController.ts`,
 | --- | --- | --- | --- | --- |
 | 1.0.0 | 2026-10-10 | İlk sürüm. | REQ-004, ADR-006 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.1.0 | 2026-10-10 | **L-1:** SPDX tag-value tek satırlık değerlerde `<text>`/`</text>` (harf duyarsız) → `&lt;text&gt;`/`&lt;/text&gt;`, blok içi kuralla aynı; hiçbir tek satırlık değer ham `<text>` ile başlayamaz (6.1, 9 adım 4; C-14). **L-2:** Excel formül kalkanı tüm sayfalardaki tüm metin hücrelerine genişletildi (`Summary`, `Dependencies`, `Licenses`, `Vulnerabilities`); sayı hücreleri tipini korur; mevcut içerik kalkan öneki dışında değişmez (1, 5.1, 5.1a; C-15). **I-3:** adım 3'te U+0085/U+2028/U+2029 → boşluk; NOTICE ayraç kalkanı bu karakterlerden sonra da uygulanır (3.5, 3.6, 9; C-16). **M-1:** NOTICE metinleri parti parti okunur ve kesimden sonra okunmaz; çıktı biçimi değişmez (3.7; C-18). `NOTICE format: 1` kalır (11; C-17). Test yükümlülükleri eklendi (10). | `docs/quality/security-reports/REQ-004-security-review.md` (M-1, L-1, L-2, I-3) | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
+| 1.2.0 | 2026-10-10 | **L-5:** `scan_dependencies.lock_integrity` değerleri ve `mismatch` fail-safe saklama kuralı (4.4); Excel `License Source` `none (lockfile integrity mismatch)` (4.1, 5.1; C-19); NOTICE `Reason:` satır 15 `lockfile integrity does not match registry; license not verified` ve önceliği (4.3; C-23); `[registry]` uyuşmazlık sayısı `X` (8; C-21); SBOM `NOASSERTION`, yeni yorum satırı yok (6; C-22); `NOTICE format: 1` kalır (11; C-20); test yükümlülükleri (10). `match`/`not_comparable`/`NULL` çıktıları 1.1.0 ile aynı. | `docs/product/REQ-005.md` L-5 (AC-L5-1…4, D-103), ADR-007 Karar 12, 14 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
+| 1.3.0 | 2026-10-10 | **L-2 (REQ-005 güvenlik incelemesi):** `REGISTRY_ENRICHMENT` F4 anahtarlarıyla aynı ayrıştırmaya bağlandı: `on/off/true/false/1/0/yes/no` (harf duyarsız), boş/tanımsız → açık, **diğer değer → kapalı** + yalnız ad içeren tek uyarı (4.2 notu; C-24). F3'teki "geçersiz → açık" davranışı değişti. Çıktı biçimleri, OpenAPI ve `NOTICE format: 1` değişmez. ADR-006 Karar 14 ve REQ-004 AC-P14-16 metinlerinin bu karara göre güncellenmesi solution-architect / product-analyst işidir. | `docs/quality/security-reports/REQ-005-security-review.md` (L-2); REQ-005 contract 1.1.0 bölüm 7.1 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |

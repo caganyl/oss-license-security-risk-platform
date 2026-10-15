@@ -23,6 +23,7 @@ import zlib from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeSupportsProxyEnv, resolveProxy, shouldUseProxy } from '../lib/http/proxy';
+import { guardProxyTunnelErrors } from '../lib/http/safeHttpClient';
 import { type HostAllowlist, canonicalHost, isAllowedRequestUrl } from './allowlist';
 import { isCertificateError } from './checks/transport';
 import type { ProbeOutcome, ProbeResponse, ProbeTlsInfo } from './types';
@@ -164,7 +165,7 @@ export function createProbeClient(options: ProbeClientOptions): ProbeClient {
         maxSockets: concurrency,
         proxyEnv: { HTTPS_PROXY: proxy.proxyUrl },
       };
-      proxyAgent = new https.Agent(agentOptions);
+      proxyAgent = guardProxyTunnelErrors(new https.Agent(agentOptions));
       noProxy = proxy.noProxy;
     } else {
       proxyBlocked = true;

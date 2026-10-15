@@ -170,7 +170,8 @@ export function createWebScanner(options: WebScannerOptions): WebScanner {
         ]);
         findings.push(...checkHttpRedirect(variant), ...checkLegacyProtocol(url, accepted));
       }
-      return finish(client, target, run, { findings, components, warnings, builtin, finalUrl: locationOf(url), tls: null });
+      // The main page failure is already reported by the TLS line above.
+      return finish(client, target, run, { findings, components, warnings, builtin, finalUrl: locationOf(url), tls: null, knownFailures: 1 });
     }
 
     if (main.crossHostRedirect) warnings.push('[web] Ana sayfa başka bir hosta yönlendiriyor; o host taranmadı.');
@@ -271,7 +272,7 @@ export function createWebScanner(options: WebScannerOptions): WebScanner {
     client: ProbeClient,
     target: WebScanTarget,
     run: WebScanRunOptions,
-    partial: { findings: WebFindingDraft[]; components: DetectedComponent[]; warnings: string[]; builtin: EngineState; finalUrl: string | null; tls: ProbeTlsInfo | null },
+    partial: { findings: WebFindingDraft[]; components: DetectedComponent[]; warnings: string[]; builtin: EngineState; finalUrl: string | null; tls: ProbeTlsInfo | null; knownFailures?: number },
   ): Promise<WebScanOutcome> {
     const { warnings } = partial;
     let builtin = partial.builtin;
@@ -279,7 +280,8 @@ export function createWebScanner(options: WebScannerOptions): WebScanner {
       builtin = 'partial';
       warnings.push(`[web] İstek sınırına (${options.maxRequests ?? MAX_REQUESTS_PER_SCAN}) ulaşıldı; bazı kontroller atlandı.`);
     }
-    if (client.stats.failures > 0) warnings.push(`[web] ${client.stats.failures} istek başarısız oldu.`);
+    const failures = client.stats.failures - (partial.knownFailures ?? 0);
+    if (failures > 0) warnings.push(`[web] ${failures} istek başarısız oldu.`);
 
     let zapState: ZapState = 'not_configured';
     let zapMode: WebScanMode | null = null;

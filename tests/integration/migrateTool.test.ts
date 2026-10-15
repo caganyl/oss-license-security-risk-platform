@@ -325,7 +325,6 @@ describe('AC-P11-16: migration 005_scan_next_attempt', () => {
 
 describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
   const V007 = '007_vulnerability_recheck';
-  const V008 = '008_nuget_enrichment'; // REQ-006: applied on top of 007, so "down --to 006" reverts it too
 
   /** project -> scan -> package -> scan_dependency; returns the ids a finding needs. */
   async function seedDependency(db: ScratchDatabase): Promise<{ scanId: string; depId: string }> {
@@ -1508,5 +1507,86 @@ describe('AC-P11-1 / AC-P11-12 / AC-P11-18: the compiled CLI as a real node proc
     expect(status.code, status.stderr).toBe(0);
     expect(status.stdout).toContain(`özet: ${ALL.length} uygulanmış, 0 bekleyen, 0 bilinmeyen`);
     expect(status.stdout + status.stderr).not.toContain(db.cluster.password);
+  });
+});
+
+describe('REQ-008 AC-G-3: migration 009_web_scan (contract REQ-008 1.0.0 §2; ADR-010 Karar 1, 2)', () => {
+  const V009 = '009_web_scan';
+  const WEB_COLUMNS: Array<[string, string]> = [
+    ['projects', 'web_url'],
+    ['projects', 'web_scan_mode'],
+    ['scans', 'scan_kind'],
+    ['scans', 'target_url'],
+    ['scans', 'web_summary'],
+  ];
+
+  it('up -> down --to 008 (deletes web scans only, restores exactly the 008 schema) -> up yields the identical schema', async () => {
+    const db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+    const full = await schemaSnapshot(db);
+    for (const [t, c] of WEB_COLUMNS) expect(await columnExists(db, t, c), `${t}.${c}`).toBe(true);
+    for (const t of ['web_findings', 'web_scan_components']) expect(await tableExists(db, t), t).toBe(true);
+
+    // Existing scans default to 'dependency'; the kind/target CHECK binds both ways.
+    const [p] = await db.query<{ id: string }>(`INSERT INTO projects (name, web_url) VALUES ('qa-009', 'https://app.local/') RETURNING id`);
+    await db.query(`INSERT INTO scans (project_id, trigger) VALUES ($1, 'manual')`, [p.id]);
+    const [web] = await db.query<{ id: string }>(`INSERT INTO scans (project_id, trigger, scan_kind, target_url) VALUES ($1, 'manual', 'web', 'https://app.local/') RETURNING id`, [p.id]);
+    expect((await pgError(db.query(`INSERT INTO scans (project_id, trigger, scan_kind) VALUES ($1, 'manual', 'web')`, [p.id]))).constraint).toBe('scans_web_target_chk');
+    expect((await pgError(db.query(`INSERT INTO scans (project_id, trigger, target_url) VALUES ($1, 'manual', 'https://x/')`, [p.id]))).constraint).toBe('scans_web_target_chk');
+    expect((await pgError(db.query(`UPDATE projects SET web_scan_mode = 'loud' WHERE id = $1`, [p.id]))).constraint).toBe('projects_web_scan_mode_chk');
+    await db.query(
+      `INSERT INTO web_findings (scan_id, project_id, rule_id, source, category, severity, title, description, recommendation, fingerprint)
+       VALUES ($1, $2, 'WEB-HDR-001', 'builtin', 'headers', 'medium', 't', 'd', 'r', $3)`,
+      [web.id, p.id, 'a'.repeat(64)],
+    );
+    expect((await pgError(db.query(
+      `INSERT INTO web_findings (scan_id, project_id, rule_id, source, category, severity, title, description, recommendation, fingerprint)
+       VALUES ($1, $2, 'NOT-A-RULE', 'builtin', 'headers', 'medium', 't', 'd', 'r', $3)`,
+      [web.id, p.id, 'b'.repeat(64)],
+    ))).constraint).toBe('web_findings_rule_id_chk');
+
+    const ref = copyOfRealMigrations();
+    for (const f of [`${V009}.up.sql`, `${V009}.down.sql`]) fs.rmSync(path.join(ref, f));
+    const at008Db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: at008Db.url, dir: ref })).code).toBe(0);
+    const at008 = await schemaSnapshot(at008Db);
+
+    const down = await cli(['down', '--to', '008'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${V009}`);
+    expect(down.out).toContain('Tamam: 1 göç geri alındı; son uygulanmış sürüm 008_nuget_enrichment.');
+    expect(await schemaSnapshot(db)).toEqual(at008);
+    // Web scans are deleted; the dependency scan and the project stay.
+    expect(await db.query(`SELECT id FROM scans WHERE id = $1`, [web.id])).toEqual([]);
+    expect((await db.query(`SELECT id FROM scans WHERE project_id = $1`, [p.id])).length).toBe(1);
+    expect(full.types).toEqual(at008.types);
+
+    const again = await cli(['up'], { url: db.url });
+    expect(again.code, again.all).toBe(0);
+    expect(await versions(db)).toEqual(ALL);
+    expect(await schemaSnapshot(db)).toEqual(full);
+  });
+
+  it('db/schema.sql equals 001…009 including the CHECK constraints and column comments of 009', async () => {
+    const migrated = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: migrated.url })).code).toBe(0);
+    const fromSchema = await newDb({ migrated: false });
+    const c = await connect(fromSchema.url);
+    try {
+      await c.query(decodeMigrationSql(fs.readFileSync(path.join(REPO_ROOT, 'db', 'schema.sql'))));
+    } finally {
+      await c.end();
+    }
+    expect(await schemaSnapshot(fromSchema)).toEqual(await schemaSnapshot(migrated));
+    for (const [t, col] of WEB_COLUMNS) {
+      expect(await columnComment(fromSchema, t, col), `${t}.${col}`).toBe(await columnComment(migrated, t, col));
+      expect(await columnComment(migrated, t, col), `${t}.${col}`).toEqual(expect.any(String));
+    }
+    const upText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V009}.up.sql`)));
+    expect(findForbiddenStatements(upText)).toEqual([]);
+    const downText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V009}.down.sql`)));
+    expect(findForbiddenStatements(downText)).toEqual([]);
+    expect(downText).toMatch(/DATA LOSS/);
+    expect(downText).toMatch(/explicit human approval/);
   });
 });

@@ -19,7 +19,14 @@ import type { WebConfidence, WebFindingDraft, WebScanMode, WebSeverity, ZapState
 
 export const ZAP_TIMEOUT_MS = 30_000;
 export const ZAP_MAX_BYTES = 8 * 1024 * 1024;
-export const ZAP_BUDGETS = Object.freeze({ spiderMs: 5 * 60_000, passiveMs: 2 * 60_000, activeMs: 30 * 60_000, pollMs: 2_000 });
+export interface ZapBudgets {
+  spiderMs: number;
+  passiveMs: number;
+  activeMs: number;
+  pollMs: number;
+}
+/** D-229: spider 5 min, passive queue 2 min, active scan 30 min; status poll every 2 s. */
+export const ZAP_BUDGETS: Readonly<ZapBudgets> = Object.freeze({ spiderMs: 5 * 60_000, passiveMs: 2 * 60_000, activeMs: 30 * 60_000, pollMs: 2_000 });
 /** Time kept free at the end of the job for the result write. */
 export const ZAP_DEADLINE_MARGIN_MS = 60_000;
 export const ZAP_ALERT_PAGE = 500;
@@ -92,7 +99,7 @@ export interface ZapConnectorOptions {
   clock?: AppClock;
   /** Monotonic clock (default `performance.now`), injectable for tests. */
   monotonic?: () => number;
-  budgets?: Partial<typeof ZAP_BUDGETS>;
+  budgets?: Partial<ZapBudgets>;
   env?: Readonly<Record<string, string | undefined>>;
 }
 

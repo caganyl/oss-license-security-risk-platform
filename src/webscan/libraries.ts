@@ -10,7 +10,7 @@ import type { HtmlTag } from './html';
 import type { DetectedComponent } from './types';
 
 // Pre-release only with a conventional tag, so `jquery-3.4.1-min.js` keeps `3.4.1`.
-const VERSION = String.raw`(\d{1,4}\.\d{1,4}\.\d{1,4}(?:-(?:alpha|beta|rc|pre)[0-9A-Za-z.]{0,30})?)`;
+const VERSION = String.raw`(\d{1,4}\.\d{1,4}\.\d{1,4}(?:-(?:alpha|beta|rc|pre)(?:\.?\d{1,4})?)?)`;
 const VERSION_RE = new RegExp(`^${VERSION}$`);
 
 interface KnownLibrary {

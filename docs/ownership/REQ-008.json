@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-008",
+  "title": "REQ-008: F7 — Web (URL) güvenlik taraması (P-25, P-26, P-27, P-28)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (talimat, 2026-10-15: \"okey başla repo zaten sende, link var. erişime düzenlemeye izin veriyorum yetkin var. url üzerinden yapacağım tarama başka siteye değil. kendi sistemime ve şirkette geliştirdiğimiz sistemele yapılacak.\"; kapsam: REQ-008 belgeleri, 009_web_scan göçü, yerleşik web tarama motoru, OWASP ZAP bağlayıcısı, API/arayüz/rapor değişiklikleri; merge insan kapısında; Claude tarafından kaydedildi)",
+    "approved_at": "2026-10-15T11:18:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-008.md",
+    "acceptance_criteria": "docs/product/REQ-008.md",
+    "contracts": [
+      "docs/contracts/REQ-008-web-scan.md",
+      "docs/contracts/REQ-007-cli-and-exports.md",
+      "docs/contracts/REQ-005-vulnerability-data.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-010-web-url-guvenlik-taramasi.md",
+      "docs/architecture/adr/ADR-004-tek-surec-calisma-zamani-ve-goc-araci.md",
+      "docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src", "db", "README.md", ".env.example"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests", "vitest.config.ts", "tsconfig.test.json"] }
+  ]
+}

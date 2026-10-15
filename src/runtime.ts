@@ -43,6 +43,10 @@ import { createVulnerabilityClient, type VulnerabilityClient } from './vulnerabi
 import { warnRemovedVulnerabilitySettings } from './vulnerability/endpoints';
 import { createVulnerabilityLookup, type VulnerabilityLookup } from './vulnerability/lookup';
 import { createVulnerabilityScheduler, type SchedulerOptions, type VulnerabilityScheduler } from './vulnerability/scheduler';
+import { ALLOWED_HOSTS_INVALID_MESSAGE } from './webscan/allowlist';
+import { type WebScanSettings, loadWebScanSettings } from './webscan/config';
+import { type WebScanner, createWebScanner } from './webscan/engine';
+import { createZapConnector } from './webscan/zap';
 
 export type RuntimeLogger = Pick<Console, 'log' | 'warn' | 'error'>;
 export type ExitFn = (code: number) => void;
@@ -156,6 +160,8 @@ class Runtime implements RuntimeHandle {
   private enricher: DependencyEnricher | null = null;
   /** Vulnerability (OSV/NVD) client created by the runtime (ADR-007 Karar 11); null when injected or not started. */
   private vulnerabilityClient: VulnerabilityClient | null = null;
+  /** Web scanner created by the runtime (REQ-008); null when injected or not started. */
+  private webScanner: WebScanner | null = null;
   /** Recheck / expiry scheduler (lock-holding process only, ADR-007 Karar 8); null before step 7 or when disabled by tests. */
   vulnerabilityScheduler: VulnerabilityScheduler | null = null;
 
@@ -255,6 +261,17 @@ class Runtime implements RuntimeHandle {
       }
       this.checkCancelled();
 
+      // 4b. Web scan settings (REQ-008 AC-P25-1): an invalid allowlist stops the start-up.
+      let webSettings: WebScanSettings;
+      try {
+        webSettings = loadWebScanSettings(this.env, (message) => this.logger.warn(message));
+      } catch {
+        throw new RuntimeStartupError(ALLOWED_HOSTS_INVALID_MESSAGE);
+      }
+      if (webSettings.allowlist.empty) this.logger.log('Web taraması kapalı: WEB_SCAN_ALLOWED_HOSTS boş.');
+      if (webSettings.zap) this.logger.log('OWASP ZAP bağlayıcısı etkin (ZAP_API_URL).');
+      this.checkCancelled();
+
       // 5. Git version: informational, never stops the start-up (AC-T-3).
       try {
         if (this.options.checkGit) await this.options.checkGit(this.logger);
@@ -271,7 +288,7 @@ class Runtime implements RuntimeHandle {
       const host = resolveHost(this.options.host, this.env);
       try {
         this.server = await listenApp(
-          { db: pool, port: this.options.port, host, scanRoots, vulnerabilityScheduler: () => this.vulnerabilityScheduler },
+          { db: pool, port: this.options.port, host, scanRoots, webAllowlist: webSettings.allowlist, vulnerabilityScheduler: () => this.vulnerabilityScheduler },
           this.env,
         );
       } catch (err) {
@@ -301,8 +318,18 @@ class Runtime implements RuntimeHandle {
         });
         vulnerabilityLookup = createVulnerabilityLookup({ client: this.vulnerabilityClient, db: pool, logger: this.logger });
       }
+      // Web scanner (REQ-008, ADR-010): always created unless injected (tests).
+      if (this.options.scanWorker?.webScanner === undefined) {
+        this.webScanner = createWebScanner({
+          allowlist: webSettings.allowlist,
+          timeoutMs: webSettings.timeoutMs,
+          zap: webSettings.zap ? createZapConnector({ config: webSettings.zap, env: this.env }) : null,
+          env: this.env,
+        });
+      }
       this.scanWorker = new ScanWorker({
         ...this.options.scanWorker,
+        ...(this.webScanner ? { webScanner: this.webScanner } : {}),
         ...(this.enricher ? { enricher: this.enricher } : {}),
         ...(vulnerabilityLookup ? { vulnerabilityLookup } : {}),
         logger: this.options.scanWorker?.logger ?? this.logger,
@@ -355,6 +382,14 @@ class Runtime implements RuntimeHandle {
 
   /** Destroys the enricher's and the vulnerability client's pooled sockets (after the scans are aborted). */
   private closeEnricher(): void {
+    if (this.webScanner) {
+      try {
+        this.webScanner.close();
+      } catch (err) {
+        this.logger.warn(`Web tarayıcısı kapatılamadı (${errorCode(err)}).`);
+      }
+      this.webScanner = null;
+    }
     if (this.vulnerabilityClient) {
       try {
         this.vulnerabilityClient.close();

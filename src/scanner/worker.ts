@@ -54,6 +54,10 @@ import {
   upsertVulnerability,
   type NewFinding,
 } from '../vulnerability/findingWriter';
+import { WebUrlError } from '../webscan/allowlist';
+import type { WebScanner } from '../webscan/engine';
+import { type LibraryVulnerability, writeWebResults } from '../webscan/persist';
+import type { DetectedComponent, LookupState, WebScanMode } from '../webscan/types';
 
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
@@ -145,6 +149,11 @@ export interface ScanWorkerDeps {
   vulnerabilityLookup: VulnerabilityLookup | null;
   /** Application clock (default `systemClock`). */
   clock: AppClock;
+  /**
+   * Web (URL) scanner (REQ-008, ADR-010 Karar 1). The runtime always passes
+   * one; `null` (tests, older wiring) fails web scans permanently.
+   */
+  webScanner: WebScanner | null;
 }
 
 export { NonRetryableScanError };
@@ -191,6 +200,10 @@ interface ScanJobRow {
   project_id: string;
   ref: string | null;
   retry_count: number;
+  /** REQ-008: `dependency` | `web`. */
+  scan_kind: string;
+  target_url: string | null;
+  web_scan_mode: string | null;
   project_repo_url: string | null;
   integration_repo_url: string | null;
   default_branch: string | null;
@@ -225,6 +238,7 @@ export class ScanWorker {
       enricher: deps.enricher ?? null,
       vulnerabilityLookup: deps.vulnerabilityLookup ?? null,
       clock: deps.clock ?? systemClock,
+      webScanner: deps.webScanner ?? null,
     };
   }
 
@@ -490,6 +504,7 @@ export class ScanWorker {
       const scanResult = await client.query(
         `
         SELECT s.id, s.project_id, s.integration_id, s.ref, s.ref_type, s.retry_count,
+               s.scan_kind, s.target_url, p.web_scan_mode,
                p.repo_url as project_repo_url,
                i.repo_url as integration_repo_url, i.default_branch, i.access_token_enc
         FROM scans s
@@ -588,6 +603,11 @@ export class ScanWorker {
     this.logger.log(`Starting execution of scan ${scanId} (project ${scanRow.project_id})...`);
     try {
       signal.throwIfAborted();
+      // REQ-008 ADR-010 Karar 1: same queue, timer, retry and fence; own pipeline.
+      if (scanRow.scan_kind === 'web') {
+        await this.processWebJob(job);
+        return;
+      }
       // Before any clone: a token that cannot be decrypted fails the scan (D-14).
       let token: string | null;
       try {
@@ -1116,6 +1136,143 @@ export class ScanWorker {
         [scanId]
       );
 
+      await client.query('COMMIT');
+      return true;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Web scan pipeline (REQ-008, ADR-010 Karar 1, 7): engine -> JavaScript
+   * library lookup -> fenced result write. A rejected target (allowlist
+   * changed, AC-P25-7) is permanent; an unreachable main page is transient
+   * (AC-P26-3); a job abort is rethrown.
+   */
+  private async processWebJob(job: ClaimedJob): Promise<void> {
+    const { scanRow } = job;
+    const signal = job.controller.signal;
+    const scanner = this.deps.webScanner;
+    if (!scanner) throw new NonRetryableScanError('Web taraması bu süreçte kullanılamıyor.');
+    if (!scanRow.target_url) throw new NonRetryableScanError('Web taramasının hedef adresi yok.');
+    const mode: WebScanMode = scanRow.web_scan_mode === 'active' ? 'active' : 'passive';
+    let outcome;
+    try {
+      outcome = await scanner.scan(
+        { scanId: scanRow.id, projectId: scanRow.project_id, url: scanRow.target_url, mode },
+        { signal, deadlineMs: job.deadlineMs },
+      );
+    } catch (err) {
+      if (err instanceof WebUrlError) {
+        throw new NonRetryableScanError(
+          err.code === 'web_url_not_allowed'
+            ? 'Web adresi WEB_SCAN_ALLOWED_HOSTS izin listesinde değil.'
+            : 'Web adresi geçersiz.',
+        );
+      }
+      throw err;
+    }
+    const lookup = await this.lookupWebComponents(job, outcome.components);
+    this.logger.log(`Web scan ${scanRow.id} finished: ${outcome.findings.length} built-in/ZAP findings, ${outcome.components.length} components.`);
+    const stored = await this.persistWebResults(job, outcome, lookup);
+    if (stored) this.logger.log(`Web scan ${scanRow.id} results stored.`);
+  }
+
+  /**
+   * OSV lookup of the detected JavaScript libraries with the scan budget
+   * (AC-P26-7, D-234). Same isolation as `lookupVulnerabilities`: only a job
+   * abort escapes.
+   */
+  private async lookupWebComponents(
+    job: ClaimedJob,
+    components: readonly DetectedComponent[],
+  ): Promise<{ state: LookupState; vulnerabilities: LibraryVulnerability[]; summaryLines: string[] }> {
+    const candidates = components.filter((c) => c.npmName !== null);
+    const deps = candidates.map((c) => ({ ecosystem: 'nodejs' as const, name: c.npmName as string, version: c.version }));
+    if (deps.length === 0) return { state: 'not_needed', vulnerabilities: [], summaryLines: [] };
+    const engine = this.deps.vulnerabilityLookup;
+    if (!engine) {
+      return { state: 'disabled', vulnerabilities: [], summaryLines: ['[web] JavaScript kütüphanesi açık sorgusu kapalı (VULNERABILITY_LOOKUP=off).'] };
+    }
+    const signal = job.controller.signal;
+    const timeoutMs = job.settings.timeoutMinutes * 60_000;
+    const budgetMs = computeVulnerabilityBudgetMs(timeoutMs, job.deadlineMs - performance.now());
+    const startedAt = new Date(this.deps.clock.now());
+    let result: VulnerabilityLookupResult;
+    try {
+      result = await engine.lookup(deps, { signal, budgetMs });
+    } catch (err) {
+      if (signal.aborted) throw signal.reason ?? err;
+      this.logger.warn(`Web scan ${job.scanRow.id}: library vulnerability lookup failed (${errorCode(err)}); continuing without it.`);
+      result = engine.failed(deps, startedAt);
+    }
+    const vulnerabilities: LibraryVulnerability[] = [];
+    candidates.forEach((component, i) => {
+      const key = vulnerabilityKeyOf(deps[i]);
+      if (key === null) return;
+      for (const resolved of result.byKey.get(key) ?? []) {
+        vulnerabilities.push({ component, vulnerability: normalizeResolved(resolved, deps[i]) });
+      }
+    });
+    const lines = result.status === 'disabled'
+      ? ['[web] JavaScript kütüphanesi açık sorgusu kapalı (VULNERABILITY_LOOKUP=off).']
+      : result.summaryLines;
+    return { state: result.status, vulnerabilities, summaryLines: lines };
+  }
+
+  /** Fenced web result write (ADR-010 Karar 1); false when the row is no longer ours. */
+  private async persistWebResults(
+    job: ClaimedJob,
+    outcome: Awaited<ReturnType<WebScanner['scan']>>,
+    lookup: { state: LookupState; vulnerabilities: LibraryVulnerability[]; summaryLines: string[] },
+  ): Promise<boolean> {
+    const scanId = job.scanRow.id;
+    const signal = job.controller.signal;
+    signal.throwIfAborted();
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      const owned = await client.query(
+        `SELECT id FROM scans WHERE id = $1 AND status = 'running' AND worker_id = $2 FOR UPDATE`,
+        [scanId, this.runId],
+      );
+      if (owned.rows.length === 0) {
+        await client.query('ROLLBACK');
+        this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; sonuç atıldı.`);
+        return false;
+      }
+      const { summary, counts } = await writeWebResults(
+        client,
+        { scanId, projectId: job.scanRow.project_id, outcome, libraryVulnerabilities: lookup.vulnerabilities, lookupState: lookup.state },
+        signal,
+      );
+      const lines = [...outcome.warnings, ...lookup.summaryLines];
+      const warningMsg = lines.length > 0 ? scanErrorText(lines.join('\n'), this.errorContext(job)) : null;
+      signal.throwIfAborted();
+      const total = counts.critical + counts.high + counts.medium + counts.low;
+      const updated = await client.query(
+        `UPDATE scans
+         SET status = 'completed', completed_at = NOW(),
+             total_dependencies = 0, total_vulnerabilities = $1, critical_vulns = $2, high_vulns = $3,
+             medium_vulns = $4, low_vulns = $5, license_violations = 0,
+             error_message = COALESCE(error_message, $6), next_attempt_at = NULL,
+             web_summary = $7::jsonb, updated_at = NOW()
+         WHERE id = $8 AND status = 'running' AND worker_id = $9`,
+        [total, counts.critical, counts.high, counts.medium, counts.low, warningMsg, JSON.stringify(summary), scanId, this.runId],
+      );
+      if (updated.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        this.logger.warn(`Tarama ${scanId} başka bir örnek tarafından devralındı; sonuç atıldı.`);
+        return false;
+      }
+      await client.query(
+        `INSERT INTO audit_logs (action, entity_type, entity_id, occurred_at)
+         VALUES ('scan_completed', 'scan', $1, NOW())`,
+        [scanId],
+      );
       await client.query('COMMIT');
       return true;
     } catch (err) {

@@ -27,6 +27,9 @@ export function createExportRouter(db: Pool, limiter: ExportLimiter): Router {
     controller.download('license-inventory.xlsx'),
   );
   router.get('/scans/:scanId/exports/license-inventory.csv', guard('reports:read'), controller.download('license-inventory.csv'));
+  // REQ-008 contract 3.7: web scan outputs (same limiter and error order).
+  router.get('/scans/:scanId/exports/web-report.pdf', guard('reports:read'), controller.download('web-report.pdf'));
+  router.get('/scans/:scanId/exports/web-findings.csv', guard('reports:read'), controller.download('web-findings.csv'));
 
   return router;
 }

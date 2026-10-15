@@ -316,7 +316,7 @@ export class NoticeService {
       `SELECT s.id::text AS id, s.completed_at, p.name AS project_name
        FROM scans s
        JOIN projects p ON p.id = s.project_id
-       WHERE s.id = $1 AND s.status = 'completed'`,
+       WHERE s.id = $1 AND s.status = 'completed' AND s.scan_kind = 'dependency'`,
       [scanId],
     );
     if (scanResult.rows.length === 0) throw notFound();

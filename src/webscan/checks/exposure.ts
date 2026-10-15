@@ -24,7 +24,7 @@ const looksLikeHtml = (t: string) => /^\s*(<!doctype html|<html|<head|<body)/i.t
 
 function parseJsonObject(body: Buffer): Record<string, unknown> | null {
   try {
-    const value: unknown = JSON.parse(text(body).replace(/^﻿/, ''));
+    const value: unknown = JSON.parse(text(body).replace(/^\uFEFF/, ''));
     return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   } catch {
     return null;

@@ -24,14 +24,23 @@ describe('ADR-007 Karar 1: one network module', () => {
     expect(filesMatching(/(^|[^\w.])fetch\s*\(/m)).toEqual([]);
   });
 
-  it('D-87: only src/lib/http/safeHttpClient.ts issues outgoing requests or sockets', () => {
+  // REQ-008 ADR-010 Karar 4, 5: the web scanner's probe client (allowlisted
+  // targets, every status read) and its legacy TLS handshake probe are the
+  // only other network modules. The list stays exact.
+  it('D-87 / ADR-010: only the safe client and the two web scan modules issue outgoing requests or sockets', () => {
     expect(filesMatching(/\b(https?|http2)\.(request|get|connect)\b|\bnet\.(connect|createConnection)\s*\(|\btls\.connect\s*\(|['"](node:)?(undici|http2)['"]/)).toEqual([
       'src/lib/http/safeHttpClient.ts',
+      'src/webscan/probeClient.ts',
+      'src/webscan/tlsProbe.ts',
     ]);
   });
 
-  it('D-87: https.Agent / http.Agent are created only by the safe client', () => {
-    expect(filesMatching(/new\s+https?\.Agent\s*\(/)).toEqual(['src/lib/http/safeHttpClient.ts']);
+  it('D-87 / ADR-010: https.Agent / http.Agent are created only by the safe client and the web probe client', () => {
+    expect(filesMatching(/new\s+https?\.Agent\s*\(/)).toEqual(['src/lib/http/safeHttpClient.ts', 'src/webscan/probeClient.ts']);
+  });
+
+  it('ADR-010 Karar 5: rejectUnauthorized: false appears only in the legacy TLS handshake probe', () => {
+    expect(filesMatching(/rejectUnauthorized\s*:\s*false/)).toEqual(['src/webscan/tlsProbe.ts']);
   });
 });
 

@@ -32,6 +32,13 @@ export const MAX_REQUESTS_PER_SCAN = 120;
 export const PROBE_CONCURRENCY = 3;
 export const MAX_MAIN_PAGE_REDIRECTS = 5;
 export const BUDGET_EXHAUSTED = 'BUDGET_EXHAUSTED';
+/**
+ * Media ranges built without a literal slash-star sequence: the static
+ * source guards strip block comments by regex and a literal would hide the
+ * rest of this file from them (tests/security/f4Static.test.ts).
+ */
+const ANY_MEDIA = ['*', '*'].join('/');
+const PAGE_ACCEPT = `text/html,application/xhtml+xml,${ANY_MEDIA};q=0.8`;
 
 export interface ProbeRequestOptions {
   signal: AbortSignal;
@@ -207,7 +214,7 @@ export function createProbeClient(options: ProbeClientOptions): ProbeClient {
 
       const headers: Record<string, string> = {
         'User-Agent': userAgent,
-        Accept: opts.accept ?? '*/*',
+        Accept: opts.accept ?? ANY_MEDIA,
         'Accept-Encoding': 'gzip, deflate',
       };
       if (opts.origin !== undefined) headers.Origin = opts.origin;
@@ -327,7 +334,7 @@ export async function fetchMainPage(client: ProbeClient, target: string, signal:
   let current = target;
   const startHost = canonicalHost(new URL(target).hostname);
   for (let hop = 0; hop <= MAX_MAIN_PAGE_REDIRECTS; hop++) {
-    const outcome = await client.request(current, { signal, maxBytes, accept: 'text/html,application/xhtml+xml,*/*;q=0.8' });
+    const outcome = await client.request(current, { signal, maxBytes, accept: PAGE_ACCEPT });
     if (!outcome.ok) return { chain, final: chain.at(-1) ?? null, failure: outcome, crossHostRedirect: false };
     const response = outcome.response;
     chain.push(response);

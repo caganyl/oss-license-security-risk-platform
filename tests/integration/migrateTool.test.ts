@@ -59,6 +59,7 @@ const ALL = [
   '006_registry_enrichment', // REQ-004
   '007_vulnerability_recheck', // REQ-005
   '008_nuget_enrichment', // REQ-006
+  '009_web_scan', // REQ-008
 ];
 /** Newest real migration (the "latest version" of the --to / compiled-CLI scenarios). */
 const LATEST = ALL[ALL.length - 1];
@@ -370,7 +371,7 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
 
     // Reference: a fresh database migrated with 001…006 only (007 and every later file removed).
     const dir006 = copyOfRealMigrations();
-    for (const v of [V007, V008]) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(dir006, f));
+    for (const v of ALL.slice(6)) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(dir006, f));
     expect((await loadMigrations(dir006)).map((m) => m.version)).toEqual(ALL.slice(0, 6));
     const ref = await newDb({ migrated: false });
     expect((await cli(['up'], { url: ref.url, dir: dir006 })).code).toBe(0);
@@ -378,7 +379,7 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
 
     const down = await cli(['down', '--to', '006'], { url: db.url });
     expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
-    expect(down.out).toContain(`geri alınacak (sırayla): ${V008}, ${V007}`);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${ALL.slice(6).reverse().join(', ')}`);
     expect(await versions(db)).toEqual(ALL.slice(0, 6));
     for (const t of ['vulnerability_recheck_runs', 'osv_vulnerability_cache', 'nvd_cvss_cache']) expect(await tableExists(db, t), t).toBe(false);
     for (const [t, c] of [
@@ -397,7 +398,7 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
-    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V007, V008]);
+    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual(ALL.slice(6));
     expect(await versions(db)).toEqual(ALL);
     expect(await schemaSnapshot(db)).toEqual(full);
   });
@@ -537,7 +538,8 @@ describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0
   /** Reference database migrated with 001…007 only. */
   async function at007Database(): Promise<ScratchDatabase> {
     const dir = copyOfRealMigrations();
-    for (const f of [`${V008}.up.sql`, `${V008}.down.sql`]) fs.rmSync(path.join(dir, f));
+    // 008 and every later migration removed (REQ-008 added 009 on top).
+    for (const v of ALL.slice(7)) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(dir, f));
     expect((await loadMigrations(dir)).map((m) => m.version)).toEqual(ALL.slice(0, 7));
     const ref = await newDb({ migrated: false });
     const run = await cli(['up'], { url: ref.url, dir });
@@ -631,9 +633,9 @@ describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0
 
     const down = await cli(['down', '--to', '007'], { url: db.url });
     expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
-    expect(down.out).toContain(`geri alınacak (sırayla): ${V008}`);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${ALL.slice(7).reverse().join(', ')}`);
     expect(down.out).toContainEqual(expect.stringMatching(new RegExp(`^geri alındı ${V008} \\(\\d+ ms\\)$`)));
-    expect(down.out).toContain(`Tamam: 1 göç geri alındı; son uygulanmış sürüm ${V007}.`);
+    expect(down.out).toContain(`Tamam: ${ALL.length - 7} göç geri alındı; son uygulanmış sürüm ${V007}.`);
     expect(await versions(db)).toEqual(ALL.slice(0, 7));
     for (const [t, c] of NEW_COLUMNS) expect(await columnExists(db, t, c), `${t}.${c}`).toBe(false);
     expect((await checkConstraints(db)).registry_package_cache_nuget_fields).toBeUndefined();
@@ -646,7 +648,7 @@ describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
-    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual([V008]);
+    expect(again.out.filter((l) => l.startsWith('uygulandı ')).map((l) => l.split(' ')[1])).toEqual(ALL.slice(7));
     expect(await versions(db)).toEqual(ALL);
     expect(await schemaSnapshot(db)).toEqual(full);
     expect(await columnComment(db, 'scan_dependencies', 'lock_integrity')).toBe(fullLockComment);

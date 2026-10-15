@@ -11,6 +11,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import { type HostAllowlist, isAllowedRequestUrl } from './allowlist';
+import { guardedLookup } from './probeClient';
 
 export const LEGACY_PROBE_TIMEOUT_MS = 10_000;
 
@@ -53,6 +54,8 @@ export function probeLegacyTls(target: string, allowlist: HostAllowlist, signal:
         maxVersion: 'TLSv1.1',
         ciphers: 'DEFAULT:@SECLEVEL=0',
         rejectUnauthorized: false,
+        // Same address rule as the probe client (security review L-6).
+        lookup: guardedLookup(allowlist),
       });
     } catch {
       finish(null);

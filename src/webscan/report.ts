@@ -18,6 +18,7 @@ import PDFDocument from 'pdfkit';
 import type { Pool } from 'pg';
 import { excelSafeText, singleLine } from '../lib/outputText';
 import { toCsv, type CsvCell } from '../reports/csv';
+import { locationOf } from './allowlist';
 import { countBySeverity, webGrade, webScore } from './score';
 import type { WebSeverity } from './types';
 
@@ -206,7 +207,8 @@ export async function renderWebReportPdf(result: WebScanResult, generatedAt: Dat
   doc.font(bold).fontSize(20).fillColor('#111827').text(t('Web Güvenlik Raporu'), left, 48, { width });
   doc.moveDown(0.3).font(regular).fontSize(10).fillColor('#374151');
   doc.text(t(`Proje: ${result.scan.project_name}`), { width });
-  doc.text(t(`Hedef: ${result.scan.target_url}`), { width });
+  // Security review I-9: the query string of the stored URL is never printed.
+  doc.text(t(`Hedef: ${locationOf(result.scan.target_url) || '-'}`), { width });
   doc.text(t(`Tarama: ${result.scan.id}`), { width });
   doc.text(t(`Tamamlanma: ${result.scan.completed_at ? result.scan.completed_at.toISOString() : '-'}   Rapor: ${generatedAt.toISOString()}`), { width });
 

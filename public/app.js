@@ -279,6 +279,16 @@ function webHost(value) {
   }
 }
 
+/** URL without query string and fragment (they may carry tokens; never displayed). */
+function webLocation(value) {
+  try {
+    const u = new URL(String(value));
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '—';
+  }
+}
+
 function isWebScan(row) {
   return row && row.scan_kind === 'web';
 }
@@ -966,7 +976,7 @@ function renderWebSummary(data) {
     el('div', { className: `web-grade web-grade-${grade}`, 'aria-label': `Grade ${grade}` }, grade),
     el('div', { className: 'web-summary-text' },
       el('h3', null, `Security grade ${grade} · ${Number(data.score) || 0}/100`),
-      el('p', null, `Target: ${data.scan && data.scan.target_url ? data.scan.target_url : '—'}`),
+      el('p', null, `Target: ${data.scan && data.scan.target_url ? webLocation(data.scan.target_url) : '—'}`),
       el('p', null, engineText),
       el('div', { className: 'web-counts' }, chips)));
 }

@@ -63,7 +63,8 @@ const ERROR_PATTERNS: ReadonlyArray<{ label: string; test: (text: string) => boo
   { label: 'python-traceback', test: (t) => t.includes('Traceback (most recent call last)') },
   { label: 'werkzeug-debugger', test: (t) => t.includes('Werkzeug Debugger') },
   { label: 'laravel-whoops', test: (t) => t.includes('Whoops! There was an error') },
-  { label: 'java-exception', test: (t) => /java\.lang\.[A-Za-z]{1,60}Exception/.test(t) && /(^|\n)\s*at [a-z][\w$.]{0,200}\(/.test(t) },
+  // `m` flag with a bounded indent (security review H-1: `(^|\n)\s*` was quadratic on newline floods).
+  { label: 'java-exception', test: (t) => /java\.lang\.[A-Za-z]{1,60}Exception/.test(t) && /^[ \t]{0,40}at [a-z][\w$.]{0,200}\(/m.test(t) },
   {
     label: 'sql-error',
     test: (t) => t.includes('SQLSTATE[') || /\bORA-0\d{4}\b/.test(t) || t.includes('Microsoft OLE DB Provider') || t.includes('Unclosed quotation mark'),

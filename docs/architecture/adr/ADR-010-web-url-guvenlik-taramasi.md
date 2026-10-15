@@ -1,6 +1,7 @@
 # ADR-010: Web (URL) güvenlik taraması — tarama türü, ayrı bulgu tablosu, izinli prob istemcisi ve isteğe bağlı OWASP ZAP
 
-- **Durum:** Kabul edildi (2026-10-15)
+- **Durum:** Kabul edildi (2026-10-15); güvenlik incelemesi düzeltmeleri
+  aynı gün işlendi (Ek: Güvenlik incelemesi sonrası)
 - **İlgili:** REQ-008 (P-25…P-28), ADR-004 (tek süreç, kuyruk), ADR-006/007
   (güvenli HTTP katmanı, OSV), ADR-009 (tek tık çıktılar)
 
@@ -205,6 +206,33 @@ durumu `web_summary.engines.zap` ve `[zap]` uyarı satırıdır.
 - Entegrasyon: loopback HTTP sunucusuna karşı uçtan uca web taraması
   (işçi → veritabanı → `web-findings` → PDF/CSV), izin listesi dışı hedefin
   reddi, sahte ZAP sunucusu, göç up/down/up ve `schema.sql` eşitliği.
+
+## Ek: Güvenlik incelemesi sonrası (2026-10-15)
+
+Bağımsız inceleme (`docs/quality/security-reports/REQ-008-security-review.md`)
+sonrası kararlar:
+
+- **H-1:** HTML etiket ve yorum taraması regex yerine doğrusal `indexOf`
+  tarayıcısıdır (`html.ts`), etiket başına öznitelik metni 8 KiB ile sınırlıdır;
+  Java yığın izi deseni `m` bayrağı ve sınırlı girintiyle yazılır.
+- **M-2/M-3:** ZAP her taramada hedef hostla sınırlı bir bağlam (context)
+  açar; spider ve aktif tarama yalnız kapsam içinde çalışır; tohum isteği
+  yönlendirme izlemez; spider form göndermez.
+- **M-4:** ZAP kilidi beklemesi iş sinyaliyle kesilebilir.
+- **L-5:** Ana sayfa yönlendirmesi aynı origin veya varsayılan portlarda
+  http ↔ https ile sınırlıdır.
+- **L-6:** Doğrudan bağlantılar korumalı `lookup` ile çözülür; loopback,
+  link-local ve belirsiz adresler açıkça izinli değilse reddedilir.
+- **L-7:** `rejectUnauthorized: true` prob istemcisinde açıkça verilir.
+- **L-8:** Tamamlanan web taramasının `error_message`'ı yalnız o denemenin
+  uyarı satırlarıdır.
+- **I-9:** Hedef adresin sorgu dizesi PDF'te ve arayüzde gösterilmez.
+- **Ek bulgu (kapsam dışı, düzeltildi):** Node 22.22 `proxyEnv` tünelinde
+  vekil `CONNECT`'i reddedince ham soket dinleyicisiz kalıp
+  `uncaughtException` ile uygulamayı kapatıyordu; `guardProxyTunnelErrors`
+  `safeHttpClient` ve prob istemcisinin vekil ajanlarına uygulanır.
+- **Ek bulgu:** Günlük yeniden kontrol, durum paneli ve yeniden kontrol çiti
+  yalnız `scan_kind = 'dependency'` taramalarını "son tarama" sayar.
 
 ## Onay (Approval)
 

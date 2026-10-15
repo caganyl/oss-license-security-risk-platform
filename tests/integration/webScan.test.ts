@@ -30,7 +30,7 @@ let site: http.Server;
 let siteUrl = '';
 let zap: http.Server;
 let zapOrigin = '';
-const zapCalls: Array<{ path: string; key: string | undefined }> = [];
+const zapCalls: Array<{ path: string; key: string | undefined; params: Record<string, string> }> = [];
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port)));
@@ -64,10 +64,11 @@ beforeAll(async () => {
 
   zap = http.createServer((rq, rs) => {
     const url = new URL(rq.url ?? '/', 'http://x');
-    zapCalls.push({ path: url.pathname, key: rq.headers['x-zap-api-key'] as string | undefined });
+    zapCalls.push({ path: url.pathname, key: rq.headers['x-zap-api-key'] as string | undefined, params: Object.fromEntries(url.searchParams) });
     rs.setHeader('Content-Type', 'application/json');
     const p = url.pathname;
     if (p === '/JSON/core/view/version/') return void rs.end('{"version":"2.16.0"}');
+    if (p === '/JSON/context/action/newContext/') return void rs.end('{"contextId":"7"}');
     if (p.endsWith('/action/scan/')) return void rs.end('{"scan":"1"}');
     if (p.endsWith('/view/status/')) return void rs.end('{"status":"100"}');
     if (p === '/JSON/pscan/view/recordsToScan/') return void rs.end('{"recordsToScan":"0"}');
@@ -307,6 +308,15 @@ describe('P-28: OWASP ZAP connector against a fake daemon', () => {
     expect(paths).toEqual(expect.arrayContaining(['/JSON/core/view/version/', '/JSON/core/action/newSession/', '/JSON/spider/action/scan/', '/JSON/pscan/view/recordsToScan/', '/JSON/alert/view/alerts/']));
     expect(paths).not.toContain('/JSON/ascan/action/scan/');
     expect(zapCalls.every((c) => c.key === 'zap-test-key')).toBe(true);
+    // Security review M-2/M-3: scoped context, no redirect following, no form submission.
+    const call = (path: string) => zapCalls.find((c) => c.path === path)?.params;
+    expect(call('/JSON/context/action/includeInContext/')?.regex).toBe('^https?://127\\.0\\.0\\.1(:\\d+)?(/.*)?$');
+    expect(call('/JSON/context/action/setContextInScope/')?.booleanInScope).toBe('true');
+    expect(call('/JSON/spider/action/setOptionProcessForm/')?.Boolean).toBe('false');
+    expect(call('/JSON/spider/action/setOptionPostForm/')?.Boolean).toBe('false');
+    expect(call('/JSON/core/action/accessUrl/')?.followRedirects).toBe('false');
+    expect(call('/JSON/spider/action/scan/')?.contextName).toBe(call('/JSON/context/action/newContext/')?.contextName);
+    expect(JSON.stringify(zapCalls.map((c) => c.params))).not.toContain('zap-test-key');
     const zapRows = await db.query('SELECT rule_id, severity, source, category, cwe_id, owasp FROM web_findings WHERE scan_id = $1 AND source = $2', [scan, 'zap']);
     expect(zapRows).toEqual([{ rule_id: 'ZAP-40012', severity: 'high', source: 'zap', category: 'zap', cwe_id: 79, owasp: 'A03:2021' }]);
     const [row] = await db.query<{ web_summary: { engines: unknown } }>('SELECT web_summary FROM scans WHERE id = $1', [scan]);
@@ -318,7 +328,7 @@ describe('P-28: OWASP ZAP connector against a fake daemon', () => {
     await req(app, 'patch', `/api/projects/${id}`, { cookie }).send({ webScanMode: 'active' });
     await queueWeb(id);
     await worker({ zap: true }).runOnce();
-    expect(zapCalls.map((c) => c.path)).toContain('/JSON/ascan/action/scan/');
+    expect(zapCalls.find((c) => c.path === '/JSON/ascan/action/scan/')?.params).toMatchObject({ inScopeOnly: 'true', contextId: '7' });
   });
 
   it('AC-P28-3: unreachable ZAP -> built-in results only, zap = unavailable, [zap] line', async () => {

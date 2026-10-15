@@ -16,7 +16,9 @@
  *   rules); http targets always go direct.
  * - The job `AbortSignal` aborts a request; its reason is rethrown.
  */
+import dns from 'node:dns';
 import http from 'node:http';
+import net from 'node:net';
 import https from 'node:https';
 import type { TLSSocket } from 'node:tls';
 import zlib from 'node:zlib';
@@ -74,6 +76,49 @@ export interface ProbeClientOptions {
   concurrency?: number;
   env?: Readonly<Record<string, string | undefined>>;
   nodeVersion?: string;
+}
+
+/**
+ * Addresses a host name may never resolve to unless that IP itself is
+ * allowlisted (security review L-6: DNS names under a wildcard pointing at
+ * loopback, link-local / cloud metadata or the unspecified address). Private
+ * ranges (10/8, 172.16/12, 192.168/16) stay allowed: internal systems are the
+ * intended targets.
+ */
+export function isRestrictedAddress(address: string): boolean {
+  const ip = address.toLowerCase().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 127 || a === 0 || (a === 169 && b === 254);
+  }
+  if (net.isIPv6(ip)) {
+    return ip === '::1' || ip === '::' || /^fe[89ab][0-9a-f]:/.test(ip);
+  }
+  return true;
+}
+
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | dns.LookupAddress[], family?: number) => void;
+
+/** `lookup` of the probe sockets: resolves, then refuses restricted addresses that are not allowlisted. */
+export function guardedLookup(allowlist: HostAllowlist) {
+  return (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
+    dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+      if (err) {
+        callback(err, '', 4);
+        return;
+      }
+      const list = (addresses as dns.LookupAddress[]).filter(
+        (a) => !isRestrictedAddress(a.address) || allowlist.allows(a.address) || (canonicalHost(hostname) === 'localhost' && allowlist.allows('localhost')),
+      );
+      if (list.length === 0) {
+        const refused = Object.assign(new Error('address not allowed'), { code: 'ADDRESS_NOT_ALLOWED' }) as NodeJS.ErrnoException;
+        callback(refused, '', 4);
+        return;
+      }
+      if (options.all) callback(null, list);
+      else callback(null, list[0].address, list[0].family);
+    });
+  };
 }
 
 function readPackageVersion(): string {
@@ -150,8 +195,10 @@ export function createProbeClient(options: ProbeClientOptions): ProbeClient {
   const stats: ProbeStats = { requests: 0, budgetExhausted: false, failures: 0, proxied: false };
   const userAgent = webScanUserAgent();
 
+  const lookup = guardedLookup(options.allowlist);
   const httpAgent = new http.Agent({ keepAlive: true, maxSockets: concurrency });
-  const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: concurrency });
+  // Security review L-7: explicit, so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot turn validation off.
+  const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: concurrency, rejectUnauthorized: true });
   const proxy = resolveProxy(options.env ?? process.env);
   let proxyAgent: https.Agent | null = null;
   let proxyBlocked = false;
@@ -163,6 +210,7 @@ export function createProbeClient(options: ProbeClientOptions): ProbeClient {
       const agentOptions: https.AgentOptions & { proxyEnv?: Record<string, string> } = {
         keepAlive: true,
         maxSockets: concurrency,
+        rejectUnauthorized: true,
         proxyEnv: { HTTPS_PROXY: proxy.proxyUrl },
       };
       proxyAgent = guardProxyTunnelErrors(new https.Agent(agentOptions));
@@ -220,7 +268,11 @@ export function createProbeClient(options: ProbeClientOptions): ProbeClient {
       };
       if (opts.origin !== undefined) headers.Origin = opts.origin;
       const request = url.protocol === 'http:' ? http.request : https.request;
-      req = request(url, { method: 'GET', agent, headers }, (response) => {
+      // Direct connections resolve through the guarded lookup (L-6); a proxied
+      // request is resolved by the proxy (the allowlist host check still applies).
+      const requestOptions: https.RequestOptions = { method: 'GET', agent, headers, ...(agent === proxyAgent ? {} : { lookup }) };
+      if (url.protocol === 'https:') requestOptions.rejectUnauthorized = true;
+      req = request(url, requestOptions, (response) => {
         res = response;
         const tls = tlsInfoOf(response.socket);
         const chunks: Buffer[] = [];
@@ -329,11 +381,21 @@ export interface MainPageResult {
 
 const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 
+/**
+ * Security review L-5: the main page follows a redirect only to the same
+ * origin, or between http and https of the same host on the default ports
+ * (http://h/ <-> https://h/). Any other port or host is not followed.
+ */
+export function isFollowableRedirect(from: URL, to: URL): boolean {
+  if (to.protocol !== 'http:' && to.protocol !== 'https:') return false;
+  if (to.origin === from.origin) return true;
+  return canonicalHost(to.hostname) === canonicalHost(from.hostname) && from.port === '' && to.port === '';
+}
+
 /** Main page with same-host redirects (at most 5, http -> https allowed; AC-P26-3, D-215). */
 export async function fetchMainPage(client: ProbeClient, target: string, signal: AbortSignal, maxBytes: number): Promise<MainPageResult> {
   const chain: ProbeResponse[] = [];
   let current = target;
-  const startHost = canonicalHost(new URL(target).hostname);
   for (let hop = 0; hop <= MAX_MAIN_PAGE_REDIRECTS; hop++) {
     const outcome = await client.request(current, { signal, maxBytes, accept: PAGE_ACCEPT });
     if (!outcome.ok) return { chain, final: chain.at(-1) ?? null, failure: outcome, crossHostRedirect: false };
@@ -349,7 +411,7 @@ export async function fetchMainPage(client: ProbeClient, target: string, signal:
     } catch {
       return { chain, final: response, failure: null, crossHostRedirect: false };
     }
-    if ((next.protocol !== 'http:' && next.protocol !== 'https:') || canonicalHost(next.hostname) !== startHost) {
+    if (!isFollowableRedirect(new URL(current), next)) {
       return { chain, final: response, failure: null, crossHostRedirect: true };
     }
     next.hash = '';

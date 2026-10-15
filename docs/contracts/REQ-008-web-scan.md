@@ -1,6 +1,6 @@
 # REQ-008 Contract — Web (URL) güvenlik taraması
 
-- **Sürüm:** 1.0.0 (2026-10-15)
+- **Sürüm:** 1.1.0 (2026-10-15; güvenlik incelemesi düzeltmeleri, §1.1, §7)
 - **İlgili:** REQ-008, ADR-010
 - **Kapsam:** ortam değişkenleri, veritabanı (göç `009_web_scan`), HTTP API,
   kural kataloğu, kütüphane imzaları, not hesabı, ZAP kullanımı, uyarı
@@ -18,6 +18,20 @@
 Eşleşme: host küçük harfe çevrilir, sondaki `.` atılır; IPv6 köşeli
 parantezsiz karşılaştırılır. `*.sirket.com` → `a.sirket.com`,
 `a.b.sirket.com` eşleşir; `sirket.com` ve `kotusirket.com` eşleşmez.
+
+### 1.1 Ağ kuralları (1.1.0)
+
+- **Çözümlenen adres:** Bir host adı loopback (`127.0.0.0/8`, `::1`),
+  link-local / bulut meta veri (`169.254.0.0/16`, `fe80::/10`) veya
+  belirsiz adrese (`0.0.0.0`, `::`) çözülürse istek atılmaz
+  (`ADDRESS_NOT_ALLOWED`), meğer ki o IP (ya da `localhost` adının kendisi)
+  izin listesinde açıkça yazılı olsun. Özel ağlar (`10/8`, `172.16/12`,
+  `192.168/16`) serbesttir. Vekil üzerinden giden istekleri vekil çözer.
+- **Ana sayfa yönlendirmesi:** yalnız aynı origin'e veya aynı hostun
+  varsayılan portlarında http ↔ https geçişine izlenir; başka port/host
+  izlenmez (uyarı satırı).
+- **TLS:** prob istemcisinin her HTTPS isteğinde `rejectUnauthorized: true`
+  açıkça verilir (`NODE_TLS_REJECT_UNAUTHORIZED=0` etkisizdir).
 
 ## 2. Veritabanı (`009_web_scan`)
 
@@ -347,15 +361,23 @@ Tüm çağrılar `GET <ZAP origin>/JSON/…` ve `X-ZAP-API-Key` başlığıyla.
 | --- | --- | --- |
 | Erişim | `core/view/version/` | — |
 | Oturum | `core/action/newSession/` | `name=oss-risk-<scanId>`, `overwrite=true` |
-| Tohum | `core/action/accessUrl/` | `url`, `followRedirects=true` |
-| Spider | `spider/action/scan/` | `url`, `recurse=true`, `subtreeOnly=true` |
+| Kapsam | `context/action/newContext/` | `contextName=oss-risk-<scanId>` → `contextId` |
+| Kapsam | `context/action/includeInContext/` | `contextName`, `regex=^https?://<host>(:\d+)?(/.*)?$` |
+| Kapsam | `context/action/setContextInScope/` | `contextName`, `booleanInScope=true` |
+| Spider ayarı | `spider/action/setOptionProcessForm/`, `spider/action/setOptionPostForm/` | `Boolean=false` (form gönderilmez) |
+| Tohum | `core/action/accessUrl/` | `url`, `followRedirects=false` |
+| Spider | `spider/action/scan/` | `url`, `recurse=true`, `subtreeOnly=true`, `contextName` |
 | Durum | `spider/view/status/` | `scanId` |
 | Durdur | `spider/action/stop/` | `scanId` |
 | Pasif kuyruk | `pscan/view/recordsToScan/` | — |
-| Aktif | `ascan/action/scan/` | `url`, `recurse=true`, `inScopeOnly=false` |
+| Aktif | `ascan/action/scan/` | `url`, `recurse=true`, `inScopeOnly=true`, `contextId` |
 | Durum | `ascan/view/status/` | `scanId` |
 | Durdur | `ascan/action/stop/` | `scanId` |
 | Alarmlar | `alert/view/alerts/` | `baseurl`, `start`, `count=500` (en fazla 10 sayfa) |
+
+ZAP kilidini bekleyen tarama, iş sinyali (süre sınırı / kapanış) gelince
+beklemeyi bırakır. ZAP örneği bu araca ayrılmış ve ağda yalıtılmış olmalıdır:
+ZAP kendi hostundan istek atar, araç yalnız kapsamı ve sonuçları denetler.
 
 Eşleme: `riskcode` 3→high, 2→medium, 1→low, 0→info; `confidence` `0`
 (False Positive) atlanır, 1→low, 2→medium, 3/4→high. `cweid` > 0 → `cwe_id`;

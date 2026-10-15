@@ -1249,6 +1249,8 @@ export class ScanWorker {
         { scanId, projectId: job.scanRow.project_id, outcome, libraryVulnerabilities: lookup.vulnerabilities, lookupState: lookup.state },
         signal,
       );
+      // Security review L-8: a completed web scan shows this attempt's lines,
+      // not the failure text of an earlier (retried) attempt.
       const lines = [...outcome.warnings, ...lookup.summaryLines];
       const warningMsg = lines.length > 0 ? scanErrorText(lines.join('\n'), this.errorContext(job)) : null;
       signal.throwIfAborted();
@@ -1258,7 +1260,7 @@ export class ScanWorker {
          SET status = 'completed', completed_at = NOW(),
              total_dependencies = 0, total_vulnerabilities = $1, critical_vulns = $2, high_vulns = $3,
              medium_vulns = $4, low_vulns = $5, license_violations = 0,
-             error_message = COALESCE(error_message, $6), next_attempt_at = NULL,
+             error_message = $6, next_attempt_at = NULL,
              web_summary = $7::jsonb, updated_at = NOW()
          WHERE id = $8 AND status = 'running' AND worker_id = $9`,
         [total, counts.critical, counts.high, counts.medium, counts.low, warningMsg, JSON.stringify(summary), scanId, this.runId],

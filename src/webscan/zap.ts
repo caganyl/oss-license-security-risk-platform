@@ -203,6 +203,31 @@ export function owaspFromTags(tags: unknown): string | null {
   return null;
 }
 
+/** Resolves with `p`, or rejects with the signal's reason when it aborts first. */
+function untilAborted(p: Promise<unknown>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(
+      () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      },
+    );
+  });
+}
+
+/** ZAP context include regex: the target host on any port, http or https (contract section 7). */
+export function scopeRegex(targetUrl: string): string {
+  const host = new URL(targetUrl).hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return `^https?://${host}(:\\d+)?(/.*)?$`;
+}
+
 export function createZapConnector(options: ZapConnectorOptions): ZapConnector {
   const clock = options.clock ?? systemClock;
   const monotonic = options.monotonic ?? (() => performance.now());
@@ -281,10 +306,22 @@ export function createZapConnector(options: ZapConnectorOptions): ZapConnector {
 
     try {
       await call(session, 'core/action/newSession', { name: `oss-risk-${input.scanId}`, overwrite: 'true' }, signal);
-      await call(session, 'core/action/accessUrl', { url: input.targetUrl, followRedirects: 'true' }, signal);
+      // Security review M-2: ZAP is held to the target host through a context
+      // (spider and active scan run in scope only) and never follows a
+      // redirect when seeding. The ZAP host itself should still be isolated.
+      const contextName = `oss-risk-${input.scanId}`;
+      const context = await call(session, 'context/action/newContext', { contextName }, signal);
+      const contextId = String(context.contextId ?? '');
+      if (!/^\d+$/.test(contextId)) throw new ZapCallError('BAD_CONTEXT_ID');
+      await call(session, 'context/action/includeInContext', { contextName, regex: scopeRegex(input.targetUrl) }, signal);
+      await call(session, 'context/action/setContextInScope', { contextName, booleanInScope: 'true' }, signal);
+      // Security review M-3: the spider never submits forms (passive must stay read-only).
+      await call(session, 'spider/action/setOptionProcessForm', { Boolean: 'false' }, signal);
+      await call(session, 'spider/action/setOptionPostForm', { Boolean: 'false' }, signal);
+      await call(session, 'core/action/accessUrl', { url: input.targetUrl, followRedirects: 'false' }, signal);
 
       if (remaining(budgets.spiderMs) > 0) {
-        const spider = await call(session, 'spider/action/scan', { url: input.targetUrl, recurse: 'true', subtreeOnly: 'true' }, signal);
+        const spider = await call(session, 'spider/action/scan', { url: input.targetUrl, recurse: 'true', subtreeOnly: 'true', contextName }, signal);
         const spiderId = String(spider.scan ?? '');
         if (!/^\d+$/.test(spiderId)) throw new ZapCallError('BAD_SCAN_ID');
         if (!(await pollUntilDone('spider/view/status', 'spider/action/stop', spiderId, budgets.spiderMs))) partial = true;
@@ -307,7 +344,7 @@ export function createZapConnector(options: ZapConnectorOptions): ZapConnector {
 
       if (input.mode === 'active') {
         if (remaining(budgets.activeMs) > 0) {
-          const ascan = await call(session, 'ascan/action/scan', { url: input.targetUrl, recurse: 'true', inScopeOnly: 'false' }, signal);
+          const ascan = await call(session, 'ascan/action/scan', { url: input.targetUrl, recurse: 'true', inScopeOnly: 'true', contextId }, signal);
           const ascanId = String(ascan.scan ?? '');
           if (!/^\d+$/.test(ascanId)) throw new ZapCallError('BAD_SCAN_ID');
           if (!(await pollUntilDone('ascan/view/status', 'ascan/action/stop', ascanId, budgets.activeMs))) partial = true;
@@ -335,10 +372,23 @@ export function createZapConnector(options: ZapConnectorOptions): ZapConnector {
 
   return {
     run(input) {
-      const next = queue.then(() => runExclusive(input));
-      // The chain never rejects, so one failed run does not block the next.
-      queue = next.catch(() => undefined);
-      return next;
+      // Security review M-4: waiting for the lock honours the job signal, so a
+      // queued scan stops at its time limit / shutdown instead of after every
+      // ZAP run ahead of it. The chain never rejects.
+      const previous = queue;
+      let release: () => void = () => undefined;
+      const mine = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      queue = previous.then(() => mine);
+      return (async () => {
+        try {
+          await untilAborted(previous, input.signal);
+          return await runExclusive(input);
+        } finally {
+          release();
+        }
+      })();
     },
     close() {
       core.close();

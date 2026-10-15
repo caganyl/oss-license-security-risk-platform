@@ -16,9 +16,10 @@ export interface HtmlTag {
   attrs: Record<string, string>;
 }
 
-const TAG_RE = /<(script|link|iframe|form|meta|html|base)\b([^>]*)>/gi;
+const TAG_NAMES: ReadonlySet<string> = new Set(['script', 'link', 'iframe', 'form', 'meta', 'html', 'base']);
+/** Longest attribute text read from one tag (security review H-1: bounded work per tag). */
+export const MAX_TAG_CHARS = 8192;
 const ATTR_RE = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-const COMMENT_RE = /<!--[\s\S]*?-->/g;
 
 function decodeEntities(value: string): string {
   return value
@@ -30,25 +31,62 @@ function decodeEntities(value: string): string {
     .replace(/&amp;/gi, '&');
 }
 
-/** Opening tags of `script`, `link`, `iframe`, `form`, `meta`, `html`, `base` in document order. */
+/**
+ * Comments removed with an `indexOf` loop (linear; an unterminated comment
+ * hides the rest of the document, as in a browser). Security review H-1: the
+ * former lazy regex was quadratic on `<!--` floods.
+ */
+export function stripComments(html: string): string {
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const start = html.indexOf('<!--', pos);
+    if (start === -1) return out + html.slice(pos);
+    out += html.slice(pos, start) + ' ';
+    const end = html.indexOf('-->', start + 4);
+    if (end === -1) return out;
+    pos = end + 3;
+  }
+}
+
+function parseAttrs(attrText: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  ATTR_RE.lastIndex = 0;
+  let attr: RegExpExecArray | null;
+  let count = 0;
+  while ((attr = ATTR_RE.exec(attrText)) !== null && count < 64) {
+    count++;
+    const name = attr[1].toLowerCase();
+    if (name in attrs) continue;
+    attrs[name] = decodeEntities(attr[2] ?? attr[3] ?? attr[4] ?? '');
+  }
+  return attrs;
+}
+
+/**
+ * Opening tags of `script`, `link`, `iframe`, `form`, `meta`, `html`, `base`
+ * in document order. A linear `indexOf` scan (security review H-1): every
+ * character is visited a bounded number of times; a tag without a closing `>`
+ * ends the scan; attribute text is cut at `MAX_TAG_CHARS`.
+ */
 export function extractTags(html: string): HtmlTag[] {
-  const text = html.replace(COMMENT_RE, ' ');
+  const text = stripComments(html);
   const tags: HtmlTag[] = [];
-  TAG_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = TAG_RE.exec(text)) !== null && tags.length < MAX_TAGS) {
-    const attrs: Record<string, string> = {};
-    const attrText = match[2] ?? '';
-    ATTR_RE.lastIndex = 0;
-    let attr: RegExpExecArray | null;
-    let count = 0;
-    while ((attr = ATTR_RE.exec(attrText)) !== null && count < 64) {
-      count++;
-      const name = attr[1].toLowerCase();
-      if (name in attrs) continue;
-      attrs[name] = decodeEntities(attr[2] ?? attr[3] ?? attr[4] ?? '');
+  let pos = 0;
+  while (tags.length < MAX_TAGS) {
+    const lt = text.indexOf('<', pos);
+    if (lt === -1) break;
+    let i = lt + 1;
+    while (i < text.length && i - lt <= 7 && /[A-Za-z]/.test(text[i])) i++;
+    const name = text.slice(lt + 1, i).toLowerCase();
+    if (!TAG_NAMES.has(name) || (i < text.length && !/[\s/>]/.test(text[i]))) {
+      pos = lt + 1;
+      continue;
     }
-    tags.push({ name: match[1].toLowerCase(), attrs });
+    const gt = text.indexOf('>', i);
+    if (gt === -1) break;
+    tags.push({ name, attrs: parseAttrs(text.slice(i, Math.min(gt, i + MAX_TAG_CHARS))) });
+    pos = gt + 1;
   }
   return tags;
 }

@@ -231,6 +231,128 @@ Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını her
 
 Notlar: `HOST` değerini loopback dışına (ör. `0.0.0.0`) çekmek API'yi düz HTTP ile ağa açar ve başlangıçta uyarı verir. Unutulan parola, `db/README.md`'deki kurtarma SQL adımıyla sıfırlanır; ardından setup aynı kullanıcıya yeni parola atar.
 
+## Web (URL) güvenlik taraması (REQ-008)
+
+Bağımlılık taramasına ek olarak platform, **çalışan bir web uygulamasını adresi
+üzerinden** denetleyebilir (kodu elde olmayan yayındaki sistemler dahil).
+Ayrıntılar: `docs/product/REQ-008.md`, `docs/architecture/adr/ADR-010-web-url-guvenlik-taramasi.md`,
+`docs/contracts/REQ-008-web-scan.md`.
+
+> **Yalnız kendi sistemlerinizi tarayın.** Sahibi olmadığınız veya yazılı izin
+> almadığınız bir sisteme tarama yapmak suç olabilir (TCK 243–244). Bu yüzden
+> web taraması varsayılan olarak **kapalıdır** ve yalnız `.env`'deki izin
+> listesine yazılan hostlara istek atar.
+
+**Kurulum**
+
+1. `.env`'e taranabilecek hostları yazın ve uygulamayı yeniden başlatın:
+
+    ```
+    WEB_SCAN_ALLOWED_HOSTS=portal.sirket.local, *.sirket.com.tr, 10.1.2.3
+    ```
+
+   Girdi biçimleri: tam host, `*.alan` (yalnız alt alan adları; `alan`'ın kendisi
+   ayrıca yazılır), IPv4, `[IPv6]`. Şema, port veya yol yazılmaz (hostun her
+   portu kapsanır). Geçersiz bir girdi uygulamanın başlangıçta durmasına yol
+   açar; liste boşsa web adresleri `400 web_url_not_allowed` alır.
+2. İç sistemleriniz şirket iç sertifika otoritesiyle imzalıysa kök sertifikayı
+   `NODE_EXTRA_CA_CERTS` ile verin (yukarıdaki "Kurumsal TLS denetimi" notu).
+   Aksi halde tarama `WEB-TLS-003` (sertifika doğrulanamadı) bulgusu yazar ve
+   içerik kontrollerini atlar; sertifika doğrulaması hiçbir zaman kapatılmaz.
+3. Arayüzde **New Project Scan** penceresine "Web URL" girin (repo yolu
+   isteğe bağlıdır) veya **Projects** ekranında **Web URL** düğmesiyle mevcut
+   projeye adres ekleyin. **Web Scan** düğmesi taramayı kuyruğa alır.
+   API: `POST /api/projects` (`webUrl`), `PATCH /api/projects/{id}`
+   (`webUrl`, `webScanMode`), `POST /api/scans` (`"kind": "web"`).
+
+**Ne kontrol edilir (yerleşik, pasif)**
+
+Yalnız zararsız `GET` istekleri atılır (form gönderilmez, çerez saklanmaz,
+kimlik bilgisi gönderilmez), taramada en fazla 120 istek, aynı anda en fazla 3.
+`User-Agent: oss-risk-platform/<sürüm> (web-scan)`; sunucu loglarında bu adla
+görünür. 34 kural (tam katalog contract §4):
+
+- **HTTPS/TLS:** şifresiz HTTP, HTTP→HTTPS yönlendirmesi, sertifika geçerliliği
+  ve 30 gün içinde bitiş, TLS 1.0/1.1 kabulü.
+- **Güvenlik başlıkları:** HSTS, CSP (yok veya gevşek), clickjacking koruması,
+  `nosniff`, `Referrer-Policy`, `Permissions-Policy`.
+- **Bilgi ifşası:** `Server` sürümü, `X-Powered-By`, `X-AspNet-Version`,
+  ayrıntılı hata sayfaları/yığın izleri (ASP.NET YSOD, .NET Core geliştirici
+  sayfası, SQL hataları …), dizin listeleme.
+- **Çerezler:** `Secure`, `HttpOnly` (oturum çerezlerinde orta önem), `SameSite`.
+- **CORS:** her kaynağın (ve `null`'ın) kimlik bilgisiyle yansıtılması.
+- **Açıkta kalan dosyalar:** `.git`, `.env`, `appsettings*.json`, `web.config`,
+  `elmah.axd`, `trace.axd`, `.svn`/`.hg`/`.DS_Store`, `server-status`,
+  `phpinfo.php`, Swagger/OpenAPI. İçerik doğrulanır (yalnız `200` yetmez) ve
+  rastgele bir yola verilen yanıtla karşılaştırılır. **Dosya içerikleri
+  saklanmaz**; kanıtta yalnız eşleşen anahtar adları bulunur.
+- **Sayfa içeriği:** karma içerik, harici betiklerde SRI eksikliği, HTTP'ye
+  giden formlar.
+- **JavaScript kütüphaneleri:** sayfadaki jQuery, Bootstrap, AngularJS/Angular,
+  Vue, Lodash, Moment, React … adres, dosya başlığı veya HTML özniteliğinden
+  tespit edilir ve OSV'de (npm) bilinen açıklar sorgulanır (`WEB-LIB-001`).
+  Üçüncü taraf (CDN) betikleri **indirilmez**, sürüm adresten okunur.
+  Paketlenmiş (webpack) uygulamalarda tespit sınırlıdır; bu durumda
+  bağımlılık taraması kullanın.
+
+**Sonuçlar ve rapor**
+
+- Tarama satırında `Web` etiketi, hedef host ve **güvenlik notu (A–F)** görünür.
+  Not: `100 − 40·kritik − 20·yüksek − 8·orta − 2·düşük` (en az 0);
+  A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, F < 40.
+- **Vulnerabilities** ekranında web taraması seçilince not kartı, bulgular
+  (kural, önem, OWASP 2021, CWE, konum, kanıt, öneri) ve tespit edilen
+  kütüphaneler gösterilir. API: `GET /api/scans/{id}/web-findings`.
+- Satırdaki **PDF** yönetici odaklı rapordur (ilk sayfa: not, önem dağılımı,
+  öne çıkan bulgular, "ne yapılmalı"); **CSV** tüm bulgulardır.
+  `GET /api/scans/{id}/exports/web-report.pdf` ve `…/web-findings.csv`.
+  PDF, Türkçe karakterler için Windows'ta Arial/Segoe UI, Linux'ta DejaVu
+  fontunu kullanır.
+- Web taramasının `scans` sayaçları web bulgularının önem dağılımıdır;
+  bağımlılık çıktıları (Excel, NOTICE, SBOM) web taraması için `404` döner.
+  Günlük CVE yeniden kontrolü ve durum paneli yalnız **bağımlılık**
+  taramalarını "son tarama" sayar.
+
+**OWASP ZAP ile derin tarama (isteğe bağlı, Docker'sız)**
+
+Yerleşik kontroller yapılandırma hatalarını bulur; XSS/SQL injection gibi
+uygulama açıklarına yaklaşmak için makinede bir **OWASP ZAP** daemon'u
+çalıştırıp bağlayabilirsiniz:
+
+1. ZAP'ı Windows kurulum paketiyle kurun (`https://www.zaproxy.org/download/`).
+2. API anahtarıyla daemon olarak başlatın (PowerShell):
+
+    ```powershell
+    & "C:\Program Files\ZAP\Zed Attack Proxy\zap.bat" -daemon -host 127.0.0.1 -port 8090 -config api.key=<uzun-rastgele-anahtar>
+    ```
+
+3. `.env`: `ZAP_API_URL=http://127.0.0.1:8090` ve `ZAP_API_KEY=<aynı anahtar>`;
+   uygulamayı yeniden başlatın.
+
+Her web taramasında ZAP'ta **yeni oturum** açılır (ZAP örneği bu araca ayrılmış
+olmalı) ve ZAP yalnız hedef hostu kapsayan bir bağlamda (context) çalıştırılır;
+site gezdirilir (spider, en fazla 5 dk, form gönderilmez), pasif tarama
+sonuçları alınır. ZAP istekleri kendi hostundan atar: ZAP'ı aracın çalıştığı
+makinede `127.0.0.1`'e bağlayın ve ağda yalıtılmış tutun.
+Projede tarama modu **Active** seçildiyse ayrıca **aktif tarama** (saldırı
+simülasyonu, en fazla 30 dk) yapılır. Aktif tarama sisteme gerçek saldırı
+istekleri gönderir ve kayıt/veri oluşturabilir: **canlı sistemlerde değil, test
+ortamında kullanın.** ZAP'a ulaşılamazsa tarama yerleşik sonuçlarla tamamlanır
+ve `[zap] …` uyarısı yazılır. ZAP alarmları eklenti başına tek bulgu olarak
+(`ZAP-<pluginId>`) aynı listeye düşer; ZAP'ın "False Positive" işaretledikleri
+ve izin listesi dışındaki adresler atılır.
+
+**Sınırlamalar**
+
+- Bir host adı `127.0.0.1`, `169.254.x.x` gibi loopback/link-local bir adrese
+  çözülürse istek atılmaz; bunu bilerek tarayacaksanız IP'yi listeye açıkça
+  yazın. Ana sayfa yönlendirmeleri yalnız aynı adrese (veya http ↔ https)
+  izlenir.
+- Kimlik doğrulama arkasındaki sayfalar taranmaz (giriş sayfasına kadar).
+- Web bulgularında henüz karar akışı (false positive / risk kabulü) yoktur.
+- Zamanlanmış web taraması ve CLI'da `--kind web` sonraki fazdadır.
+- Otomatik tarama, sızma testinin (pentest) yerini tutmaz.
+
 ## Tek tıkla çıktılar (PDF, Excel, CSV, NOTICE)
 
 REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama

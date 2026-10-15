@@ -235,6 +235,23 @@
     .tag-medium { background: rgba(139,92,246,0.15); color: var(--scanning); }
     .tag-low { background: rgba(148,163,184,0.15); color: var(--text-muted); }
     .tag-violation { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .tag-info { background: rgba(148,163,184,0.1); color: var(--text-muted); }
+    /* Web scan (REQ-008) */
+    .kind-web { display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 6px; font-size: 0.68rem; font-weight: 600; background: rgba(56,189,248,0.15); color: #38bdf8; vertical-align: middle; }
+    .web-summary { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; padding: 1.25rem; border-radius: 16px; background: rgba(0,0,0,0.15); border: 1px solid var(--card-border); margin-bottom: 1.25rem; }
+    .web-grade { width: 76px; height: 76px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 2.4rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .web-grade-A { background: #15803d; } .web-grade-B { background: #65a30d; } .web-grade-C { background: #ca8a04; } .web-grade-D { background: #ea580c; } .web-grade-F { background: #b91c1c; }
+    .web-summary-text { flex: 1; min-width: 220px; }
+    .web-summary-text h3 { font-family: var(--font-display); font-size: 1.1rem; margin-bottom: 0.35rem; }
+    .web-summary-text p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
+    .web-counts { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.6rem; }
+    .web-finding-rec { margin-top: 0.4rem; font-size: 0.82rem; color: #a7f3d0; line-height: 1.5; }
+    .web-finding-ev { margin-top: 0.3rem; font-size: 0.8rem; color: var(--text-muted); font-family: monospace; word-break: break-all; }
+    .web-components { margin-top: 1.5rem; }
+    .web-components h4 { font-family: var(--font-display); font-size: 1rem; margin-bottom: 0.6rem; }
+    .form-hint { display: block; color: var(--text-muted); font-size: 0.78rem; margin-top: 0.35rem; line-height: 1.4; }
+    .form-warning { display: none; color: var(--warning); font-size: 0.8rem; margin-top: 0.5rem; line-height: 1.4; }
+    .form-warning.show { display: block; }
     .capsule { display: inline-block; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.06); border-radius: 6px; font-size: 0.75rem; font-weight: 500; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .spin { animation: spin 1.5s linear infinite; }
@@ -468,6 +485,7 @@
                   <th>Project Name</th>
                   <th>Criticality</th>
                   <th>Local Path / Repository</th>
+                  <th>Web URL</th>
                   <th>Ecosystems</th>
                   <th>Registered</th>
                   <th>Actions</th>
@@ -619,7 +637,7 @@
     <div class="modal-content">
       <button class="modal-close" type="button" id="modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
       <h3 class="modal-title" id="scanModal-title">Trigger Compliance Scan</h3>
-      <p class="modal-subtitle">Create a new project or scan an existing repository path.</p>
+      <p class="modal-subtitle">Create a new project: scan its code (repository path), its running web address, or both.</p>
 
       <div class="form-group">
         <label for="projectName">Project Name</label>
@@ -629,6 +647,12 @@
       <div class="form-group">
         <label for="repoPath">Local Repository Path</label>
         <input type="text" id="repoPath" class="form-control" placeholder="/absolute/path/to/project">
+      </div>
+
+      <div class="form-group">
+        <label for="webUrl">Web URL (optional)</label>
+        <input type="url" id="webUrl" class="form-control" placeholder="https://portal.sirket.local/" autocomplete="off" spellcheck="false">
+        <small class="form-hint">Çalışan uygulamanın adresi. Yalnız WEB_SCAN_ALLOWED_HOSTS listesindeki (kendi/şirket) sistemler taranabilir.</small>
       </div>
 
       <div class="form-group">
@@ -643,6 +667,35 @@
       <div class="form-actions">
         <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Cancel</button>
         <button class="btn" type="button" id="launch-btn"><i data-lucide="play"></i> Launch Scanner</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Web URL Modal (REQ-008 AC-P27-6) -->
+  <div class="modal" id="webUrlModal" role="dialog" aria-modal="true" aria-labelledby="webUrlModal-title">
+    <div class="modal-content">
+      <button class="modal-close" type="button" id="web-modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="webUrlModal-title">Web Scan Target</h3>
+      <p class="modal-subtitle" id="webUrlModal-subtitle">Set the address of the running application.</p>
+
+      <div class="form-group">
+        <label for="webUrlInput">Web URL</label>
+        <input type="url" id="webUrlInput" class="form-control" placeholder="https://portal.sirket.local/" autocomplete="off" spellcheck="false">
+        <small class="form-hint">Boş bırakılırsa web adresi kaldırılır.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="webScanMode">Scan mode</label>
+        <select id="webScanMode" class="form-control">
+          <option value="passive">Passive (safe, read-only checks)</option>
+          <option value="active">Active (OWASP ZAP attack simulation)</option>
+        </select>
+        <small class="form-warning" id="webScanModeWarning">Aktif tarama yalnız OWASP ZAP tanımlıysa çalışır ve sisteme gerçek saldırı istekleri gönderir; kayıt/veri oluşturabilir. Canlı sistemlerde değil, test ortamında kullanın.</small>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-ghost" type="button" id="web-modal-cancel-btn">Cancel</button>
+        <button class="btn" type="button" id="web-modal-save-btn"><i data-lucide="check"></i> Save</button>
       </div>
     </div>
   </div>

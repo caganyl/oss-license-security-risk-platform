@@ -267,7 +267,30 @@ function formatDate(value) {
 /** Maps API severity / risk strings onto the fixed set of tag classes. */
 function tagLevel(value) {
   const s = String(value || 'medium').toLowerCase();
-  return ['critical', 'high', 'medium', 'low'].includes(s) ? s : 'low';
+  return ['critical', 'high', 'medium', 'low', 'info'].includes(s) ? s : 'low';
+}
+
+/** Host of a web scan target for display (REQ-008); never a link. */
+function webHost(value) {
+  try {
+    return new URL(String(value)).host;
+  } catch {
+    return '—';
+  }
+}
+
+/** URL without query string and fragment (they may carry tokens; never displayed). */
+function webLocation(value) {
+  try {
+    const u = new URL(String(value));
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '—';
+  }
+}
+
+function isWebScan(row) {
+  return row && row.scan_kind === 'web';
 }
 
 function securityLabel(row) {
@@ -311,6 +334,15 @@ function scanActions(row) {
   if (isActiveStatus(row.status)) {
     return el('div', { className: 'progress-bar-container', style: 'width:80px;' },
       el('div', { className: 'progress-bar', style: `width: ${row.status === 'running' ? '65' : '15'}%;` }));
+  }
+  if (row.status === 'completed' && isWebScan(row)) {
+    // REQ-008 AC-P27-5: web scans offer only their own PDF and CSV.
+    const linkStyle = 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;';
+    const webLink = (href, label, text) => el('a', { className: 'btn btn-sm', href, download: true, 'aria-label': label, style: linkStyle },
+      icon('download', 'width:12px;height:12px;'), ' ' + text);
+    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem; flex-wrap:wrap;' },
+      webLink(apiPath('scans', row.id, 'exports', 'web-report.pdf'), 'Download web security report (PDF)', 'PDF'),
+      webLink(apiPath('scans', row.id, 'exports', 'web-findings.csv'), 'Download web findings (CSV)', 'CSV'));
   }
   if (row.status === 'completed') {
     // One-click exports (REQ-007 AC-P24-8, contract section 8): plain same-origin
@@ -363,15 +395,18 @@ async function downloadCycloneDxSbom(scanId) {
 // ── Scan rows (dashboard + history share one renderer)
 function buildScanRow(row, idPrefix, withTrigger) {
   const tr = el('tr', { className: 'scan-row', id: `${idPrefix}-${row.id}` });
+  const web = isWebScan(row);
+  const grade = web && row.web_summary && typeof row.web_summary.grade === 'string' ? row.web_summary.grade : null;
   return append(tr, [
     el('td', null,
       el('strong', null, row.project_name || '—'),
+      web ? el('span', { className: 'kind-web', title: 'Web (URL) scan' }, 'Web') : null,
       el('br'),
-      el('small', { style: 'color:var(--text-muted);' }, row.ref || 'main')),
+      el('small', { style: 'color:var(--text-muted);' }, web ? webHost(row.target_url) : (row.ref || 'main'))),
     el('td', null, statusBadge(row.status)),
-    el('td', null, row.total_dependencies ? Number(row.total_dependencies).toLocaleString() : '—'),
-    el('td', null, licenseLabel(row)),
-    el('td', null, securityLabel(row)),
+    el('td', null, !web && row.total_dependencies ? Number(row.total_dependencies).toLocaleString() : '—'),
+    el('td', null, web ? el('span', { style: 'color: var(--text-muted);' }, '—') : licenseLabel(row)),
+    el('td', null, grade ? el('span', { className: 'capsule', style: 'margin-right:0.35rem;' }, `Grade ${grade}`) : null, securityLabel(row)),
     withTrigger
       ? el('td', { style: 'text-transform: capitalize;' }, el('span', { className: 'capsule' }, row.trigger || 'manual'))
       : null,
@@ -701,19 +736,32 @@ function renderProjectRow(p) {
     .map((e) => el('span', { className: 'capsule', style: 'margin-right:0.25rem;' }, e));
 
   // Values travel in data-* attributes and are read back from dataset — never interpolated into code.
-  const scanButton = el('button', {
-    className: 'btn btn-sm',
-    type: 'button',
-    dataset: { action: 'scan-project', projectId: String(p.id ?? ''), projectName: String(p.name ?? '') },
-  }, icon('play', 'width:12px;height:12px;'), ' Scan Now');
+  const data = { projectId: String(p.id ?? ''), projectName: String(p.name ?? '') };
+  const scanButton = p.repo_url
+    ? el('button', { className: 'btn btn-sm', type: 'button', dataset: { action: 'scan-project', ...data } },
+      icon('play', 'width:12px;height:12px;'), ' Scan Now')
+    : null;
+  const webScanButton = p.web_url
+    ? el('button', { className: 'btn btn-sm', type: 'button', dataset: { action: 'web-scan-project', ...data } },
+      icon('globe', 'width:12px;height:12px;'), ' Web Scan')
+    : null;
+  const webEditButton = el('button', { className: 'btn btn-sm btn-ghost', type: 'button', dataset: { action: 'edit-web-url', ...data }, 'aria-label': 'Edit web URL' },
+    icon('pencil', 'width:12px;height:12px;'), ' Web URL');
+
+  // REQ-008: the web address is shown as text with its scan mode, never as a link.
+  const webContent = p.web_url
+    ? el('span', null, String(p.web_url),
+      p.web_scan_mode === 'active' ? el('span', { className: 'capsule', style: 'margin-left:0.35rem; color: var(--warning);' }, 'active') : null)
+    : '—';
 
   return el('tr', null,
     el('td', null, el('strong', null, p.name ?? '—')),
     el('td', null, el('span', { className: 'status-badge', style: critStyle }, p.criticality ?? '—')),
     el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted);' }, repoContent),
+    el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted); word-break: break-all;' }, webContent),
     el('td', null, ecosystems.length ? ecosystems : el('span', { style: 'color:var(--text-muted)' }, '—')),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(p.created_at)),
-    el('td', null, scanButton));
+    el('td', null, el('div', { style: 'display:inline-flex; gap:0.375rem; flex-wrap:wrap;' }, scanButton, webScanButton, webEditButton)));
 }
 
 async function loadProjectsList() {
@@ -731,16 +779,74 @@ async function loadProjectsList() {
     clear(tbody);
     container.style.display = 'block';
 
+    projectsById.clear();
     if (!Array.isArray(data) || data.length === 0) {
-      emptyRow(tbody, 6, 'No projects registered');
+      emptyRow(tbody, 7, 'No projects registered');
       return;
     }
 
-    for (const p of data) tbody.appendChild(renderProjectRow(p));
+    for (const p of data) {
+      projectsById.set(String(p.id), p);
+      tbody.appendChild(renderProjectRow(p));
+    }
     refreshIcons();
   } catch (e) {
     loading.style.display = 'none';
     reportError(e, 'Failed to load projects');
+  }
+}
+
+/** Last loaded projects by id (Web URL modal prefill). */
+const projectsById = new Map();
+let webModalProjectId = null;
+
+async function triggerWebScan(projectId, name) {
+  showToast(`Scheduling web scan for "${name}"...`, 'success');
+  try {
+    await api('/api/scans', { method: 'POST', body: { projectId, trigger: 'manual', kind: 'web' } });
+    showToast('Web scan queued successfully!');
+    await switchView('dashboard');
+  } catch (e) {
+    reportError(e, 'Failed to trigger web scan');
+  }
+}
+
+function syncWebModeWarning() {
+  byId('webScanModeWarning').classList.toggle('show', byId('webScanMode').value === 'active');
+}
+
+function openWebUrlModal(projectId) {
+  const p = projectsById.get(String(projectId));
+  if (!p) return;
+  webModalProjectId = String(projectId);
+  setText('webUrlModal-subtitle', `Project: ${p.name ?? '—'}`);
+  byId('webUrlInput').value = p.web_url || '';
+  byId('webScanMode').value = p.web_scan_mode === 'active' ? 'active' : 'passive';
+  syncWebModeWarning();
+  byId('webUrlModal').classList.add('open');
+  byId('webUrlInput').focus();
+}
+
+function closeWebUrlModal() {
+  byId('webUrlModal').classList.remove('open');
+  webModalProjectId = null;
+}
+
+async function saveWebUrl() {
+  if (!webModalProjectId) return;
+  const webUrl = byId('webUrlInput').value.trim();
+  const webScanMode = byId('webScanMode').value === 'active' ? 'active' : 'passive';
+  const button = byId('web-modal-save-btn');
+  button.disabled = true;
+  try {
+    await api(apiPath('projects', webModalProjectId), { method: 'PATCH', body: { webUrl: webUrl === '' ? null : webUrl, webScanMode } });
+    closeWebUrlModal();
+    showToast('Web target saved.');
+    await loadProjectsList();
+  } catch (e) {
+    reportError(e, 'Failed to save web URL');
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -757,13 +863,15 @@ async function triggerManualScan(projectId, name) {
 }
 
 // ── Dropdowns Populator for Scans (Vulnerabilities and SBOM)
-async function populateScansDropdown(selectId, loader) {
+async function populateScansDropdown(selectId, loader, options = {}) {
   const select = byId(selectId);
   setPlaceholderOption(select, 'Loading completed scans...');
 
   try {
     const { data } = await api('/api/scans');
-    const completed = (Array.isArray(data) ? data : []).filter((s) => s.status === 'completed');
+    // The SBOM Center lists dependency scans only (a web scan has no SBOM).
+    const completed = (Array.isArray(data) ? data : [])
+      .filter((s) => s.status === 'completed' && (options.includeWeb !== false || !isWebScan(s)));
     clear(select);
 
     if (completed.length === 0) {
@@ -772,8 +880,11 @@ async function populateScansDropdown(selectId, loader) {
     }
 
     for (const scan of completed) {
-      select.appendChild(el('option', { value: String(scan.id) },
-        `${scan.project_name} - ${scan.ref} (${formatDate(scan.completed_at)})`));
+      const web = isWebScan(scan);
+      select.appendChild(el('option', { value: String(scan.id), dataset: { kind: web ? 'web' : 'dependency' } },
+        web
+          ? `${scan.project_name} - Web ${webHost(scan.target_url)} (${formatDate(scan.completed_at)})`
+          : `${scan.project_name} - ${scan.ref} (${formatDate(scan.completed_at)})`));
     }
   } catch (e) {
     setPlaceholderOption(select, 'Failed to fetch scans');
@@ -843,6 +954,78 @@ function renderFinding(f) {
         : null));
 }
 
+// ── Web scan findings (REQ-008 AC-P27-5)
+const WEB_SEVERITY_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
+const WEB_ENGINE_LABELS = { complete: 'complete', partial: 'partial', not_configured: 'not configured', unavailable: 'unreachable', failed: 'failed', disabled: 'off', not_needed: 'not needed' };
+
+function hasLabel(map, key) {
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : '—';
+}
+
+function renderWebSummary(data) {
+  const grade = ['A', 'B', 'C', 'D', 'F'].includes(data.grade) ? data.grade : 'F';
+  const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
+  const engines = summary.engines && typeof summary.engines === 'object' ? summary.engines : {};
+  const counts = data.counts && typeof data.counts === 'object' ? data.counts : {};
+  const chips = ['critical', 'high', 'medium', 'low', 'info'].map((s) =>
+    el('span', { className: `tag tag-${tagLevel(s)}` }, `${WEB_SEVERITY_LABELS[s]}: ${Number(counts[s]) || 0}`));
+  const engineText = `Built-in: ${hasLabel(WEB_ENGINE_LABELS, engines.builtin)} · OWASP ZAP: ${hasLabel(WEB_ENGINE_LABELS, engines.zap)}`
+    + (engines.zap_mode === 'active' ? ' (active)' : '')
+    + ` · Library lookup: ${hasLabel(WEB_ENGINE_LABELS, summary.vulnerability_lookup)} · Requests: ${Number(summary.requests) || 0}`;
+  return el('div', { className: 'web-summary' },
+    el('div', { className: `web-grade web-grade-${grade}`, 'aria-label': `Grade ${grade}` }, grade),
+    el('div', { className: 'web-summary-text' },
+      el('h3', null, `Security grade ${grade} · ${Number(data.score) || 0}/100`),
+      el('p', null, `Target: ${data.scan && data.scan.target_url ? webLocation(data.scan.target_url) : '—'}`),
+      el('p', null, engineText),
+      el('div', { className: 'web-counts' }, chips)));
+}
+
+function renderWebFinding(f) {
+  const sev = tagLevel(f.severity);
+  const badges = el('div', null,
+    el('span', { className: `tag tag-${sev}` }, hasLabel(WEB_SEVERITY_LABELS, f.severity)),
+    ' ',
+    el('span', { className: 'capsule' }, f.rule_id ?? '—'),
+    f.owasp ? [' ', el('span', { className: 'capsule' }, `OWASP ${f.owasp}`)] : null,
+    f.cwe_id ? [' ', el('span', { className: 'capsule' }, `CWE-${f.cwe_id}`)] : null,
+    f.advisory_id ? [' ', el('span', { className: 'capsule' }, f.advisory_id)] : null);
+  let iconColor = 'var(--text-muted)';
+  let iconBg = 'rgba(255,255,255,0.06)';
+  if (sev === 'critical' || sev === 'high') { iconColor = 'var(--danger)'; iconBg = 'rgba(239,68,68,0.15)'; }
+  else if (sev === 'medium') { iconColor = 'var(--warning)'; iconBg = 'rgba(245,158,11,0.15)'; }
+  return el('div', { className: 'finding-item' },
+    el('div', { className: 'finding-icon', style: `background: ${iconBg}; color: ${iconColor};` }, icon(f.source === 'zap' ? 'radar' : 'globe')),
+    el('div', { className: 'finding-info' },
+      el('div', { className: 'finding-title-row' }, el('h4', { className: 'finding-title' }, f.title ?? '—'), badges),
+      el('div', { className: 'finding-meta' },
+        f.location ? el('span', null, 'Location: ', el('strong', { style: 'word-break: break-all;' }, f.location)) : null,
+        el('span', null, 'Source: ', el('span', { className: 'capsule' }, f.source === 'zap' ? 'OWASP ZAP' : 'Built-in')),
+        f.component_name ? el('span', null, 'Component: ', el('strong', null, `${f.component_name}@${f.component_version ?? '?'}`)) : null),
+      el('p', { className: 'finding-description' }, f.description ?? ''),
+      f.evidence ? el('div', { className: 'web-finding-ev' }, `Evidence: ${f.evidence}`) : null,
+      f.fixed_version ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, 'Fixed in: ', el('strong', null, f.fixed_version)) : null,
+      el('div', { className: 'web-finding-rec' }, `Recommendation: ${f.recommendation ?? ''}`)));
+}
+
+async function loadWebFindings(scanId, container) {
+  const { data } = await api(apiPath('scans', scanId, 'web-findings'));
+  clear(container);
+  container.appendChild(renderWebSummary(data));
+  const findings = Array.isArray(data.findings) ? data.findings : [];
+  if (findings.length === 0) {
+    container.appendChild(emptyState('shield-check', 'No web findings', 'No issue was found by the checks that ran for this target.', ' color:var(--success); opacity:1;'));
+  }
+  for (const f of findings) container.appendChild(renderWebFinding(f));
+  const components = Array.isArray(data.components) ? data.components : [];
+  if (components.length > 0) {
+    container.appendChild(el('div', { className: 'web-components' },
+      el('h4', null, 'Detected JavaScript libraries'),
+      components.map((c) => el('span', { className: 'capsule', style: 'margin:0 0.35rem 0.35rem 0;' }, `${c.name} ${c.version}`))));
+  }
+  refreshIcons();
+}
+
 async function loadScanFindings() {
   const scanId = byId('findings-scan-select').value;
   const container = byId('findings-container');
@@ -856,6 +1039,21 @@ async function loadScanFindings() {
 
   loading.style.display = 'block';
   container.style.display = 'none';
+
+  const selected = byId('findings-scan-select').selectedOptions[0];
+  if (selected && selected.dataset.kind === 'web') {
+    try {
+      await loadWebFindings(scanId, container);
+      loading.style.display = 'none';
+      container.style.display = 'block';
+    } catch (e) {
+      loading.style.display = 'none';
+      container.style.display = 'block';
+      clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, 'Error loading web findings')));
+      reportError(e, 'Error loading web findings');
+    }
+    return;
+  }
 
   try {
     const { data } = await api(apiPath('scans', scanId, 'findings'));
@@ -1201,16 +1399,18 @@ function closeModal() {
   modal.classList.remove('open');
   byId('projectName').value = '';
   byId('repoPath').value = '';
+  byId('webUrl').value = '';
 }
 
 // ── Launch Scan modal submission
 async function launchScan() {
   const name = byId('projectName').value.trim();
   const repoPath = byId('repoPath').value.trim();
+  const webUrl = byId('webUrl').value.trim();
   const ecosystems = Array.from(byId('ecosystems').selectedOptions).map((o) => o.value);
 
   if (!name) { showToast('Project name is required', 'error'); return; }
-  if (!repoPath) { showToast('Repository path is required', 'error'); return; }
+  if (!repoPath && !webUrl) { showToast('Enter a repository path, a web URL, or both', 'error'); return; }
 
   const launchBtn = byId('launch-btn');
   launchBtn.disabled = true;
@@ -1218,9 +1418,13 @@ async function launchScan() {
 
   try {
     // 1. Create project
-    const { data: project } = await api('/api/projects', { method: 'POST', body: { name, repoUrl: repoPath, ecosystems } });
-    // 2. Queue scan
-    await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual' } });
+    const body = { name, ecosystems };
+    if (repoPath) body.repoUrl = repoPath;
+    if (webUrl) body.webUrl = webUrl;
+    const { data: project } = await api('/api/projects', { method: 'POST', body });
+    // 2. Queue scans: dependency scan for the code, web scan for the address (REQ-008).
+    if (repoPath) await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual' } });
+    if (webUrl) await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual', kind: 'web' } });
 
     closeModal();
     showToast(`Scan queued for "${name}". Results will appear shortly.`);
@@ -1264,7 +1468,7 @@ const VIEWS = {
   sbom: {
     title: 'SBOM Center',
     subtitle: 'Software Bill of Materials (SBOM) generation and download registry',
-    load: () => populateScansDropdown('sbom-scan-select', loadScanSboms),
+    load: () => populateScansDropdown('sbom-scan-select', loadScanSboms, { includeWeb: false }),
     refresh: () => loadScanSboms(),
   },
   users: {
@@ -1542,11 +1746,27 @@ function bindHandlers() {
     if (e.key === 'Escape' && byId('scanModal').classList.contains('open')) closeModal();
   });
 
-  // Delegated: per-project "Scan Now" buttons carry their values in data-* attributes.
+  // Web URL modal (REQ-008).
+  byId('web-modal-close-btn').addEventListener('click', fire(closeWebUrlModal));
+  byId('web-modal-cancel-btn').addEventListener('click', fire(closeWebUrlModal));
+  byId('web-modal-save-btn').addEventListener('click', fire(saveWebUrl));
+  byId('webScanMode').addEventListener('change', syncWebModeWarning);
+  byId('webUrlModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeWebUrlModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && byId('webUrlModal').classList.contains('open')) closeWebUrlModal();
+  });
+
+  // Delegated: per-project buttons carry their values in data-* attributes.
   byId('projects-list-tbody').addEventListener('click', fire((e) => {
-    const target = e.target instanceof Element ? e.target.closest('button[data-action="scan-project"]') : null;
+    const target = e.target instanceof Element ? e.target.closest('button[data-action]') : null;
     if (!target) return undefined;
-    return triggerManualScan(target.dataset.projectId, target.dataset.projectName);
+    const { action, projectId, projectName } = target.dataset;
+    if (action === 'scan-project') return triggerManualScan(projectId, projectName);
+    if (action === 'web-scan-project') return triggerWebScan(projectId, projectName);
+    if (action === 'edit-web-url') return openWebUrlModal(projectId);
+    return undefined;
   }));
 }
 

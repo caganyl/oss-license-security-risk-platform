@@ -19,6 +19,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 - [Kayıt defteri önbelleği (`006`)](#kayıt-defteri-önbelleği-006)
 - [Güvenlik açığı önbellekleri ve yeniden kontrol kaydı (`007`)](#güvenlik-açığı-önbellekleri-ve-yeniden-kontrol-kaydı-007)
 - [NuGet önbelleği ve sınıflandırılmamış lisans işareti (`008`)](#nuget-önbelleği-ve-sınıflandırılmamış-lisans-işareti-008)
+- [Web taraması (`009`)](#web-taraması-009)
 - [Parola kurtarma (SQL adımı)](#parola-kurtarma-sql-adımı)
 - [Kurallar](#kurallar)
 
@@ -27,7 +28,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | Yol | Amaç |
 | --- | --- |
 | `migrations/NNN_ad.up.sql` / `.down.sql` | İleri / geri göç. Araç her dosyayı, `schema_migrations` kaydıyla (`up`'ta `INSERT`, `down`'da `DELETE`) birlikte **tek transaction** içinde çalıştırır: ya ikisi birden işlenir ya hiçbiri. Dosyalarda `BEGIN/COMMIT` yoktur. |
-| `schema.sql` | `001`–`008` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
+| `schema.sql` | `001`–`009` sonrası şemanın **referans görüntüsü**. Araçla yönetilen bir veritabanına yüklenmez (`schema_migrations` doldurmaz; sonraki `npm run db:migrate` her nesneyi yeniden oluşturmaya çalışıp hata verir, `npm start` de tüm göçleri bekleyen görüp başlamaz). Her yeni göçle senkron tutulur. |
 | `tests/f1_migrations_test.sql` | `002`–`004` için up → assert → down → up senaryosu. `psql` gerektirmez: `npm test` bunu `tests/integration/migrations.test.ts` içinde gömülü PostgreSQL'e karşı çalıştırır (`\ir` satırları satır içine alınır). Bulgu parmak izi referans değerleri de buradadır. |
 | `../src/db/migrate.ts` | CLI (`npm run db:migrate` = `node dist/db/migrate.js`). |
 | `../src/db/migrator.ts` | Göç kütüphanesi: klasör doğrulama, durum okuma, `up`, `down`, `status`, `npm start` için bekleyen göç kontrolü. |
@@ -45,6 +46,7 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
 | `006_registry_enrichment` | `registry_package_cache` (kayıt defteri lisans meta veri önbelleği), `registry_archive_cache` (arşivden çıkarılan lisans dosyaları ve telif satırları); `scan_dependencies`'e 7 kolon: `license_expression`, `license_source`, `license_lock_hint`, `license_hint_differs`, `license_enrichment_status`, `notice_status`, `notice_archive_id` (FK, `ON DELETE SET NULL`); `idx_scan_dependencies_notice_archive`. Veri taşıma yok; eski satırlar `NULL` kalır (= F3 öncesi tarama) | ADR-006 Karar 9–10, D-57, D-62, D-79 | İki önbellek (kayıt defterlerinden yeniden indirilebilir) ve F3 sonrası taramaların etkin lisans / NOTICE alanları (kalıcı; bu taramalar F3 öncesi gibi görünür, NOTICE için yeniden tarama gerekir) |
 | `007_vulnerability_recheck` | `vulnerability_recheck_runs` (günlük yeniden kontrol çalıştırma kaydı; `runtime_run_id` çiti, aynı anda tek `running` satırı: `uq_vulnerability_recheck_runs_running`), `osv_vulnerability_cache` (kırpılmış OSV kayıtları), `nvd_cvss_cache` (CVE başına CVSS özeti); `scans.vulnerability_data_status` (`complete`/`partial`/`unavailable`/`disabled`, `NULL` = F4 öncesi), `scans.vulnerability_checked_at`; `findings.recheck_run_id` (FK, `ON DELETE SET NULL`); `scan_dependencies.lock_integrity` (L-5: `match`/`mismatch`/`not_comparable`); `idx_findings_recheck_run`, `idx_findings_accepted`, `idx_scans_project_completed`. Enum değişikliği ve veri taşıma yok; eski satırlar `NULL` kalır | ADR-007 Karar 14, D-102, D-103 | Yeniden kontrol çalıştırma geçmişi, bulguların yeniden kontrol bağlantısı (bulgular, incelemeler ve denetim satırları **kalır**), taramaların güvenlik açığı verisi durumu ve son kontrol zamanı, L-5 işaretleri (kalıcı); iki önbellek (OSV/NVD'den yeniden alınabilir) |
 | `008_nuget_enrichment` | `registry_package_cache` ve `registry_archive_cache` `ecosystem` CHECK'ine `nuget`; `registry_package_cache`'e 3 kolon (yalnız NuGet `found` satırlarında dolu, `registry_package_cache_nuget_fields`): `license_unclassified` (`file`/`url`), `license_file_path` (≤ 256), `canonical_name` (≤ 100, `.nuspec` `<id>`); `scan_dependencies.license_source` CHECK'ine `registry:nuget`; `scan_dependencies.license_unclassified` (`file`/`url`/`NULL`). İndeks, enum değişikliği ve veri taşıma yok; eski satırlar `NULL` kalır | ADR-008 Karar 14, D-139, D-157, D-158 | NuGet meta veri ve arşiv önbellek satırları (yeniden indirilebilir; NuGet satırlarının `notice_archive_id`'si `NULL` olur, NOTICE için yeniden tarama gerekir); `registry:nuget` → `none` (**toplu güncelleme**, `license_expression` korunur); `license_unclassified` işaretleri (kalıcı) |
+| `009_web_scan` | `projects.web_url` (≤ 2048) ve `projects.web_scan_mode` (`passive`/`active`, varsayılan `passive`); `scans.scan_kind` (`dependency`/`web`, varsayılan `dependency`), `scans.target_url` (yalnız web taramasında dolu, `scans_web_target_chk`), `scans.web_summary` (JSONB); yeni tablolar `web_findings` ve `web_scan_components`. Enum değişikliği ve veri taşıma yok; eski taramalar `dependency` olur | ADR-010 Karar 1, 2, D-210, D-211 | Tüm web taramaları ve bulguları (**toplu silme**), projelerin web adresleri (kalıcı) |
 
 **Dağıtım sırası:**
 
@@ -71,6 +73,12 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
   reddettiği `nuget` / `registry:nuget` değerlerini yazar). Down betiği toplu
   veri güncellemesi içerdiği için yalnız açık insan onayıyla çalıştırılır.
   REQ-006 öncesi kod yeni kolonları yok sayar.
+- `009`, REQ-008 çalışma zamanından **önce** uygulanır (worker, API, rapor ve
+  arayüz yeni kolonları ve tabloları okur/yazar; `npm start` göç bekliyorsa
+  başlamaz). REQ-008 öncesi kod yeni kolonları yok sayar ama kuyruktaki bir web
+  taramasını bağımlılık taraması sanıp başarısız yapar; bu yüzden `009`'u geri
+  almak REQ-008 kodunu geri almakla birlikte yapılır. Down betiği web
+  taramalarını sildiği için yalnız açık insan onayıyla çalıştırılır.
 - Veritabanında dosyası olmayan bir sürüm varsa (veritabanı koddan yeni) ne
   araç (`up`/`down`) ne `npm start` çalışır; önce kodu güncelleyin.
 
@@ -504,6 +512,29 @@ COMMIT;
   (`registry:nuget` → `none`, `license_expression` korunur) ve NuGet önbellek
   satırlarını siler; yalnız açık insan onayıyla, yedek alındıktan sonra
   çalıştırılır.
+
+## Web taraması (`009`)
+
+REQ-008 web (URL) güvenlik taraması için şema (ADR-010 Karar 1, 2; contract
+`docs/contracts/REQ-008-web-scan.md` §2):
+
+| Nesne | İçerik |
+| --- | --- |
+| `projects.web_url` | Çalışan uygulamanın adresi (`http`/`https`, ≤ 2048). Hostu `WEB_SCAN_ALLOWED_HOSTS`'ta olmalı (uygulama denetler). |
+| `projects.web_scan_mode` | `passive` (varsayılan) / `active`. `active` yalnız ZAP tanımlıysa aktif taramayı açar. |
+| `scans.scan_kind` | `dependency` (varsayılan) / `web`. |
+| `scans.target_url` | Web taramasında, kuyruğa alındığı andaki `projects.web_url`. Bağımlılık taramasında `NULL` (`scans_web_target_chk`). |
+| `scans.web_summary` | Tamamlanmış web taramasının özeti (istek sayısı, motor durumları, TLS, sayaçlar, skor, not). |
+| `web_findings` | Web bulguları (kural, önem, kategori, CWE, OWASP, konum, kanıt, öneri; kütüphane açığında `vulnerability_id`). `UNIQUE (scan_id, fingerprint)`. |
+| `web_scan_components` | Sayfada tespit edilen JavaScript kütüphaneleri. `UNIQUE (scan_id, name, version)`. |
+
+- Web bulguları `findings` tablosuna yazılmaz; bağımlılık bulgu sorguları,
+  iş akışı ve yeniden kontrol etkilenmez.
+- Hassas dosya yoklamalarının içeriği hiçbir tabloya yazılmaz; `evidence`
+  yalnız eşleşen anahtar adlarını taşır.
+- Geri alma (`down --to 008`) tüm web taramalarını ve bulgularını siler,
+  projelerin web adreslerini kaldırır; yalnız açık insan onayıyla, yedek
+  alındıktan sonra çalıştırılır.
 
 ## Parola kurtarma (SQL adımı)
 

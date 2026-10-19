@@ -27,6 +27,8 @@ export interface AppDeps {
   scanRoots?: string[];
   /** One-click export cap (REQ-007 AC-P24-7); tests inject their own `ExportLimiter`. */
   exportLimiter?: object;
+  /** Web scan allowlist (REQ-008 P-25; `parseAllowedHosts(...)`). */
+  webAllowlist?: { readonly empty: boolean; allows(host: string): boolean };
 }
 
 export interface AppModule {

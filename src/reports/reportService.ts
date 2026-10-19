@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import { loadWebScanResult, renderWebFindingsCsv, renderWebReportPdf } from '../webscan/report';
 import ExcelJS from 'exceljs';
 import type { Pool } from 'pg';
 import { sanitizeErrorText } from '../lib/errorText';
@@ -130,12 +131,15 @@ export const VALID_REPORT_FORMATS = new Set<ReportFormat>(Object.keys(FORMAT_MET
 export { VALID_REPORT_TYPES };
 
 /** One-click export kinds = the fixed file-name suffixes of the routes (REQ-007 contract 6.1). */
-export type ExportKind = 'project-report.pdf' | 'license-inventory.xlsx' | 'license-inventory.csv';
+export type ExportKind = 'project-report.pdf' | 'license-inventory.xlsx' | 'license-inventory.csv' | 'web-report.pdf' | 'web-findings.csv';
 
 const EXPORT_META: Record<ExportKind, { contentType: string; baseName: string; ext: string }> = {
   'project-report.pdf': { contentType: FORMAT_META.pdf.mimeType, baseName: 'project-report', ext: 'pdf' },
   'license-inventory.xlsx': { contentType: FORMAT_META.excel.mimeType, baseName: 'license-inventory', ext: 'xlsx' },
   'license-inventory.csv': { contentType: 'text/csv; charset=utf-8', baseName: 'license-inventory', ext: 'csv' },
+  // REQ-008 contract 3.7: web scan outputs.
+  'web-report.pdf': { contentType: FORMAT_META.pdf.mimeType, baseName: 'web-report', ext: 'pdf' },
+  'web-findings.csv': { contentType: 'text/csv; charset=utf-8', baseName: 'web-findings', ext: 'csv' },
 };
 
 export interface RenderedExport {
@@ -264,6 +268,7 @@ export class ReportService {
    */
   async renderExport(scanId: string, kind: ExportKind, signal?: AbortSignal): Promise<RenderedExport> {
     signal?.throwIfAborted();
+    if (kind === 'web-report.pdf' || kind === 'web-findings.csv') return this.renderWebExport(scanId, kind, signal);
     const data = await this.loadReportData(scanId);
     signal?.throwIfAborted();
     let body: Buffer;
@@ -283,6 +288,23 @@ export class ReportService {
     signal?.throwIfAborted();
     const meta = EXPORT_META[kind];
     const canonicalId = data.scan.id.toLowerCase();
+    return {
+      scanId: canonicalId,
+      body,
+      contentType: meta.contentType,
+      filename: `${meta.baseName}-${canonicalId}.${meta.ext}`,
+      sha256: crypto.createHash('sha256').update(body).digest('hex'),
+    };
+  }
+
+  /** REQ-008 AC-P27-3: web scan PDF/CSV; a dependency or unknown scan is 404. */
+  private async renderWebExport(scanId: string, kind: 'web-report.pdf' | 'web-findings.csv', signal?: AbortSignal): Promise<RenderedExport> {
+    const result = await loadWebScanResult(this.db, scanId);
+    signal?.throwIfAborted();
+    const body = kind === 'web-report.pdf' ? await renderWebReportPdf(result) : renderWebFindingsCsv(result);
+    signal?.throwIfAborted();
+    const meta = EXPORT_META[kind];
+    const canonicalId = result.scan.id.toLowerCase();
     return {
       scanId: canonicalId,
       body,
@@ -386,7 +408,7 @@ export class ReportService {
               p.criticality::text AS project_criticality, p.repo_url
        FROM scans s
        JOIN projects p ON p.id = s.project_id
-       WHERE s.id = $1 AND s.status = 'completed'`,
+       WHERE s.id = $1 AND s.status = 'completed' AND s.scan_kind = 'dependency'`,
       [scanId],
     );
 

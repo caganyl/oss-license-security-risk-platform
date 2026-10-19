@@ -211,7 +211,7 @@ export class SbomService {
               p.id AS project_id, p.name AS project_name, p.description AS project_description, p.repo_url
        FROM scans s
        JOIN projects p ON p.id = s.project_id
-       WHERE s.id = $1 AND s.status = 'completed'`,
+       WHERE s.id = $1 AND s.status = 'completed' AND s.scan_kind = 'dependency'`,
       [scanId],
     );
 

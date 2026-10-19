@@ -24,6 +24,10 @@ export type ErrorCode =
   | 'too_many_attempts'
   /** REQ-007 contract 6.5: 429 when the export slots are all in use (additive). */
   | 'export_busy'
+  /** REQ-008 contract section 3: web URL rule / allowlist / missing web target (additive). */
+  | 'web_url_invalid'
+  | 'web_url_not_allowed'
+  | 'project_web_url_missing'
   | 'internal_error'
   | 'setup_state_invalid';
 

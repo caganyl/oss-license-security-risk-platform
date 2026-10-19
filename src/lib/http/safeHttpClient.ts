@@ -220,6 +220,34 @@ export function parseJsonBody(result: { headers: IncomingHttpHeaders; body: Buff
   }
 }
 
+/**
+ * Node `proxyEnv` tunnel guard (REQ-008 handoff finding): when the proxy
+ * answers `CONNECT` with a non-2xx status (e.g. `403` for a host the
+ * corporate proxy blocks), Node (22.22) passes `ERR_PROXY_TUNNEL` to the
+ * request but leaves the raw proxy socket without an `error` listener; the
+ * proxy's later reset then surfaces as an `uncaughtException` and stops the
+ * whole application. The wrapper gives such a failed tunnel socket a
+ * listener and destroys it; successful connections are untouched.
+ */
+export function guardProxyTunnelErrors<T extends http.Agent>(agent: T): T {
+  const original = (agent as unknown as { createConnection: (...args: unknown[]) => unknown }).createConnection;
+  (agent as unknown as { createConnection: (...args: unknown[]) => unknown }).createConnection = function guarded(this: unknown, ...args: unknown[]) {
+    const last = args.length - 1;
+    const cb = args[last];
+    if (typeof cb === 'function') {
+      args[last] = (err: unknown, socket: unknown) => {
+        if (err && socket && typeof (socket as { on?: unknown }).on === 'function') {
+          (socket as { on(event: string, fn: () => void): void }).on('error', () => undefined);
+          (socket as { destroy?: () => void }).destroy?.();
+        }
+        (cb as (e: unknown, s: unknown) => void)(err, socket);
+      };
+    }
+    return original.apply(this, args);
+  };
+  return agent;
+}
+
 /** Counting semaphore; waiting is abortable. */
 class Semaphore {
   private active = 0;
@@ -332,7 +360,7 @@ export function createSafeHttpClient(options: SafeHttpClientOptions): SafeHttpCl
   } else if (proxy.mode === 'proxy') {
     if (nodeSupportsProxyEnv(options.nodeVersion ?? process.versions.node)) {
       const proxyOptions: ProxyAgentOptions = { ...agentOptions, proxyEnv: { HTTPS_PROXY: proxy.proxyUrl } };
-      proxyAgent = new https.Agent(proxyOptions);
+      proxyAgent = guardProxyTunnelErrors(new https.Agent(proxyOptions));
       noProxy = proxy.noProxy;
     } else {
       proxyBlocked = true;

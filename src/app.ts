@@ -26,10 +26,12 @@ import { ExportLimiter } from './reports/exportLimiter';
 import createWorkflowRouter from './routes/workflowRoutes';
 import createProjectRouter from './routes/projectRoutes';
 import createScanRouter from './routes/scanRoutes';
+import createWebFindingsRouter from './routes/webFindingsRoutes';
 import createVulnerabilityStatusRouter from './routes/vulnerabilityStatusRoutes';
 import type { AppClock } from './lib/clock';
 import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
 import type { VulnerabilitySchedulerView } from './vulnerability/scheduler';
+import { type HostAllowlist, parseAllowedHosts } from './webscan/allowlist';
 
 export interface AppDeps {
   /** Required; the app never falls back to the global pool. */
@@ -40,6 +42,11 @@ export interface AppDeps {
   host?: string;
   /** Allowed local scan roots (P-04); default: parseScanRoots(process.env.SCAN_ROOTS). */
   scanRoots?: string[];
+  /**
+   * Web scan allowlist (REQ-008 P-25); default:
+   * `parseAllowedHosts(process.env.WEB_SCAN_ALLOWED_HOSTS)` (empty = closed).
+   */
+  webAllowlist?: HostAllowlist;
   /**
    * Read-only scheduler view for `GET /api/vulnerability-data/status`
    * (ADR-007 Karar 10). A getter, because the runtime creates the scheduler
@@ -71,6 +78,7 @@ export function createApp(deps: AppDeps): express.Express {
   const { db } = deps;
   // P-04: undefined/blank SCAN_ROOTS -> no local path is accepted (AC-P04-6).
   const scanRoots = deps.scanRoots ?? parseScanRoots(process.env.SCAN_ROOTS);
+  const webAllowlist = deps.webAllowlist ?? parseAllowedHosts(process.env.WEB_SCAN_ALLOWED_HOSTS);
   const allowed = buildAllowedOrigins(resolvePort(deps.port), resolveHost(deps.host));
   const jsonBody = express.json({ limit: JSON_BODY_LIMIT });
   const authController = new AuthController(db, new LoginThrottle());
@@ -119,8 +127,9 @@ export function createApp(deps: AppDeps): express.Express {
   api.use(createExportRouter(db, exportLimiter));
   api.use(createReportRouter(db));
   api.use('/findings', createWorkflowRouter(db));
-  api.use(createProjectRouter(db, scanRoots));
-  api.use(createScanRouter(db, scanRoots));
+  api.use(createProjectRouter(db, scanRoots, webAllowlist));
+  api.use(createScanRouter(db, scanRoots, webAllowlist));
+  api.use(createWebFindingsRouter(db));
   api.use(
     createVulnerabilityStatusRouter({
       db,

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-009",
+  "title": "REQ-009: Şirket içi Azure DevOps Server (TFS) repoları ve .NET 10 desteği (P-29…P-32)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (oturum içi yanıt, 2026-10-20: \"okey uygun aa delete olmasın\"; kapsam: PUT /api/projects/{id}/repo-credential (DELETE uç noktası yok), GIT_WINDOWS_AUTH_HOSTS ile Windows kimliği, dal belirtilmeyen taramada uzak varsayılan dal, anlaşılır klon hataları, .NET 10 project.assets.json v4; merge insan kapısında; Claude tarafından kaydedildi)",
+    "approved_at": "2026-10-20T07:30:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-009.md",
+    "acceptance_criteria": "docs/product/REQ-009.md",
+    "contracts": [
+      "docs/contracts/REQ-009-repo-credential.md",
+      "docs/contracts/REQ-008-web-scan.md",
+      "docs/contracts/REQ-002-auth-api.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-011-repo-kimlik-bilgisi-ve-windows-kimligi.md",
+      "docs/architecture/adr/ADR-002-dockersiz-tarama-calisma-alani.md",
+      "docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src", "README.md", ".env.example"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests"] }
+  ]
+}

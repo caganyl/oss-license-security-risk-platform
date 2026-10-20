@@ -1,0 +1,94 @@
+{
+  "scan_id": "golden-ruby-platform-suffix",
+  "status": "completed",
+  "total_deps": 7,
+  "dependencies": [
+    {
+      "ecosystem": "ruby",
+      "name": "ffi",
+      "version": "1.16.3",
+      "purl": "pkg:gem/ffi@1.16.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "jruby-openssl",
+      "version": "0.14.2",
+      "purl": "pkg:gem/jruby-openssl@0.14.2",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "mini_portile2",
+      "version": "2.8.5",
+      "purl": "pkg:gem/mini_portile2@2.8.5",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "nokogiri",
+      "version": "1.15.4",
+      "purl": "pkg:gem/nokogiri@1.15.4",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": "~> 1.15"
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "nokogiri",
+      "version": "1.16.0",
+      "purl": "pkg:gem/nokogiri@1.16.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": "~> 1.15"
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "racc",
+      "version": "1.7.3",
+      "purl": "pkg:gem/racc@1.7.3",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "sqlite3",
+      "version": "2.0.0.rc1",
+      "purl": "pkg:gem/sqlite3@2.0.0.rc1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": ">= 2.0.0.rc1"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "ruby",
+      "filename": "Gemfile.lock",
+      "file_path": "Gemfile.lock",
+      "file_hash": "e73de7aee5818a9c95ee45361ae2d45293f84bd10e0fd6a52875d0ba6e92bf30",
+      "size_bytes": 640
+    }
+  ],
+  "parse_errors": []
+}

@@ -1,0 +1,94 @@
+{
+  "scan_id": "golden-dart-lock-flutter",
+  "status": "completed",
+  "total_deps": 7,
+  "dependencies": [
+    {
+      "ecosystem": "dart",
+      "name": "async",
+      "version": "2.11.0",
+      "purl": "pkg:pub/async@2.11.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "collection",
+      "version": "1.18.0",
+      "purl": "pkg:pub/collection@1.18.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "flutter_lints",
+      "version": "3.0.2",
+      "purl": "pkg:pub/flutter_lints@3.0.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "http",
+      "version": "1.2.1",
+      "purl": "pkg:pub/http@1.2.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "http_parser",
+      "version": "4.0.2",
+      "purl": "pkg:pub/http_parser@4.0.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "meta",
+      "version": "1.12.0",
+      "purl": "pkg:pub/meta@1.12.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "private_sdk",
+      "version": "2.0.0+3",
+      "purl": "pkg:pub/private_sdk@2.0.0%2B3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dart",
+      "filename": "pubspec.lock",
+      "file_path": "pubspec.lock",
+      "file_hash": "e047770cf93a1b635804aaad8844a7869d3bd0d97f8c40f99acbe4a4b254fea6",
+      "size_bytes": 2500
+    }
+  ],
+  "parse_errors": []
+}

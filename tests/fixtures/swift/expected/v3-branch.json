@@ -1,0 +1,50 @@
+{
+  "scan_id": "golden-swift-v3-branch",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "swift",
+      "name": "github.com/groue/GRDB.swift",
+      "version": null,
+      "purl": "pkg:swift/github.com/groue/GRDB.swift",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": "development"
+    },
+    {
+      "ecosystem": "swift",
+      "name": "github.com/onevcat/Kingfisher",
+      "version": "7.11.0",
+      "purl": "pkg:swift/github.com/onevcat/Kingfisher@7.11.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "swift",
+      "name": "gitlab.example.com/mobile/core/pinned-commit",
+      "version": null,
+      "purl": "pkg:swift/gitlab.example.com/mobile/core/pinned-commit",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": "1111111111111111111111111111111111111111"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "swift",
+      "filename": "Package.resolved",
+      "file_path": "Package.resolved",
+      "file_hash": "54fe68cd2d94aa7f1f77da3f869d86cdf79d1227bf9eeb504d893785fcbcc699",
+      "size_bytes": 1243
+    }
+  ],
+  "parse_errors": []
+}

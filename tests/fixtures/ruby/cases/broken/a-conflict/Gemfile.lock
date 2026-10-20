@@ -1,0 +1,12 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+<<<<<<< HEAD
+    rack (3.0.10)
+=======
+    rack (3.0.9)
+>>>>>>> feature
+    secretgem (1.0.0)
+
+DEPENDENCIES
+  rack

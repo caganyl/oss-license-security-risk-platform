@@ -1,0 +1,48 @@
+{
+  "originHash" : "3c2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a3928170605f4e",
+  "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift",
+      "state" : {
+        "branch" : "development",
+        "revision" : "9a8b7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3"
+      }
+    },
+    {
+      "identity" : "kingfisher",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/onevcat/Kingfisher.git",
+      "state" : {
+        "revision" : "5b92f029fab2cce44386d28588098b5be0824ef5",
+        "version" : "7.11.0"
+      }
+    },
+    {
+      "identity" : "pinned-commit",
+      "kind" : "remoteSourceControl",
+      "location" : "ssh://git@gitlab.example.com:2222/mobile/core/pinned-commit.git",
+      "state" : {
+        "revision" : "1111111111111111111111111111111111111111"
+      }
+    },
+    {
+      "identity" : "localpackage",
+      "kind" : "fileSystem",
+      "location" : "../LocalPackage",
+      "state" : {
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "mona.linkedlist",
+      "kind" : "registry",
+      "location" : "",
+      "state" : {
+        "version" : "1.1.0"
+      }
+    }
+  ],
+  "version" : 3
+}

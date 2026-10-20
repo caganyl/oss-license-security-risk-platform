@@ -1,0 +1,27 @@
+packages:
+  args:
+    dependency: "direct main"
+    description:
+      name: args
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.2"
+  no_source:
+    dependency: transitive
+    version: "1.0.0"
+  no_version:
+    dependency: transitive
+    description:
+      name: no_version
+      url: "https://pub.dev"
+    source: hosted
+  odd_scope:
+    dependency: "direct weird"
+    description:
+      name: odd_scope
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
+  scalar_entry: oops
+sdks:
+  dart: ">=3.0.0 <4.0.0"

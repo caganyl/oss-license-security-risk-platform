@@ -1,0 +1,133 @@
+{
+  "scan_id": "golden-rust-lock-v4-workspace",
+  "status": "completed",
+  "total_deps": 8,
+  "dependencies": [
+    {
+      "ecosystem": "rust",
+      "name": "anyhow",
+      "version": "1.0.86",
+      "purl": "pkg:cargo/anyhow@1.0.86",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.0"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "pin-project-lite",
+      "version": "0.2.14",
+      "purl": "pkg:cargo/pin-project-lite@0.2.14",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "proptest",
+      "version": "1.4.0",
+      "purl": "pkg:cargo/proptest@1.4.0",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.4"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "regex",
+      "version": "1.10.5",
+      "purl": "pkg:cargo/regex@1.10.5",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.10"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "regex-syntax",
+      "version": "0.8.4",
+      "purl": "pkg:cargo/regex-syntax@0.8.4",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "tokio",
+      "version": "1.38.0",
+      "purl": "pkg:cargo/tokio@1.38.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.38"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "log",
+      "version": null,
+      "purl": "pkg:cargo/log",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "examples/standalone",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "serde",
+      "version": null,
+      "purl": "pkg:cargo/serde",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "examples/standalone",
+      "declared_range": "1"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.lock",
+      "file_path": "Cargo.lock",
+      "file_hash": "037792337dee2e45bba3ca93b12a8ce82bf63a185fcb8abe73db32a197b3daad",
+      "size_bytes": 1423
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "Cargo.toml",
+      "file_hash": "ba1cd143d601227a4bbdf6b74f204c191557316b26173e2fe35a888b0699cae7",
+      "size_bytes": 173
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "crates/app/Cargo.toml",
+      "file_hash": "37ea6af343928dd7120681c750ee40a1f6447550ed251e4b72f7c66ffb7eae65",
+      "size_bytes": 155
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "crates/util/Cargo.toml",
+      "file_hash": "598ffd91947686c0991dc1269f620394241ab09441c2c6a35fca1c767500450a",
+      "size_bytes": 127
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "examples/standalone/Cargo.toml",
+      "file_hash": "398e7a7948fd024b70c55f0fb8229106e8e085b942916604727b80c20da518d3",
+      "size_bytes": 120
+    }
+  ],
+  "parse_errors": []
+}

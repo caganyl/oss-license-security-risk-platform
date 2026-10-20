@@ -1,0 +1,28 @@
+[package]
+name = "no-lock"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+log = { version = "0.4", optional = true }
+renamed = { package = "real-crate", version = "=2.1.0" }
+mylib = { path = "../mylib" }
+gitdep = { git = "https://example.com/gitdep.git", rev = "abc" }
+mirror = { version = "1", registry = "company" }
+inherited = { workspace = true }
+both = "1.2"
+nover = { features = ["x"] }
+
+[build-dependencies]
+cc = "1"
+
+[dev_dependencies]
+criterion = "0.5"
+both = "1.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.x86_64-pc-windows-msvc.dev-dependencies]
+windows-sys = { version = "0.52" }

@@ -466,9 +466,10 @@ describe('Type-invalid values and JSON NaN/Infinity (REQ-003 Riskler, ADR-005 Ka
 describe('Ecosystem handling (scan.py counterpart)', () => {
   it("an unsupported ecosystem yields { ecosystem, file: '', error } and the others are still parsed", () => {
     const root = fixture('npm-lock-v2');
-    const r = parseManifests(root, ['nodejs', 'java'], 'eco');
+    // REQ-011 made java a supported ecosystem; 'container' is an enum value without a parser.
+    const r = parseManifests(root, ['nodejs', 'container'], 'eco');
     expect(r.status).toBe('completed');
-    expect(r.parse_errors).toEqual([{ ecosystem: 'java', file: '', error: expect.stringMatching(/\S/) }]);
+    expect(r.parse_errors).toEqual([{ ecosystem: 'container', file: '', error: expect.stringMatching(/\S/) }]);
     expect(r.total_deps).toBeGreaterThan(0);
   });
 

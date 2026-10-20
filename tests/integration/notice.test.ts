@@ -41,6 +41,8 @@ async function seedGolden(): Promise<void> {
     projectName: 'golden-app',
     scanId: GOLDEN_ID,
     deps: [
+      // REQ-011 P-43: java now has a registry source (deps.dev), so this `disabled` row gives
+      // "license enrichment disabled" (contract 4.3 row 12); row 14 stays for php/swift (req011Licenses).
       f3Dep({ ecosystem: 'java', name: 'org.foo:bar', version: '1.0.0', purl: 'pkg:maven/org.foo/bar@1.0.0', licenseSource: 'none', enrichmentStatus: 'disabled' }),
       f3Dep({ ecosystem: 'nodejs', name: 'Alpha', version: '1.0.0', purl: 'pkg:npm/Alpha@1.0.0', licenseSource: 'none', enrichmentStatus: 'no_license', licenseLockHint: 'MIT', noticeStatus: 'no_candidate' }),
       f3Dep({

@@ -1,0 +1,8 @@
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>org.secret</groupId>
+      <artifactId>oops</artifactId>
+    </dependency>
+  </dependencies>
+</projekt>

@@ -1,0 +1,127 @@
+{
+  "scan_id": "golden-golang-basic",
+  "status": "completed",
+  "total_deps": 10,
+  "dependencies": [
+    {
+      "ecosystem": "go",
+      "name": "github.com/BurntSushi/toml",
+      "version": "v1.4.0",
+      "purl": "pkg:golang/github.com/BurntSushi/toml@v1.4.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/bytedance/sonic",
+      "version": "v1.11.6",
+      "purl": "pkg:golang/github.com/bytedance/sonic@v1.11.6",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/docker/docker",
+      "version": "v26.1.3+incompatible",
+      "purl": "pkg:golang/github.com/docker/docker@v26.1.3%2Bincompatible",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/gin-gonic/gin",
+      "version": "v1.10.0",
+      "purl": "pkg:golang/github.com/gin-gonic/gin@v1.10.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "purl": "pkg:golang/github.com/google/uuid@v1.6.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/pelletier/go-toml/v2",
+      "version": "v2.2.2",
+      "purl": "pkg:golang/github.com/pelletier/go-toml/v2@v2.2.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/stretchr/testify",
+      "version": "v1.9.0",
+      "purl": "pkg:golang/github.com/stretchr/testify@v1.9.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "golang.org/x/net",
+      "version": "v0.0.0-20240416194518-5c4b8b1b7bcd",
+      "purl": "pkg:golang/golang.org/x/net@v0.0.0-20240416194518-5c4b8b1b7bcd",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "golang.org/x/sys",
+      "version": "v0.20.0",
+      "purl": "pkg:golang/golang.org/x/sys@v0.20.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "purl": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "go.mod",
+      "file_hash": "7834019cee9f97a3a902f405b9bee4e4848cd4ce209c71bb43cdcde35a514677",
+      "size_bytes": 811
+    }
+  ],
+  "parse_errors": []
+}

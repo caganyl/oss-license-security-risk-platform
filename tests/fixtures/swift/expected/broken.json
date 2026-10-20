@@ -1,0 +1,77 @@
+{
+  "scan_id": "golden-swift-broken",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "swift",
+      "name": "github.com/apple/swift-collections",
+      "version": "1.1.0",
+      "purl": "pkg:swift/github.com/apple/swift-collections@1.1.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": "e-invalid-pins",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "swift",
+      "name": "github.com/apple/swift-algorithms",
+      "version": "1.2.0",
+      "purl": "pkg:swift/github.com/apple/swift-algorithms@1.2.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": "g-ok",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "swift",
+      "filename": "Package.resolved",
+      "file_path": "e-invalid-pins/Package.resolved",
+      "file_hash": "f218c0dae5aa73a69a1325c7a5cddad73057fb6f2a352cd1441cb1057a2e6f8e",
+      "size_bytes": 807
+    },
+    {
+      "ecosystem": "swift",
+      "filename": "Package.resolved",
+      "file_path": "g-ok/Package.resolved",
+      "file_hash": "4d6916ee642b308e5daabd6f767e825efe72be57b12a14b9c6b3747219c0fec9",
+      "size_bytes": 314
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "swift",
+      "file": "a-bad-json/Package.resolved",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "swift",
+      "file": "b-future-version/Package.resolved",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    },
+    {
+      "ecosystem": "swift",
+      "file": "c-string-version/Package.resolved",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    },
+    {
+      "ecosystem": "swift",
+      "file": "d-wrong-structure/Package.resolved",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "swift",
+      "file": "e-invalid-pins/Package.resolved",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "swift",
+      "file": "f-v1-no-object/Package.resolved",
+      "error": "Beklenmeyen dosya yapısı."
+    }
+  ]
+}

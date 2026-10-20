@@ -1,0 +1,35 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    ffi (1.16.3)
+    ffi (1.16.3-x64-mingw-ucrt)
+    jruby-openssl (0.14.2-java)
+    mini_portile2 (2.8.5)
+    nokogiri (1.15.4)
+      mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
+    nokogiri (1.15.4-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.15.4-x86_64-linux)
+      racc (~> 1.4)
+    nokogiri (1.16.0-java)
+      racc (~> 1.4)
+    racc (1.7.3)
+    racc (1.7.3-java)
+    sqlite3 (2.0.0.rc1-x86_64-linux-gnu)
+
+PLATFORMS
+  arm64-darwin
+  java
+  ruby
+  x64-mingw-ucrt
+  x86_64-linux
+
+DEPENDENCIES
+  ffi
+  jruby-openssl
+  nokogiri (~> 1.15)
+  sqlite3 (>= 2.0.0.rc1)
+
+BUNDLED WITH
+   2.4.22

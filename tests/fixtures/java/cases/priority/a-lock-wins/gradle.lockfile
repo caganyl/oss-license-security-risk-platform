@@ -1,0 +1,6 @@
+# lock wins over pom.xml and build.gradle; both still decide direct vs transitive
+com.google.guava:failureaccess:1.0.2=compileClasspath,runtimeClasspath
+com.google.guava:guava:33.2.0-jre=compileClasspath,runtimeClasspath
+org.apache.commons:commons-lang3:3.14.0=compileClasspath,runtimeClasspath
+org.junit.jupiter:junit-jupiter:5.10.2=testCompileClasspath,testRuntimeClasspath
+empty=annotationProcessor

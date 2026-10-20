@@ -5,7 +5,7 @@
  * behaviour are unchanged; `npmRegistry.ts`/`pypiRegistry.ts` get a session.
  *
  * - Fixed endpoint set (`PRODUCTION_ENDPOINTS`), frozen in code. Tests may
- *   inject endpoints from code only (`assertInjectableEndpoint`: the three
+ *   inject endpoints from code only (`assertInjectableEndpoint`: the six
  *   production origins, or `http://127.0.0.1:<port>` / `http://[::1]:<port>`);
  *   nothing reads them from the environment, settings or registry data.
  * - `assertAllowedUrl` semantics run before the first request **and every
@@ -19,6 +19,15 @@
  * - Retries, `Retry-After`, `err.code` classification, per-scan per-host
  *   circuit breaker, process-wide semaphore (`REGISTRY_CONCURRENCY`),
  *   in-flight dedupe, proxy and TLS rules: see the core.
+ * - REQ-011 P-43 (ADR-012 Karar 3): two license API origins on the same
+ *   core — `https://api.deps.dev` (`metadata-depsdev`, exactly
+ *   `/v3/systems/{GO|MAVEN|CARGO|RUBYGEMS}/packages/<name>/versions/<version>`)
+ *   and `https://pub.dev` (`metadata-pubdev`, exactly
+ *   `/api/packages/<name>/score`). No query, no fragment, no redirect
+ *   (3xx -> `REDIRECT`), JSON only, `licenseApiMaxBytes` (1 MiB) cap; same
+ *   timeout, retries, breaker, semaphore, proxy and TLS rules. Only the
+ *   package name and version leave the machine (path), no header beyond the
+ *   fixed set.
  */
 import { URL } from 'node:url';
 import { ENRICHMENT_LIMITS } from '../scanner/sandbox/runner.config';
@@ -42,6 +51,10 @@ export interface RegistryEndpoints {
   files: string;
   /** NuGet flat container origin (REQ-006, ADR-008 Karar 8). */
   nuget: string;
+  /** deps.dev API origin: Go, Maven, Cargo, RubyGems licenses (REQ-011 AC-P43-1). */
+  depsdev: string;
+  /** pub.dev origin: Dart package licenses (REQ-011 AC-P43-2). */
+  pubdev: string;
 }
 
 export const PRODUCTION_ENDPOINTS: Readonly<RegistryEndpoints> = Object.freeze({
@@ -49,20 +62,66 @@ export const PRODUCTION_ENDPOINTS: Readonly<RegistryEndpoints> = Object.freeze({
   pypi: 'https://pypi.org',
   files: 'https://files.pythonhosted.org',
   nuget: 'https://api.nuget.org',
+  depsdev: 'https://api.deps.dev',
+  pubdev: 'https://pub.dev',
 });
 
 const PRODUCTION_ORIGINS: ReadonlySet<string> = new Set(Object.values(PRODUCTION_ENDPOINTS));
 
-export type RequestPurpose = 'metadata-npm' | 'metadata-pypi' | 'metadata-nuget' | 'archive-npm' | 'archive-pypi' | 'archive-nuget';
+export type RequestPurpose =
+  | 'metadata-npm'
+  | 'metadata-pypi'
+  | 'metadata-nuget'
+  | 'metadata-depsdev'
+  | 'metadata-pubdev'
+  | 'archive-npm'
+  | 'archive-pypi'
+  | 'archive-nuget';
+
+/** JSON metadata purposes (`getJson`). */
+export type JsonRequestPurpose = 'metadata-npm' | 'metadata-pypi' | 'metadata-depsdev' | 'metadata-pubdev';
 
 const PURPOSE_ENDPOINT: Readonly<Record<RequestPurpose, keyof RegistryEndpoints>> = {
   'metadata-npm': 'npm',
   'metadata-pypi': 'pypi',
   'metadata-nuget': 'nuget',
+  'metadata-depsdev': 'depsdev',
+  'metadata-pubdev': 'pubdev',
   'archive-npm': 'npm',
   'archive-pypi': 'files',
   'archive-nuget': 'nuget',
 };
+
+/** Path segment of a license API URL: non-empty, no `/`, no dot segment (encoded names keep `%2F` / `%3A` inside one segment). */
+function plainSegment(segment: string): boolean {
+  return segment.length > 0 && segment !== '.' && segment !== '..' && !segment.includes('/');
+}
+
+const DEPSDEV_SYSTEM_SEGMENTS: ReadonlySet<string> = new Set(['GO', 'MAVEN', 'CARGO', 'RUBYGEMS']);
+
+/** `metadata-depsdev`: exactly `/v3/systems/<SYSTEM>/packages/<name>/versions/<version>`, no query or fragment. */
+export function isDepsDevVersionPath(url: URL): boolean {
+  if (url.search !== '' || url.hash !== '') return false;
+  const parts = url.pathname.split('/');
+  return (
+    parts.length === 8 &&
+    parts[0] === '' &&
+    parts[1] === 'v3' &&
+    parts[2] === 'systems' &&
+    DEPSDEV_SYSTEM_SEGMENTS.has(parts[3]) &&
+    parts[4] === 'packages' &&
+    plainSegment(parts[5]) &&
+    parts[6] === 'versions' &&
+    plainSegment(parts[7])
+  );
+}
+
+/** `metadata-pubdev`: exactly `/api/packages/<name>/score`, no query or fragment. */
+export function isPubDevScorePath(url: URL): boolean {
+  if (url.search !== '' || url.hash !== '') return false;
+  const parts = url.pathname.split('/');
+  return parts.length === 5 && parts[0] === '' && parts[1] === 'api' && parts[2] === 'packages' && plainSegment(parts[3]) && parts[4] === 'score';
+}
 
 const FLAT_CONTAINER = 'v3-flatcontainer';
 
@@ -98,7 +157,7 @@ export class RegistryUrlError extends Error {
 
 /**
  * Validates an endpoint injected from code (tests only) and returns its
- * origin: one of the three production origins, or a loopback `http:` origin
+ * origin: one of the production origins, or a loopback `http:` origin
  * (any port). Path, query, fragment and credentials are rejected.
  */
 export function assertInjectableEndpoint(value: string): string {
@@ -112,6 +171,8 @@ export function resolveEndpoints(injected?: Partial<RegistryEndpoints>): Registr
     pypi: injected?.pypi !== undefined ? assertInjectableEndpoint(injected.pypi) : PRODUCTION_ENDPOINTS.pypi,
     files: injected?.files !== undefined ? assertInjectableEndpoint(injected.files) : PRODUCTION_ENDPOINTS.files,
     nuget: injected?.nuget !== undefined ? assertInjectableEndpoint(injected.nuget) : PRODUCTION_ENDPOINTS.nuget,
+    depsdev: injected?.depsdev !== undefined ? assertInjectableEndpoint(injected.depsdev) : PRODUCTION_ENDPOINTS.depsdev,
+    pubdev: injected?.pubdev !== undefined ? assertInjectableEndpoint(injected.pubdev) : PRODUCTION_ENDPOINTS.pubdev,
   };
 }
 
@@ -182,6 +243,8 @@ export interface RegistryClientLimits {
   metadataMaxBytes: number;
   /** NuGet `.nuspec` cap (decompressed body). */
   nuspecMaxBytes: number;
+  /** deps.dev / pub.dev JSON response cap (network and decompressed bytes; REQ-011). */
+  licenseApiMaxBytes: number;
   archiveMaxBytes: number;
   archiveMinTimeoutMs: number;
   maxRetries: number;
@@ -236,7 +299,7 @@ export interface ArchiveRequestOptions {
 /** Per-scan view of the client: carries the per-host circuit breaker (ADR-006 Karar 4). */
 export interface RegistrySession {
   readonly endpoints: RegistryEndpoints;
-  getJson(target: string, purpose: 'metadata-npm' | 'metadata-pypi', options: JsonRequestOptions): Promise<JsonFetchResult>;
+  getJson(target: string, purpose: JsonRequestPurpose, options: JsonRequestOptions): Promise<JsonFetchResult>;
   /** NuGet `.nuspec` (ADR-008 Karar 8); the first target must be the exact nuspec path, else `URL_NOT_ALLOWED` without a request. */
   getText(target: string, purpose: 'metadata-nuget', options: JsonRequestOptions): Promise<TextFetchResult>;
   getArchive(target: string, purpose: 'archive-npm' | 'archive-pypi' | 'archive-nuget', options: ArchiveRequestOptions): Promise<ArchiveFetchResult>;
@@ -251,6 +314,9 @@ export interface RegistryClient {
   /** Destroys pooled sockets (shutdown, tests). */
   close(): void;
 }
+
+/** deps.dev / pub.dev response cap: a version document or a score document is a few KiB. */
+export const LICENSE_API_MAX_BYTES = 1024 * 1024;
 
 function registryPurposes(limits: RegistryClientLimits): Record<RequestPurpose, SafeHttpPurpose> {
   const anyPath = () => true;
@@ -280,9 +346,22 @@ function registryPurposes(limits: RegistryClientLimits): Record<RequestPurpose, 
   // the first request's exact nuspec path is checked by `getText` before the core runs.
   const underFlatContainer = (url: URL, origin: string) =>
     url.href.startsWith(`${origin}/${FLAT_CONTAINER}/`) && url.search === '' && url.hash === '';
+  // deps.dev / pub.dev (REQ-011 ADR-012 Karar 3): exact path shape, no redirect, small JSON cap.
+  const licenseApi = (originKey: 'depsdev' | 'pubdev', pathRule: (url: URL) => boolean): SafeHttpPurpose => ({
+    originKey,
+    method: 'GET',
+    redirect: 'none',
+    maxBytes: limits.licenseApiMaxBytes,
+    accept: 'application/json',
+    acceptEncoding: 'gzip',
+    pathRule: (url: URL, origin: string) => underOrigin(url, origin) && pathRule(url),
+    kind: 'json',
+  });
   return {
     'metadata-npm': metadata('npm'),
     'metadata-pypi': metadata('pypi'),
+    'metadata-depsdev': licenseApi('depsdev', isDepsDevVersionPath),
+    'metadata-pubdev': licenseApi('pubdev', isPubDevScorePath),
     'metadata-nuget': {
       originKey: 'nuget',
       method: 'GET',
@@ -301,9 +380,16 @@ function registryPurposes(limits: RegistryClientLimits): Record<RequestPurpose, 
 
 export function createRegistryClient(options: RegistryClientOptions): RegistryClient {
   const endpoints = resolveEndpoints(options.endpoints);
-  const limits: RegistryClientLimits = { ...ENRICHMENT_LIMITS.client, ...options.limits };
+  const limits: RegistryClientLimits = { ...ENRICHMENT_LIMITS.client, licenseApiMaxBytes: LICENSE_API_MAX_BYTES, ...options.limits };
   const core = createSafeHttpClient({
-    origins: { npm: endpoints.npm, pypi: endpoints.pypi, files: endpoints.files, nuget: endpoints.nuget },
+    origins: {
+      npm: endpoints.npm,
+      pypi: endpoints.pypi,
+      files: endpoints.files,
+      nuget: endpoints.nuget,
+      depsdev: endpoints.depsdev,
+      pubdev: endpoints.pubdev,
+    },
     purposes: registryPurposes(limits),
     timeoutMs: options.timeoutMs,
     concurrency: options.concurrency,

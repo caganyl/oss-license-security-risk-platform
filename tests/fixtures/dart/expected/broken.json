@@ -1,0 +1,79 @@
+{
+  "scan_id": "golden-dart-broken",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "dart",
+      "name": "args",
+      "version": "2.4.2",
+      "purl": "pkg:pub/args@2.4.2",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": "d-invalid-entries",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "dart",
+      "name": "path",
+      "version": "1.9.0",
+      "purl": "pkg:pub/path@1.9.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pubspec.lock",
+      "manifest_path": "g-ok",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "dart",
+      "filename": "pubspec.lock",
+      "file_path": "d-invalid-entries/pubspec.lock",
+      "file_hash": "299f79d9c8aec912ed35a59b71be23aeba149757ebf599b81d39e8e317d9d430",
+      "size_bytes": 545
+    },
+    {
+      "ecosystem": "dart",
+      "filename": "pubspec.lock",
+      "file_path": "e-empty-packages/pubspec.lock",
+      "file_hash": "c74b92b4e747d5c51790c478c031b7ed0023c66f27deb62bfbfa781b432e85fa",
+      "size_bytes": 114
+    },
+    {
+      "ecosystem": "dart",
+      "filename": "pubspec.lock",
+      "file_path": "g-ok/pubspec.lock",
+      "file_hash": "e13fdd1735953428a2ad8d7186d5de4f70fa6c3e33dcce7f680ec9f3e7cc9c94",
+      "size_bytes": 263
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "dart",
+      "file": "a-anchor/pubspec.lock",
+      "error": "Desteklenmeyen YAML özelliği (çapa, takma ad, etiket veya çok belgeli akış)."
+    },
+    {
+      "ecosystem": "dart",
+      "file": "b-bad-yaml/pubspec.lock",
+      "error": "YAML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "dart",
+      "file": "c-wrong-structure/pubspec.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "dart",
+      "file": "d-invalid-entries/pubspec.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "dart",
+      "file": "f-root-scalar/pubspec.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    }
+  ]
+}

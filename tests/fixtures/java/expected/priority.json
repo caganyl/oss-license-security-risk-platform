@@ -1,0 +1,129 @@
+{
+  "scan_id": "golden-java-priority",
+  "status": "completed",
+  "total_deps": 7,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "com.google.guava:failureaccess",
+      "version": "1.0.2",
+      "purl": "pkg:maven/com.google.guava/failureaccess@1.0.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "a-lock-wins",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.guava:guava",
+      "version": "33.2.0-jre",
+      "purl": "pkg:maven/com.google.guava/guava@33.2.0-jre",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "a-lock-wins",
+      "declared_range": "33.+"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.commons:commons-lang3",
+      "version": "3.14.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "a-lock-wins",
+      "declared_range": "3.14.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "version": "5.10.2",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "a-lock-wins",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": "2.0.13",
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": "b-pom-wins",
+      "declared_range": "2.0.13"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.mockk:mockk",
+      "version": "1.13.11",
+      "purl": "pkg:maven/io.mockk/mockk@1.13.11",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": "c-both-scripts",
+      "declared_range": "1.13.11"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": "2.0.13",
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": "c-both-scripts",
+      "declared_range": "2.0.13"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle",
+      "file_path": "a-lock-wins/build.gradle",
+      "file_hash": "e8ad75bab5b65118d9ddbbaad25a18af6e2544da223175be6b19f2a67a00c740",
+      "size_bytes": 130
+    },
+    {
+      "ecosystem": "java",
+      "filename": "gradle.lockfile",
+      "file_path": "a-lock-wins/gradle.lockfile",
+      "file_hash": "92ab0f84dcf6e4bc4f52f409f29233fa84b6b5bed78a91734bcfe111d5b25ef7",
+      "size_bytes": 402
+    },
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "a-lock-wins/pom.xml",
+      "file_hash": "ca7a81359a6f35bf007a74d6d07de83a0c8e80d54a11ddca9abdf302896e5e3c",
+      "size_bytes": 338
+    },
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "b-pom-wins/pom.xml",
+      "file_hash": "285e77025f51133cefd13327331dce19751c0bef7209e9e63aea6440ba18b0d2",
+      "size_bytes": 325
+    },
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle",
+      "file_path": "c-both-scripts/build.gradle",
+      "file_hash": "ec1ed23cb68855addb7f1fc2d9741ad7f64b02ee5cdcf9d1cf53c88d89545600",
+      "size_bytes": 65
+    },
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle.kts",
+      "file_path": "c-both-scripts/build.gradle.kts",
+      "file_hash": "e9c03fe9ae77355471f647690ed6131eeee2aea951f92d32ec62c9654825537f",
+      "size_bytes": 115
+    }
+  ],
+  "parse_errors": []
+}

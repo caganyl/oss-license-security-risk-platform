@@ -60,7 +60,19 @@ const ALL = [
   '007_vulnerability_recheck', // REQ-005
   '008_nuget_enrichment', // REQ-006
   '009_web_scan', // REQ-008
+  '010_new_ecosystems', // REQ-011
 ];
+/** tech_ecosystem values added by 010 (REQ-011 D-300); older reference databases do not have them. */
+const REQ011_ECOSYSTEMS = new Set(['rust', 'dart', 'swift']);
+
+/** Enum snapshot without the 010 tech_ecosystem values (comparison with a reference database older than 010). */
+function typesBefore010(types: unknown): unknown {
+  // `pg` returns an enum label array as its text form (`{a,b}`); the labels hold no comma, quote or brace.
+  const strip = (labels: string): string => `{${labels.slice(1, -1).split(',').filter((l) => !REQ011_ECOSYSTEMS.has(l)).join(',')}}`;
+  return (types as Array<{ typname: string; labels: string }>).map((t) =>
+    t.typname === 'tech_ecosystem' ? { ...t, labels: strip(t.labels) } : t,
+  );
+}
 /** Newest real migration (the "latest version" of the --to / compiled-CLI scenarios). */
 const LATEST = ALL[ALL.length - 1];
 /** Versions pending on the F1 database (001…004 applied). */
@@ -392,8 +404,8 @@ describe('REQ-005 AC-G-7: migration 007_vulnerability_recheck', () => {
       expect(await columnExists(db, t, c), `${t}.${c}`).toBe(false);
     }
     expect(await schemaSnapshot(db)).toEqual(at006);
-    // No enum type gains or loses a value (finding_status, audit_action, scan_trigger …).
-    expect(full.types).toEqual(at006.types);
+    // No enum type gains or loses a value (finding_status, audit_action, scan_trigger …) except the 010 tech_ecosystem values.
+    expect(typesBefore010(full.types)).toEqual(at006.types);
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
@@ -642,8 +654,8 @@ describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0
     // The lock_integrity comment is put back to its 007 text.
     expect(await columnComment(db, 'scan_dependencies', 'lock_integrity')).toBe(refLockComment);
     expect(refLockComment).not.toBe(fullLockComment);
-    // No enum type gains or loses a value (tech_ecosystem already had 'dotnet').
-    expect(full.types).toEqual(at007.types);
+    // No enum type gains or loses a value (tech_ecosystem already had 'dotnet'), except the 010 tech_ecosystem values.
+    expect(typesBefore010(full.types)).toEqual(at007.types);
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
@@ -656,10 +668,11 @@ describe('REQ-006 AC-G-7: migration 008_nuget_enrichment (contract REQ-004 1.4.0
   it('CHECK value sets (binding names): cache ecosystems incl. nuget, license_source incl. registry:nuget, license_unclassified file|url', async () => {
     const db = await newDb(); // migrated template: 001…latest
     const defs = await checkConstraints(db);
-    expect(valueSet(defs, 'registry_package_cache_ecosystem_check')).toEqual(['npm', 'nuget', 'pypi']);
+    // REQ-011 (010) widens the package cache and license_source sets with deps.dev / pub.dev; the archive cache is unchanged.
+    expect(valueSet(defs, 'registry_package_cache_ecosystem_check')).toEqual(['depsdev', 'npm', 'nuget', 'pubdev', 'pypi']);
     expect(valueSet(defs, 'registry_archive_cache_ecosystem_check')).toEqual(['npm', 'nuget', 'pypi']);
     expect(valueSet(defs, 'scan_dependencies_license_source_check')).toEqual(
-      ['lockfile (unverified)', 'none', 'registry:npm', 'registry:nuget', 'registry:pypi'],
+      ['lockfile (unverified)', 'none', 'registry:depsdev', 'registry:npm', 'registry:nuget', 'registry:pubdev', 'registry:pypi'],
     );
     expect(valueSet(defs, 'scan_dependencies_license_unclassified_check')).toEqual(['file', 'url']);
     expect(valueSet(defs, 'registry_package_cache_license_unclassified_check')).toEqual(['file', 'url']);
@@ -1546,20 +1559,21 @@ describe('REQ-008 AC-G-3: migration 009_web_scan (contract REQ-008 1.0.0 §2; AD
     ))).constraint).toBe('web_findings_rule_id_chk');
 
     const ref = copyOfRealMigrations();
-    for (const f of [`${V009}.up.sql`, `${V009}.down.sql`]) fs.rmSync(path.join(ref, f));
+    // 009 and every later migration removed (REQ-011 added 010 on top).
+    for (const v of ALL.slice(8)) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(ref, f));
     const at008Db = await newDb({ migrated: false });
     expect((await cli(['up'], { url: at008Db.url, dir: ref })).code).toBe(0);
     const at008 = await schemaSnapshot(at008Db);
 
     const down = await cli(['down', '--to', '008'], { url: db.url });
     expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
-    expect(down.out).toContain(`geri alınacak (sırayla): ${V009}`);
-    expect(down.out).toContain('Tamam: 1 göç geri alındı; son uygulanmış sürüm 008_nuget_enrichment.');
+    expect(down.out).toContain(`geri alınacak (sırayla): ${ALL.slice(8).reverse().join(', ')}`);
+    expect(down.out).toContain(`Tamam: ${ALL.length - 8} göç geri alındı; son uygulanmış sürüm 008_nuget_enrichment.`);
     expect(await schemaSnapshot(db)).toEqual(at008);
     // Web scans are deleted; the dependency scan and the project stay.
     expect(await db.query(`SELECT id FROM scans WHERE id = $1`, [web.id])).toEqual([]);
     expect((await db.query(`SELECT id FROM scans WHERE project_id = $1`, [p.id])).length).toBe(1);
-    expect(full.types).toEqual(at008.types);
+    expect(typesBefore010(full.types)).toEqual(at008.types);
 
     const again = await cli(['up'], { url: db.url });
     expect(again.code, again.all).toBe(0);
@@ -1585,6 +1599,150 @@ describe('REQ-008 AC-G-3: migration 009_web_scan (contract REQ-008 1.0.0 §2; AD
     const upText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V009}.up.sql`)));
     expect(findForbiddenStatements(upText)).toEqual([]);
     const downText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V009}.down.sql`)));
+    expect(findForbiddenStatements(downText)).toEqual([]);
+    expect(downText).toMatch(/DATA LOSS/);
+    expect(downText).toMatch(/explicit human approval/);
+  });
+});
+
+describe('REQ-011 AC-P40-1 / AC-P43-1 / AC-P43-2: migration 010_new_ecosystems (ADR-012 Karar 4; D-300, D-318)', () => {
+  const V009 = '009_web_scan';
+  const V010 = '010_new_ecosystems';
+
+  async function checkDefs(db: ScratchDatabase): Promise<Record<string, string>> {
+    const rows = await db.query<{ conname: string; def: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE connamespace = 'public'::regnamespace
+          AND conname IN ('registry_package_cache_ecosystem_check', 'registry_archive_cache_ecosystem_check', 'scan_dependencies_license_source_check')`,
+    );
+    return Object.fromEntries(rows.map((r) => [r.conname, r.def]));
+  }
+  const values = (def: string | undefined): string[] => [...(def ?? '').matchAll(/'([^']+)'::text/g)].map((m) => m[1]).sort();
+
+  async function enumLabels(db: ScratchDatabase): Promise<string[]> {
+    const [row] = await db.query<{ labels: string[] }>(
+      `SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder) AS labels
+         FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'tech_ecosystem' AND t.typnamespace = 'public'::regnamespace`,
+    );
+    return row.labels;
+  }
+
+  /** project + completed scan + one package / scan dependency / finding / scan file / catalog row per ecosystem; returns the project id. */
+  async function seed(db: ScratchDatabase, ecosystems: string[]): Promise<string> {
+    const [p] = await db.query<{ id: string }>(`INSERT INTO projects (name) VALUES ('qa-010') RETURNING id`);
+    const [s] = await db.query<{ id: string }>(
+      `INSERT INTO scans (project_id, trigger, status, ref, completed_at) VALUES ($1, 'manual', 'completed', 'main', NOW()) RETURNING id`,
+      [p.id],
+    );
+    for (const eco of ecosystems) {
+      await db.query(`INSERT INTO project_tech_stacks (project_id, ecosystem) VALUES ($1, $2::tech_ecosystem)`, [p.id, eco]);
+      const [pkg] = await db.query<{ id: string }>(
+        `INSERT INTO packages (ecosystem, name, version, purl) VALUES ($1::tech_ecosystem, $2, '1.0.0', $3) RETURNING id`,
+        [eco, `qa-${eco}`, `pkg:generic/qa-${eco}@1.0.0`],
+      );
+      const [dep] = await db.query<{ id: string }>(
+        `INSERT INTO scan_dependencies (scan_id, package_id, manifest_file, manifest_path, license_source, license_enrichment_status)
+         VALUES ($1, $2, 'm', '.', $3, $4) RETURNING id`,
+        [s.id, pkg.id, ...(eco === 'go' || eco === 'rust' ? ['registry:depsdev', 'ok'] : ['none', 'no_license'])],
+      );
+      await db.query(
+        `INSERT INTO findings (scan_id, scan_dependency_id, finding_type, fingerprint) VALUES ($1, $2, 'license', $3)`,
+        [s.id, dep.id, crypto.createHash('sha256').update(eco).digest('hex')],
+      );
+      await db.query(
+        `INSERT INTO scan_files (scan_id, filename, file_path, ecosystem, file_hash) VALUES ($1, 'm', 'm', $2::tech_ecosystem, 'h')`,
+        [s.id, eco],
+      );
+      await db.query(
+        `INSERT INTO vulnerabilities (osv_id, title, affected_ecosystem, affected_package, severity) VALUES ($1, 't', $2::tech_ecosystem, $3, 'low')`,
+        [`QA-010-${eco}`, eco, `qa-${eco}`],
+      );
+    }
+    return p.id;
+  }
+
+  it('up adds rust/dart/swift next to their neighbours and widens the package cache and license_source CHECKs', async () => {
+    const db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+    expect(await enumLabels(db)).toEqual(['nodejs', 'python', 'java', 'dotnet', 'go', 'php', 'rust', 'ruby', 'dart', 'swift', 'container', 'other']);
+    const defs = await checkDefs(db);
+    expect(values(defs.registry_package_cache_ecosystem_check)).toEqual(['depsdev', 'npm', 'nuget', 'pubdev', 'pypi']);
+    expect(values(defs.registry_archive_cache_ecosystem_check)).toEqual(['npm', 'nuget', 'pypi']);
+    expect(values(defs.scan_dependencies_license_source_check)).toEqual(
+      ['lockfile (unverified)', 'none', 'registry:depsdev', 'registry:npm', 'registry:nuget', 'registry:pubdev', 'registry:pypi'],
+    );
+    // Every new value is usable after the migration's transaction.
+    await seed(db, ['rust', 'dart', 'swift', 'java', 'go', 'php', 'ruby']);
+    await db.query(
+      `INSERT INTO registry_package_cache (ecosystem, name, version, outcome, declared_license, extractor_version)
+       VALUES ('depsdev', 'GO:qa', '1.0.0', 'found', 'MIT', 1), ('pubdev', 'qa', '1.0.0', 'found', 'MIT', 1)`,
+    );
+    const rejected = await pgError(
+      db.query(`INSERT INTO registry_package_cache (ecosystem, name, version, outcome, extractor_version) VALUES ('maven', 'qa', '1', 'found', 1)`),
+    );
+    expect(rejected.constraint).toBe('registry_package_cache_ecosystem_check');
+  });
+
+  it('down --to 009 deletes only rust/dart/swift data, restores exactly the 009 schema; up again yields the identical schema', async () => {
+    const db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: db.url })).code).toBe(0);
+    const full = await schemaSnapshot(db);
+    const projectId = await seed(db, ['rust', 'dart', 'swift', 'java', 'go']);
+    await db.query(
+      `INSERT INTO registry_package_cache (ecosystem, name, version, outcome, declared_license, extractor_version)
+       VALUES ('depsdev', 'GO:qa', '1.0.0', 'found', 'MIT', 1), ('npm', 'qa', '1.0.0', 'found', 'MIT', 1)`,
+    );
+
+    const ref = copyOfRealMigrations();
+    for (const v of ALL.slice(9)) for (const f of [`${v}.up.sql`, `${v}.down.sql`]) fs.rmSync(path.join(ref, f));
+    const at009Db = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: at009Db.url, dir: ref })).code).toBe(0);
+    const at009 = await schemaSnapshot(at009Db);
+
+    const down = await cli(['down', '--to', '009'], { url: db.url });
+    expect(down.code, down.all).toBe(MIGRATE_EXIT.ok);
+    expect(down.out).toContain(`geri alınacak (sırayla): ${ALL.slice(9).reverse().join(', ')}`);
+    expect(down.out).toContain(`Tamam: ${ALL.length - 9} göç geri alındı; son uygulanmış sürüm ${V009}.`);
+    expect(await schemaSnapshot(db)).toEqual(at009);
+    expect(typesBefore010(full.types)).toEqual(at009.types);
+
+    const ecosystemsOf = async (sql: string, params: unknown[] = []) =>
+      (await db.query<{ ecosystem: string }>(sql, params)).map((r) => r.ecosystem);
+    expect(await ecosystemsOf(`SELECT ecosystem::text AS ecosystem FROM packages ORDER BY 1`)).toEqual(['go', 'java']);
+    expect(await ecosystemsOf(`SELECT ecosystem::text AS ecosystem FROM project_tech_stacks WHERE project_id = $1 ORDER BY 1`, [projectId])).toEqual(['go', 'java']);
+    expect(await ecosystemsOf(`SELECT ecosystem::text AS ecosystem FROM scan_files ORDER BY 1`)).toEqual(['go', 'java']);
+    expect((await db.query(`SELECT 1 FROM findings`)).length).toBe(2);
+    expect(await db.query(`SELECT osv_id, affected_ecosystem::text AS eco FROM vulnerabilities ORDER BY osv_id`)).toEqual([
+      { osv_id: 'QA-010-dart', eco: null },
+      { osv_id: 'QA-010-go', eco: 'go' },
+      { osv_id: 'QA-010-java', eco: 'java' },
+      { osv_id: 'QA-010-rust', eco: null },
+      { osv_id: 'QA-010-swift', eco: null },
+    ]);
+    expect((await db.query<{ license_source: string }>(`SELECT license_source FROM scan_dependencies ORDER BY 1`)).map((r) => r.license_source)).toEqual(['none', 'none']);
+    expect(await ecosystemsOf(`SELECT ecosystem FROM registry_package_cache`)).toEqual(['npm']);
+
+    const again = await cli(['up'], { url: db.url });
+    expect(again.code, again.all).toBe(0);
+    expect(await versions(db)).toEqual(ALL);
+    expect(await schemaSnapshot(db)).toEqual(full);
+  });
+
+  it('db/schema.sql equals 001…010; the 010 files hold no transaction control and the down file names its data loss', async () => {
+    const migrated = await newDb({ migrated: false });
+    expect((await cli(['up'], { url: migrated.url })).code).toBe(0);
+    const fromSchema = await newDb({ migrated: false });
+    const c = await connect(fromSchema.url);
+    try {
+      await c.query(decodeMigrationSql(fs.readFileSync(path.join(REPO_ROOT, 'db', 'schema.sql'))));
+    } finally {
+      await c.end();
+    }
+    expect(await schemaSnapshot(fromSchema)).toEqual(await schemaSnapshot(migrated));
+    const upText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V010}.up.sql`)));
+    expect(findForbiddenStatements(upText)).toEqual([]);
+    const downText = decodeMigrationSql(fs.readFileSync(path.join(MIGRATIONS_DIR, `${V010}.down.sql`)));
     expect(findForbiddenStatements(downText)).toEqual([]);
     expect(downText).toMatch(/DATA LOSS/);
     expect(downText).toMatch(/explicit human approval/);

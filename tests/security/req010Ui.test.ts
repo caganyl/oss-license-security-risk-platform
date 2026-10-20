@@ -338,7 +338,8 @@ describe('AC-P36: counters, ecosystem default, zero-package warning', () => {
   it('AC-P36-2: no technology is preselected ("Otomatik algıla" is) and the hint explains auto-detection', () => {
     const doc = new JSDOM(fs.readFileSync(repoPath('public', 'index.html'), 'utf8')).window.document;
     const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('#ecosystems input[name="eco"]'));
-    expect(inputs.map((i) => i.value)).toEqual(['auto', 'nodejs', 'python', 'dotnet']);
+    // REQ-011 P-42: every supported ecosystem has a card, in the D-307 order.
+    expect(inputs.map((i) => i.value)).toEqual(['auto', 'nodejs', 'python', 'dotnet', 'java', 'go', 'php', 'rust', 'ruby', 'dart', 'swift']);
     expect(inputs.filter((i) => i.hasAttribute('checked')).map((i) => i.value)).toEqual(['auto']);
     expect(doc.getElementById('ecosystems-hint')?.textContent).toMatch(/^Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır \(önerilen\)\./);
   });

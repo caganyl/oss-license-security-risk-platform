@@ -1,0 +1,97 @@
+{
+  "scan_id": "golden-python-extra-broken",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "python",
+      "name": "ok-req",
+      "version": "1.0.0",
+      "declared_range": "==1.0.0",
+      "purl": "pkg:pypi/ok-req@1.0.0",
+      "manifest_file": "requirements-prod.txt",
+      "manifest_path": "z-healthy",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "ok-pkg",
+      "version": "1.0.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/ok-pkg@1.0.0",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": "pipfile-invalid-entry",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "ok-uv",
+      "version": "1.0.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/ok-uv@1.0.0",
+      "manifest_file": "uv.lock",
+      "manifest_path": "uv-invalid-entry",
+      "scope": "transitive"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "python",
+      "filename": "requirements-prod.txt",
+      "file_path": "z-healthy/requirements-prod.txt",
+      "file_hash": "abc8917b289de78b1c1b79b1b445317b6076b60b769d54eab50823a6f24b494c",
+      "size_bytes": 14
+    },
+    {
+      "ecosystem": "python",
+      "filename": "Pipfile.lock",
+      "file_path": "pipfile-invalid-entry/Pipfile.lock",
+      "file_hash": "d3be246a29a80dfd12837e5bb80e2b622f728f65fdaa76252cd967091030770b",
+      "size_bytes": 187
+    },
+    {
+      "ecosystem": "python",
+      "filename": "uv.lock",
+      "file_path": "uv-invalid-entry/uv.lock",
+      "file_hash": "5f6aa3c17029583711fad1c59a514860eabbb2e4faa5d31a1998ac6f2501e0fe",
+      "size_bytes": 191
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "python",
+      "file": "pipfile-invalid-entry/Pipfile.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "python",
+      "file": "pipfile-json/Pipfile.lock",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "python",
+      "file": "pipfile-structure/Pipfile.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "python",
+      "file": "uv-invalid-entry/uv.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "python",
+      "file": "uv-not-utf8/uv.lock",
+      "error": "Dosya geçerli UTF-8 değil."
+    },
+    {
+      "ecosystem": "python",
+      "file": "uv-toml/uv.lock",
+      "error": "TOML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "python",
+      "file": "uv-version/uv.lock",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    }
+  ]
+}

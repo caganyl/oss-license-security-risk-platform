@@ -1,0 +1,17 @@
+{
+    "name": "acme/site",
+    "require": {
+        "php": "^8.2",
+        "php-64bit": "*",
+        "ext-mbstring": "*",
+        "lib-pcre": ">=10",
+        "composer-plugin-api": "^2.0",
+        "Laravel/Framework": "^10.0",
+        "guzzlehttp/guzzle": "7.8.1",
+        "acme/tooling": "dev-develop"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "ext-xdebug": "*"
+    }
+}

@@ -17,7 +17,7 @@ License: NOASSERTION
 License source: none
 Copyright: (none found)
 License files: 0
-Reason: license enrichment not supported for this ecosystem
+Reason: license enrichment disabled
 
 ================================================================================
 Package: Alpha

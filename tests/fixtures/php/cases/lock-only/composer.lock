@@ -1,0 +1,24 @@
+{
+    "content-hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    "packages": [
+        {
+            "name": "guzzlehttp/guzzle",
+            "version": "7.8.1",
+            "type": "library",
+            "license": [
+                "MIT"
+            ]
+        },
+        {
+            "name": "guzzlehttp/psr7",
+            "version": "2.6.2",
+            "type": "library",
+            "license": [
+                "MIT"
+            ]
+        }
+    ],
+    "packages-dev": null,
+    "platform": [],
+    "platform-dev": []
+}

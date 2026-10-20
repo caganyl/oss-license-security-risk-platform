@@ -78,6 +78,31 @@ export function triedCandidates(ecosystem: RegistryEcosystem, candidates: readon
       return candidates.slice(0, 1);
     case 'pypi':
       return candidates.slice(0, ENRICHMENT_LIMITS.archive.maxCandidatesTried);
+    case 'depsdev':
+    case 'pubdev':
+      // REQ-011 D-321: no archive stage (the enricher never schedules one).
+      return [];
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+/**
+ * True when the registry has an archive (NOTICE text) stage: npm, PyPI,
+ * NuGet. deps.dev / pub.dev keys keep `notice_status = 'not_attempted'` /
+ * `'not_runtime'` (REQ-011 D-321: NOTICE shows the SPDX id only).
+ */
+export function hasArchiveStage(ecosystem: RegistryEcosystem): boolean {
+  switch (ecosystem) {
+    case 'npm':
+    case 'pypi':
+    case 'nuget':
+      return true;
+    case 'depsdev':
+    case 'pubdev':
+      return false;
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
@@ -94,6 +119,26 @@ function archivePurposeOf(ecosystem: RegistryEcosystem): 'archive-npm' | 'archiv
       return 'archive-pypi';
     case 'nuget':
       return 'archive-nuget';
+    case 'depsdev':
+    case 'pubdev':
+      throw new Error(`registry ecosystem has no archive stage: ${ecosystem}`);
+    default: {
+      const unreachable: never = ecosystem;
+      throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
+    }
+  }
+}
+
+/** Archive reader kind of a registry with an archive stage (deps.dev / pub.dev have none, D-321). */
+function archiveKindOf(ecosystem: RegistryEcosystem): ArchiveThreadInput['kind'] {
+  switch (ecosystem) {
+    case 'npm':
+    case 'pypi':
+    case 'nuget':
+      return ecosystem;
+    case 'depsdev':
+    case 'pubdev':
+      throw new Error(`registry ecosystem has no archive stage: ${ecosystem}`);
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
@@ -176,7 +221,7 @@ export async function collectArchive(task: ArchiveTask, ctx: ArchiveStageContext
 
       // NuGet without a raw match: the thread verifies the signed-package content
       // hash first and opens no entry when it differs (ADR-008 Karar 10.2).
-      const input: ArchiveThreadInput = { kind: task.ecosystem, filename: candidate.filename, bytes: download.body };
+      const input: ArchiveThreadInput = { kind: archiveKindOf(task.ecosystem), filename: candidate.filename, bytes: download.body };
       if (nuget) {
         if (task.declaredLicensePath) input.declaredLicensePath = task.declaredLicensePath;
         if (!rawMatch) input.verify = { nugetContentHash: candidate.digests.map((value) => digestKey('sha512', value)) };

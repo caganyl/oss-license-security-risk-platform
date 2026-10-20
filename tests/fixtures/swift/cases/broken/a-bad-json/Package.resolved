@@ -1,0 +1,7 @@
+{
+  "pins" : [
+    {
+      "identity" : "oops",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/example/oops.git",
+  "version" : 2

@@ -1,0 +1,6 @@
+{
+  "pins" : {
+    "oops" : "https://github.com/example/oops.git"
+  },
+  "version" : 2
+}

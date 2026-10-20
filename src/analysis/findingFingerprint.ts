@@ -45,7 +45,9 @@ function trimAsciiWhitespace(value: string): string {
 /**
  * purl without qualifiers/subpath and without the trailing "@version" (only an
  * '@' after the last '/', so scoped npm names survive), lowercased; pypi names
- * PEP 503-normalised.
+ * PEP 503-normalised. The lower-casing covers every purl type, so the
+ * case-insensitive Maven and Packagist names of REQ-011 (D-314) need no
+ * extra rule (and the formula stays byte-identical to the 004 SQL backfill).
  */
 export function purlBase(purl: string): string {
   const withoutSubpath = purl.split('#', 1)[0];

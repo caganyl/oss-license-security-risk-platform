@@ -1,0 +1,169 @@
+{
+  "scan_id": "golden-java-gradle-lockfile",
+  "status": "completed",
+  "total_deps": 12,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "androidx.test:core",
+      "version": "1.5.0",
+      "purl": "pkg:maven/androidx.test/core@1.5.0",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-annotations",
+      "version": "2.17.1",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.17.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-core",
+      "version": "2.17.1",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-core@2.17.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-databind",
+      "version": "2.17.1",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.17.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": "2.17.+"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.guava:guava",
+      "version": "33.2.0-jre",
+      "purl": "pkg:maven/com.google.guava/guava@33.2.0-jre",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": "$guavaVersion"
+    },
+    {
+      "ecosystem": "java",
+      "name": "junit:junit",
+      "version": "4.13.2",
+      "purl": "pkg:maven/junit/junit@4.13.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.hamcrest:hamcrest-core",
+      "version": "1.3",
+      "purl": "pkg:maven/org.hamcrest/hamcrest-core@1.3",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.mockito:mockito-core",
+      "version": "5.12.0",
+      "purl": "pkg:maven/org.mockito/mockito-core@5.12.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.projectlombok:lombok",
+      "version": "1.18.32",
+      "purl": "pkg:maven/org.projectlombok/lombok@1.18.32",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": "1.18.32"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": "2.0.13",
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.commons:commons-lang3",
+      "version": "3.14.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "lib",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.junit.jupiter:junit-jupiter-api",
+      "version": "5.10.2",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter-api@5.10.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "gradle.lockfile",
+      "manifest_path": "lib",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle",
+      "file_path": "build.gradle",
+      "file_hash": "f15f13ae548c92f779b8ef593fd0b8d31abb55103348f24d27c0c927dfadc240",
+      "size_bytes": 535
+    },
+    {
+      "ecosystem": "java",
+      "filename": "gradle.lockfile",
+      "file_path": "gradle.lockfile",
+      "file_hash": "94cade4f4ad28e60acff25ed6bee0a4ec145c571b7b1a597f81c7c5fbc995a52",
+      "size_bytes": 968
+    },
+    {
+      "ecosystem": "java",
+      "filename": "gradle.lockfile",
+      "file_path": "lib/gradle.lockfile",
+      "file_hash": "874f1c44a7cb7b4962920b53df81f0caf6d156b2c6099d8bdedb09f06c229b28",
+      "size_bytes": 232
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "java",
+      "file": "gradle.lockfile",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

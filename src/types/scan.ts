@@ -2,7 +2,7 @@
  * Scan-domain types — mirrors the DB enums in the schema.
  */
 
-/** Mirrors the tech_ecosystem DB enum. */
+/** Mirrors the tech_ecosystem DB enum (`rust`, `dart`, `swift` added by migration 010, REQ-011 D-300). */
 export type TechEcosystem =
   | 'nodejs'
   | 'python'
@@ -10,9 +10,27 @@ export type TechEcosystem =
   | 'dotnet'
   | 'go'
   | 'php'
+  | 'rust'
   | 'ruby'
+  | 'dart'
+  | 'swift'
   | 'container'
   | 'other';
+
+/**
+ * Ecosystems the dependency parsers understand, in the default stack order
+ * (REQ-011 D-307): an empty project stack scans all of them in this order.
+ * `container` and `other` are enum values without a parser.
+ */
+export const SCAN_ECOSYSTEMS = ['nodejs', 'python', 'dotnet', 'java', 'go', 'php', 'rust', 'ruby', 'dart', 'swift'] as const;
+
+/** One of `SCAN_ECOSYSTEMS`. */
+export type ScanEcosystem = (typeof SCAN_ECOSYSTEMS)[number];
+
+/** Type guard of `SCAN_ECOSYSTEMS` (exact, case-sensitive value). */
+export function isScanEcosystem(value: unknown): value is ScanEcosystem {
+  return typeof value === 'string' && (SCAN_ECOSYSTEMS as readonly string[]).includes(value);
+}
 
 /** Mirrors the scan_status DB enum. */
 export type ScanStatus =
@@ -63,6 +81,14 @@ export interface ScannedDependency {
   vulnerabilities?: Array<{ id: string; fix_versions: string[] }>;
   manifest_file: string;
   manifest_path: string;
+  /**
+   * Present (and `true`) only for a package from a non-public package server
+   * (REQ-011 security review M-5: private pub server, gem server other than
+   * rubygems.org). License enrichment never sends such a name to a registry
+   * (status `disabled`); vulnerability lookup (OSV) still does. Absent for
+   * every other package, so the existing record shape is unchanged.
+   */
+  private_source?: true;
 }
 
 /** Scan file record produced by the dependency parsers. */

@@ -5,7 +5,7 @@
  *
  * | status                                          | effective license        | source                    | policy input        |
  * | ----------------------------------------------- | ------------------------ | ------------------------- | ------------------- |
- * | ok                                              | normalize(declared)      | registry:npm / pypi       | [declared]          |
+ * | ok                                              | normalize(declared)      | registry:<registry>       | [declared]          |
  * | no_license                                      | none                     | none                      | [] (NOASSERTION)    |
  * | not_found, unreachable, error, budget, disabled | hint, else none          | lockfile (unverified)/none| dep.licenses, else []|
  * | version_unknown, invalid_coordinates            | none                     | none                      | [] (NOASSERTION)    |
@@ -88,6 +88,10 @@ function registryLicenseSourceOf(ecosystem: RegistryEcosystem): LicenseSource {
       return 'registry:pypi';
     case 'nuget':
       return 'registry:nuget';
+    case 'depsdev':
+      return 'registry:depsdev';
+    case 'pubdev':
+      return 'registry:pubdev';
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);

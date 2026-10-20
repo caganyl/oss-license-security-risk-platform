@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-011",
+  "title": "REQ-011: Yeni ekosistemler (Java, Go, PHP, Rust, Ruby, Dart, Swift), eksik biçimler ve yeni lisans kaynakları (P-39…P-43)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (oturum içi yanıtlar, 2026-10-20: \"c ve c++ hariç ekle bakalım\" ve REQ-011 manifest sorusuna \"Onaylıyorum + lisans kaynakları da\"; kapsam: Java/Kotlin, Go, PHP, Rust, Ruby, Dart/Flutter, Swift ayrıştırıcıları, pnpm/bun/Pipfile.lock/uv.lock/requirements*.txt, bu dillerde OSV sorgusu, deps.dev ve pub.dev lisans kaynakları, göç 010; yazma alanları src, db, public, tests, README.md, .env.example; merge insan kapısında; Claude tarafından kaydedildi)",
+    "approved_at": "2026-10-20T13:30:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-011.md",
+    "acceptance_criteria": "docs/product/REQ-011.md",
+    "contracts": [
+      "docs/contracts/REQ-004-notice-and-outputs.md",
+      "docs/contracts/REQ-005-vulnerability-data.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-012-yeni-ekosistemler-ve-lisans-kaynaklari.md",
+      "docs/architecture/adr/ADR-005-typescript-ayristiricilar.md",
+      "docs/architecture/adr/ADR-006-kayit-defteri-zenginlestirme-ve-notice.md",
+      "docs/architecture/adr/ADR-007-guvenlik-acigi-sorgusu-ve-yeniden-kontrol.md",
+      "docs/architecture/adr/ADR-008-nuget-ayristirici-ve-zenginlestirme.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src", "db", "README.md", ".env.example"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests"] }
+  ]
+}

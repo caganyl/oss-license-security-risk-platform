@@ -3,16 +3,27 @@
  * `requirements-test.txt`, `pyproject.toml` (PEP 621 and Poetry) and
  * `poetry.lock`. Line-by-line port of the legacy Python `python.py` (frozen
  * as golden output, REQ-003 D-26; P-10, ADR-005 Karar 2, 3, 4).
+ *
+ * REQ-011 P-39 adds, from the walk's `python` spec map (D-304): every other
+ * `requirements*.txt` (D-305, AC-P39-5: a name containing `dev` or `test` ->
+ * `dev`, else `direct`), `Pipfile.lock` and `uv.lock` (AC-P39-4). They are
+ * read after the F4 files, so the F4 records win the dedupe and the F4
+ * output is unchanged. A broken new-format file gives one fixed Turkish
+ * record for that file (AC-P40-3); the other files are still read.
  */
 import type { DependencyScope, ScannedDependency } from '../../types/scan';
 import {
+  ManifestReadError,
   PYTHON_MANIFEST_NAMES,
   PY_WS,
+  compareCodePoints,
   decodeLenient,
   decodeStrict,
   discoverManifests,
   emptyResult,
+  hasLoneSurrogate,
   isPyDict,
+  isPyWhitespace,
   linkErrors,
   manifestDir,
   matchRequirementLine,
@@ -28,11 +39,13 @@ import {
   pypiPurl,
   readManifest,
   uniqueDependencies,
+  type ParseErrorRecord,
   type ParseResult,
   type TreeWalk,
   type WalkedFile,
 } from './common';
-import { parseTomlText } from './toml';
+import { PARSER_MESSAGES, ParserFileError } from './kit';
+import { TomlSyntaxError, parseTomlText } from './toml';
 
 // Python regex semantics: `\s` is the `str.isspace` set, `.` is "anything
 // but \n" and a trailing `$` also matches before a final "\n".
@@ -79,6 +92,7 @@ export function parse(walk: TreeWalk): ParseResult {
   }
   collect('pyproject.toml', (file, data, manifestPath) => dependenciesFromPyproject(file, data, manifestPath));
   collect('poetry.lock', (file, data, manifestPath) => dependenciesFromPoetryLock(file, data, manifestPath));
+  collectExtraFormats(walk, result);
 
   result.dependencies = uniqueDependencies(result.dependencies);
   return result;
@@ -246,4 +260,224 @@ function dependency(
     manifest_path: manifestPath,
     scope,
   };
+}
+
+// ---------------------------------------------------------------------------
+// REQ-011 P-39: requirements*.txt pattern, Pipfile.lock, uv.lock
+// ---------------------------------------------------------------------------
+
+/** Longest accepted name / version of the new formats (same bounds as the parser kit). */
+const EXTRA_MAX_NAME_LENGTH = 512;
+const EXTRA_MAX_VERSION_LENGTH = 256;
+/** Lock file names: the walk's `python` spec map holds these and the `requirements*.txt` files. */
+const PIPFILE_LOCK = 'Pipfile.lock';
+const UV_LOCK = 'uv.lock';
+/** Pipfile.lock sections (AC-P39-4). */
+const PIPFILE_SECTIONS: ReadonlyArray<readonly [string, DependencyScope]> = [
+  ['default', 'direct'],
+  ['develop', 'dev'],
+];
+/** uv sources of the project itself and its workspace members: their dependency lists are the roots. */
+const UV_ROOT_SOURCES: readonly string[] = ['editable', 'virtual'];
+/** uv sources that are not a registry release (project, local folder, VCS, direct URL): skipped. */
+const UV_SKIPPED_SOURCES: readonly string[] = ['editable', 'virtual', 'path', 'directory', 'git', 'url'];
+
+interface ExtraFileResult {
+  dependencies: ScannedDependency[];
+  /** At least one entry was skipped as invalid (one fixed record per file). */
+  invalid: boolean;
+}
+
+type ExtraParser = (data: Buffer, file: WalkedFile, manifestPath: string) => ExtraFileResult;
+
+/**
+ * Reads the spec files of the walk (sorted by path; requirements files
+ * first, then `Pipfile.lock`, then `uv.lock`, like the F4 order).
+ */
+function collectExtraFormats(walk: TreeWalk, result: ParseResult): void {
+  const files: WalkedFile[] = [];
+  for (const dirFiles of walk.specByDir?.get('python')?.values() ?? []) files.push(...dirFiles.values());
+  files.sort((a, b) => compareCodePoints(a.relPath, b.relPath));
+  const requirementsParser: ExtraParser = (data, file, manifestPath) => ({
+    dependencies: dependenciesFromRequirements(data, manifestPath, file.name, extraRequirementsScope(file.name)),
+    invalid: false,
+  });
+  for (const file of files) if (file.name !== PIPFILE_LOCK && file.name !== UV_LOCK) readExtraFile(file, result, requirementsParser);
+  for (const file of files) if (file.name === PIPFILE_LOCK) readExtraFile(file, result, dependenciesFromPipfileLock);
+  for (const file of files) if (file.name === UV_LOCK) readExtraFile(file, result, dependenciesFromUvLock);
+}
+
+/** D-305 / AC-P39-5: a `requirements*.txt` name containing `dev` or `test` (any case) is development only. */
+function extraRequirementsScope(filename: string): DependencyScope {
+  const lower = filename.toLowerCase();
+  return lower.includes('dev') || lower.includes('test') ? 'dev' : 'direct';
+}
+
+function extraFileError(file: WalkedFile, message: string): ParseErrorRecord {
+  return { ecosystem: 'python', file: file.relPath, error: message };
+}
+
+/** Fixed text of a new-format failure (AC-P40-3): never a library message, never a path. */
+function extraFileMessage(err: unknown, file: WalkedFile): string {
+  if (err instanceof ParserFileError) return err.message;
+  if (err instanceof ManifestReadError) {
+    const prefix = `${file.relPath}: `;
+    return err.message.startsWith(prefix) ? err.message.slice(prefix.length) : PARSER_MESSAGES.structure;
+  }
+  if (err instanceof TomlSyntaxError) return PARSER_MESSAGES.toml;
+  if (err instanceof SyntaxError) return PARSER_MESSAGES.json;
+  return PARSER_MESSAGES.structure;
+}
+
+/** One new-format file: its record and entries on success, one fixed-text record on failure. */
+function readExtraFile(file: WalkedFile, result: ParseResult, parse: ExtraParser): void {
+  try {
+    const { data, record } = readManifest(file, 'python');
+    const parsed = parse(data, file, manifestDir(file.relPath, file.name));
+    result.scan_files.push(record);
+    result.dependencies.push(...parsed.dependencies);
+    if (parsed.invalid) result.parse_errors.push(extraFileError(file, PARSER_MESSAGES.invalidEntry));
+  } catch (err) {
+    result.parse_errors.push(extraFileError(file, extraFileMessage(err, file)));
+  }
+}
+
+/** Strict UTF-8 text without a leading BOM. */
+function lockText(data: Buffer, file: WalkedFile): string {
+  const text = decodeStrict(data, file.relPath);
+  return text.startsWith('﻿') ? text.slice(1) : text;
+}
+
+/** Own property of a parsed document (never an inherited one). */
+function own(obj: Record<string, unknown>, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
+}
+
+/** A mapping, or null when absent; any other type is a structure error. */
+function optionalDict(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null) return null;
+  if (!isPyDict(value)) throw new ParserFileError(PARSER_MESSAGES.structure);
+  return value;
+}
+
+/** PyPI project name with the requirement-line characters (`[A-Za-z0-9_.-]`). */
+function validPypiName(name: string): boolean {
+  return name.length > 0 && name.length <= EXTRA_MAX_NAME_LENGTH && /^[A-Za-z0-9_.-]+$/.test(name);
+}
+
+function validExactVersion(version: string): boolean {
+  if (version === '' || version.length > EXTRA_MAX_VERSION_LENGTH || hasLoneSurrogate(version)) return false;
+  for (let i = 0; i < version.length; i++) {
+    const c = version.charCodeAt(i);
+    if (c <= 0x20 || (c >= 0x7f && c <= 0x9f) || isPyWhitespace(c)) return false;
+  }
+  return true;
+}
+
+/** PEP 503 comparison key (lower case, runs of `-`, `_`, `.` -> `-`); the stored name stays as written. */
+function pep503Key(name: string): string {
+  return name.toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+/**
+ * `Pipfile.lock` (JSON): `default` -> `direct`, `develop` -> `dev`
+ * (AC-P39-4). `"version": "==X"` gives the exact version X (no declared
+ * range: the lock pins it); any other text is kept as the declared range
+ * with version null. Entries without `version` (VCS, path, editable) are
+ * not registry releases and are skipped.
+ */
+function dependenciesFromPipfileLock(data: Buffer, file: WalkedFile, manifestPath: string): ExtraFileResult {
+  const lock: unknown = JSON.parse(lockText(data, file));
+  if (!isPyDict(lock)) throw new ParserFileError(PARSER_MESSAGES.structure);
+  const dependencies: ScannedDependency[] = [];
+  let invalid = false;
+  for (const [section, scope] of PIPFILE_SECTIONS) {
+    for (const [name, entry] of Object.entries(optionalDict(own(lock, section)) ?? {})) {
+      if (!isPyDict(entry)) {
+        invalid = true;
+        continue;
+      }
+      const version = own(entry, 'version');
+      if (version === undefined) continue;
+      if (typeof version !== 'string' || !validPypiName(name)) {
+        invalid = true;
+        continue;
+      }
+      const [exact, declared] = versionFromSpecifier(version);
+      if (declared === null || (exact !== null && !validExactVersion(exact))) {
+        invalid = true;
+        continue;
+      }
+      dependencies.push(dependency(name, exact, exact === null ? declared : null, manifestPath, PIPFILE_LOCK, scope));
+    }
+  }
+  return { dependencies, invalid };
+}
+
+/** Normalised names of a uv dependency list (`[{ name = "x", ... }, ...]`). */
+function addUvNames(target: Set<string>, list: unknown): void {
+  if (!Array.isArray(list)) return;
+  for (const item of list) {
+    const name = isPyDict(item) ? own(item, 'name') : undefined;
+    if (typeof name === 'string') target.add(pep503Key(name));
+  }
+}
+
+/** Every group list of a uv `optional-dependencies` / `dev-dependencies` table. */
+function addUvGroups(target: Set<string>, groups: unknown): void {
+  if (!isPyDict(groups)) return;
+  for (const list of Object.values(groups)) addUvNames(target, list);
+}
+
+function hasAnySource(source: unknown, kinds: readonly string[]): boolean {
+  return isPyDict(source) && kinds.some((kind) => own(source, kind) !== undefined);
+}
+
+/**
+ * `uv.lock` (TOML, `version = 1`): `[[package]]` entries with `name`,
+ * `version`, `source`. The project and workspace members (`editable` /
+ * `virtual` source) are not packages but give the scopes: a package named
+ * in their `dependencies` is `direct`, in `optional-dependencies`
+ * `optional`, in `dev-dependencies` `dev` (first match in that order; names
+ * compared by PEP 503), any other package `transitive` (like `poetry.lock`).
+ * Local (`path`, `directory`), VCS (`git`) and direct-URL (`url`) packages are
+ * not registry releases and are skipped.
+ */
+function dependenciesFromUvLock(data: Buffer, file: WalkedFile, manifestPath: string): ExtraFileResult {
+  const lock = parseTomlText(lockText(data, file));
+  if (own(lock, 'version') !== 1) throw new ParserFileError(PARSER_MESSAGES.unsupportedVersion);
+  const packagesValue = own(lock, 'package');
+  if (packagesValue !== undefined && !Array.isArray(packagesValue)) throw new ParserFileError(PARSER_MESSAGES.structure);
+  const packages: unknown[] = Array.isArray(packagesValue) ? packagesValue : [];
+
+  const direct = new Set<string>();
+  const optional = new Set<string>();
+  const dev = new Set<string>();
+  for (const pkg of packages) {
+    if (!isPyDict(pkg) || !hasAnySource(own(pkg, 'source'), UV_ROOT_SOURCES)) continue;
+    addUvNames(direct, own(pkg, 'dependencies'));
+    addUvGroups(optional, own(pkg, 'optional-dependencies'));
+    addUvGroups(dev, own(pkg, 'dev-dependencies'));
+  }
+
+  const dependencies: ScannedDependency[] = [];
+  let invalid = false;
+  for (const pkg of packages) {
+    if (!isPyDict(pkg)) {
+      invalid = true;
+      continue;
+    }
+    if (hasAnySource(own(pkg, 'source'), UV_SKIPPED_SOURCES)) continue;
+    const name = own(pkg, 'name');
+    const rawVersion = own(pkg, 'version');
+    const version = typeof rawVersion === 'string' ? pyStrip(rawVersion) : '';
+    if (typeof name !== 'string' || !validPypiName(name) || !validExactVersion(version)) {
+      invalid = true;
+      continue;
+    }
+    const key = pep503Key(name);
+    const scope: DependencyScope = direct.has(key) ? 'direct' : optional.has(key) ? 'optional' : dev.has(key) ? 'dev' : 'transitive';
+    dependencies.push(dependency(name, version, null, manifestPath, UV_LOCK, scope));
+  }
+  return { dependencies, invalid };
 }

@@ -195,7 +195,7 @@
     .form-group label { display: block; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
     .eco-fieldset { border: 0; padding: 0; margin-left: 0; margin-right: 0; min-width: 0; }
     .eco-fieldset legend { padding: 0; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--text-main); }
-    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; max-height: 18rem; overflow-y: auto; padding: 2px; }
     .eco-card {
       display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.65rem 0.75rem; cursor: pointer;
       background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px;
@@ -757,18 +757,46 @@
           </label>
           <label class="eco-card">
             <input type="checkbox" name="eco" value="nodejs">
-            <span><strong>Node.js</strong><small>package.json, package-lock.json, yarn.lock</small></span>
+            <span><strong>Node.js</strong><small>package.json, package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lock</small></span>
           </label>
           <label class="eco-card">
             <input type="checkbox" name="eco" value="python">
-            <span><strong>Python</strong><small>requirements*.txt, pyproject.toml</small></span>
+            <span><strong>Python</strong><small>requirements*.txt, pyproject.toml, poetry.lock, Pipfile.lock, uv.lock</small></span>
           </label>
           <label class="eco-card">
             <input type="checkbox" name="eco" value="dotnet">
             <span><strong>.NET</strong><small>packages.lock.json, project.assets.json, *.csproj</small></span>
           </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="java">
+            <span><strong>Java / Kotlin</strong><small>gradle.lockfile, pom.xml, build.gradle(.kts)</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="go">
+            <span><strong>Go</strong><small>go.mod</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="php">
+            <span><strong>PHP</strong><small>composer.lock, composer.json</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="rust">
+            <span><strong>Rust</strong><small>Cargo.lock, Cargo.toml</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="ruby">
+            <span><strong>Ruby</strong><small>Gemfile.lock</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="dart">
+            <span><strong>Dart / Flutter</strong><small>pubspec.lock</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="swift">
+            <span><strong>Swift</strong><small>Package.resolved</small></span>
+          </label>
         </div>
-        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Yalnız belirli teknolojileri taramak istiyorsanız onları seçin; desteklenenler Node.js, Python ve .NET'tir.</small>
+        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Yalnız belirli teknolojileri taramak istiyorsanız onları seçin. Kilit dosyası (lock) olan projeler en doğru sonucu verir; yalnız bildirim dosyası (pom.xml, build.gradle, composer.json, Cargo.toml) varsa dolaylı paketler görünmez.</small>
       </fieldset>
 
       <div class="form-actions">

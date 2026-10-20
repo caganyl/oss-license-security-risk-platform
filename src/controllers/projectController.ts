@@ -4,6 +4,7 @@ import { HttpError } from '../lib/httpError';
 import { ScanSourceError, resolveScanSource } from '../lib/scanSource';
 import { encryptToken } from '../lib/tokenCrypto';
 import { isAzureDevOpsUrl } from '../scanner/workspace';
+import { SCAN_ECOSYSTEMS, isScanEcosystem, type ScanEcosystem } from '../types/scan';
 import { type HostAllowlist, normalizeWebUrl, parseAllowedHosts } from '../webscan/allowlist';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -23,6 +24,25 @@ const PROJECT_COLUMNS = `id, name, description, criticality, repo_url, scan_sche
   ${hasRepoCredentialSql('projects')}`;
 
 const MAX_TOKEN_LENGTH = 1024;
+
+/**
+ * `ecosystems` of `POST /api/projects` (REQ-011 D-313, AC-P42-3): absent,
+ * `null` or an array of supported values (`SCAN_ECOSYSTEMS`, exact case);
+ * duplicates are kept once in their first order. Anything else is a 400
+ * `invalid_request` before any row is written (it used to reach the
+ * `::tech_ecosystem` cast and fail with a 500).
+ */
+function parseEcosystems(value: unknown): ScanEcosystem[] {
+  if (value === undefined || value === null) return [];
+  const message = `ecosystems must be an array of: ${SCAN_ECOSYSTEMS.join(', ')}`;
+  if (!Array.isArray(value) || value.length > SCAN_ECOSYSTEMS.length * 4) throw new HttpError(400, message, 'invalid_request');
+  const out: ScanEcosystem[] = [];
+  for (const item of value) {
+    if (!isScanEcosystem(item)) throw new HttpError(400, message, 'invalid_request');
+    if (!out.includes(item)) out.push(item);
+  }
+  return out;
+}
 
 /** No whitespace and no control character (U+0000-U+001F, U+007F) (REQ-009 AC-P29-2). */
 function isPrintableToken(token: string): boolean {
@@ -76,7 +96,9 @@ export class ProjectController {
     // P-04 / AC-P03-7: classify repoUrl before anything is stored; rejection -> 400, no row.
     let storedRepoUrl: string | null = null;
     let storedWebUrl: string | null = null;
+    let ecosystems: ScanEcosystem[] = [];
     try {
+      ecosystems = parseEcosystems(req.body?.ecosystems);
       const repoUrl: unknown = req.body?.repoUrl;
       if (repoUrl !== undefined && repoUrl !== null && repoUrl !== '') {
         if (typeof repoUrl !== 'string') throw new ScanSourceError('repo_url_not_allowed');
@@ -101,7 +123,7 @@ export class ProjectController {
       if (!user) {
         throw Object.assign(new Error('Authentication required'), { statusCode: 401 });
       }
-      const { name, description, criticality, scanSchedule, tags, ecosystems } = req.body;
+      const { name, description, criticality, scanSchedule, tags } = req.body;
       if (!name || typeof name !== 'string' || name.trim() === '') {
         throw Object.assign(new Error('Project name is required'), { statusCode: 400 });
       }
@@ -123,17 +145,13 @@ export class ProjectController {
       const project = insertProj.rows[0];
 
       const insertedEcosystems: string[] = [];
-      if (Array.isArray(ecosystems) && ecosystems.length > 0) {
-        for (const eco of ecosystems) {
-          if (eco && typeof eco === 'string') {
-            await client.query(`
-              INSERT INTO project_tech_stacks (project_id, ecosystem)
-              VALUES ($1, $2::tech_ecosystem)
-              ON CONFLICT DO NOTHING
-            `, [project.id, eco]);
-            insertedEcosystems.push(eco);
-          }
-        }
+      for (const eco of ecosystems) {
+        await client.query(`
+          INSERT INTO project_tech_stacks (project_id, ecosystem)
+          VALUES ($1, $2::tech_ecosystem)
+          ON CONFLICT DO NOTHING
+        `, [project.id, eco]);
+        insertedEcosystems.push(eco);
       }
 
       await client.query('COMMIT');

@@ -1,0 +1,61 @@
+{
+  "scan_id": "golden-php-json-fallback",
+  "status": "completed",
+  "total_deps": 4,
+  "dependencies": [
+    {
+      "ecosystem": "php",
+      "name": "acme/tooling",
+      "version": null,
+      "purl": "pkg:composer/acme/tooling",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "composer.json",
+      "manifest_path": ".",
+      "declared_range": "dev-develop"
+    },
+    {
+      "ecosystem": "php",
+      "name": "guzzlehttp/guzzle",
+      "version": null,
+      "purl": "pkg:composer/guzzlehttp/guzzle",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "composer.json",
+      "manifest_path": ".",
+      "declared_range": "7.8.1"
+    },
+    {
+      "ecosystem": "php",
+      "name": "laravel/framework",
+      "version": null,
+      "purl": "pkg:composer/laravel/framework",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "composer.json",
+      "manifest_path": ".",
+      "declared_range": "^10.0"
+    },
+    {
+      "ecosystem": "php",
+      "name": "mockery/mockery",
+      "version": null,
+      "purl": "pkg:composer/mockery/mockery",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "composer.json",
+      "manifest_path": ".",
+      "declared_range": "^1.6"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "php",
+      "filename": "composer.json",
+      "file_path": "composer.json",
+      "file_hash": "e1b24ad4427c1cda5f1da61a52f7136659e6e5f629d712213c7513dfbf32f736",
+      "size_bytes": 400
+    }
+  ],
+  "parse_errors": []
+}

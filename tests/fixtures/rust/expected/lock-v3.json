@@ -1,0 +1,152 @@
+{
+  "scan_id": "golden-rust-lock-v3",
+  "status": "completed",
+  "total_deps": 11,
+  "dependencies": [
+    {
+      "ecosystem": "rust",
+      "name": "bitflags",
+      "version": "1.3.2",
+      "purl": "pkg:cargo/bitflags@1.3.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "bitflags",
+      "version": "2.5.0",
+      "purl": "pkg:cargo/bitflags@2.5.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "2"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "cc",
+      "version": "1.0.98",
+      "purl": "pkg:cargo/cc@1.0.98",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.0.90"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "clap",
+      "version": "4.5.4",
+      "purl": "pkg:cargo/clap@4.5.4",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "4.5"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "clap_builder",
+      "version": "4.5.2",
+      "purl": "pkg:cargo/clap_builder@4.5.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "itoa",
+      "version": "1.0.11",
+      "purl": "pkg:cargo/itoa@1.0.11",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "once_cell",
+      "version": "1.19.0",
+      "purl": "pkg:cargo/once_cell@1.19.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.19"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "serde",
+      "version": "1.0.203",
+      "purl": "pkg:cargo/serde@1.0.203",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1.0"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "serde_json",
+      "version": "1.0.117",
+      "purl": "pkg:cargo/serde_json@1.0.117",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "1"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "tempfile",
+      "version": "3.10.1",
+      "purl": "pkg:cargo/tempfile@3.10.1",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "3"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "winapi",
+      "version": "0.3.9",
+      "purl": "pkg:cargo/winapi@0.3.9",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": ".",
+      "declared_range": "0.3"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.lock",
+      "file_path": "Cargo.lock",
+      "file_hash": "117fd2c69b23a193d13c0bd55c00e45a777b0bade936e5b35df70bf2ec5cc7b2",
+      "size_bytes": 2939
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "Cargo.toml",
+      "file_hash": "b62d214a35327e8fc6102e99fab398333b05ff7f7bf35fea69d2f7bc19944fa1",
+      "size_bytes": 543
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "helper/Cargo.toml",
+      "file_hash": "e73442741eaa689b503e71019aee549cc2721b6159d74ea2f1179981c736b93e",
+      "size_bytes": 146
+    }
+  ],
+  "parse_errors": []
+}

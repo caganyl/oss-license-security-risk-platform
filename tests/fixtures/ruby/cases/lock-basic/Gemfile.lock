@@ -1,0 +1,60 @@
+GIT
+  remote: https://github.com/rails/rails.git
+  revision: 6f0d1ad14b92b9f5906e44740fce8b4f1c7075dc
+  branch: main
+  specs:
+    actionpack (7.2.0.alpha)
+      rack (>= 2.2.4)
+    rails (7.2.0.alpha)
+      actionpack (= 7.2.0.alpha)
+
+PATH
+  remote: engines/billing
+  specs:
+    billing (0.1.0)
+      money (~> 6.16)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    concurrent-ruby (1.2.3)
+    i18n (1.14.4)
+      concurrent-ruby (~> 1.0)
+    money (6.19.0)
+      i18n (>= 0.6.4, <= 2)
+    puma (6.4.2)
+      nio4r (~> 2.0)
+    nio4r (2.7.1)
+    rack (3.0.10)
+    rspec-core (3.13.0)
+      rspec-support (~> 3.13.0)
+    rspec-support (3.13.1)
+    zeitwerk (2.6.13)
+
+GEM
+  remote: https://gems.example.internal/
+  specs:
+    acme-auth (2.1.0)
+      zeitwerk (~> 2.6)
+
+PLATFORMS
+  ruby
+  x86_64-linux
+
+DEPENDENCIES
+  acme-auth!
+  billing!
+  puma (>= 5.0, < 7)
+  rails!
+  rspec-core
+  zeitwerk (~> 2.6)
+
+CHECKSUMS
+  concurrent-ruby (1.2.3) sha256=82fdd3f8a0816e28d513e637bb2b90a45d7b982bdf4f3a0511722d2e495801e2
+  puma (6.4.2) sha256=0586a0fdbd2c6aea4da6e2e0a2fc8d4c4b6a8ab6b4e1b2f6d1aa8bb0e8c5d9a2
+
+RUBY VERSION
+   ruby 3.3.0p0
+
+BUNDLED WITH
+   2.5.6

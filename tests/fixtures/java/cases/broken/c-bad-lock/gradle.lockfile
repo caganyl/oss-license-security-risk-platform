@@ -1,0 +1,3 @@
+# not a lock: no valid line
+oops this is not a lock
+org.secret:only-two-parts=runtimeClasspath

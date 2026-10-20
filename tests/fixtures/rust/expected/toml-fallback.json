@@ -1,0 +1,174 @@
+{
+  "scan_id": "golden-rust-toml-fallback",
+  "status": "completed",
+  "total_deps": 13,
+  "dependencies": [
+    {
+      "ecosystem": "rust",
+      "name": "both",
+      "version": null,
+      "purl": "pkg:cargo/both",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "1.2"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "cc",
+      "version": null,
+      "purl": "pkg:cargo/cc",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "1"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "criterion",
+      "version": null,
+      "purl": "pkg:cargo/criterion",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "0.5"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "inherited",
+      "version": null,
+      "purl": "pkg:cargo/inherited",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "libc",
+      "version": null,
+      "purl": "pkg:cargo/libc",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "0.2"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "log",
+      "version": null,
+      "purl": "pkg:cargo/log",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "0.4"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "nover",
+      "version": null,
+      "purl": "pkg:cargo/nover",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "rand",
+      "version": null,
+      "purl": "pkg:cargo/rand",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "0.8.5"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "real-crate",
+      "version": null,
+      "purl": "pkg:cargo/real-crate",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "=2.1.0"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "windows-sys",
+      "version": null,
+      "purl": "pkg:cargo/windows-sys",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": ".",
+      "declared_range": "0.52"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "actual",
+      "version": null,
+      "purl": "pkg:cargo/actual",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "ws/member",
+      "declared_range": "0.3"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "insta",
+      "version": null,
+      "purl": "pkg:cargo/insta",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "ws/member",
+      "declared_range": "1.39"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "serde",
+      "version": null,
+      "purl": "pkg:cargo/serde",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "ws/member",
+      "declared_range": "1.0.200"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "Cargo.toml",
+      "file_hash": "60d4faf2fe401affd188767fcd9aa6e4cf8bdf2a0cc2c44fc717d8eaedf0e5d7",
+      "size_bytes": 627
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "ws/Cargo.toml",
+      "file_hash": "f5164aa2167d07121698fea5982b063cd64446ed2101e05939b51986a9526690",
+      "size_bytes": 197
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "ws/member/Cargo.toml",
+      "file_hash": "b1f1ed6cca0cc873fb7170c345c876bac348e767c22d1e7d2add623263cdce4a",
+      "size_bytes": 216
+    }
+  ],
+  "parse_errors": []
+}

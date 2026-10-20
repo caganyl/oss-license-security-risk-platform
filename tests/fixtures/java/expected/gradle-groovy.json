@@ -1,0 +1,243 @@
+{
+  "scan_id": "golden-java-gradle-groovy",
+  "status": "completed",
+  "total_deps": 20,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "androidx.test.espresso:espresso-core",
+      "version": "3.5.1",
+      "purl": "pkg:maven/androidx.test.espresso/espresso-core@3.5.1",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "3.5.1"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-core",
+      "version": null,
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-core",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "$jacksonVersion"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-databind",
+      "version": null,
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "${jacksonVersion}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.guava:guava",
+      "version": "33.2.0-jre",
+      "purl": "pkg:maven/com.google.guava/guava@33.2.0-jre",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "33.2.0-jre"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.squareup.leakcanary:leakcanary-android",
+      "version": "2.14",
+      "purl": "pkg:maven/com.squareup.leakcanary/leakcanary-android@2.14",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "2.14"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.squareup.okhttp3:okhttp",
+      "version": "4.12.0",
+      "purl": "pkg:maven/com.squareup.okhttp3/okhttp@4.12.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "4.12.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "commons-io:commons-io",
+      "version": "2.16.1",
+      "purl": "pkg:maven/commons-io/commons-io@2.16.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "2.16.1"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.netty:netty-all",
+      "version": null,
+      "purl": "pkg:maven/io.netty/netty-all",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "4.1.+"
+    },
+    {
+      "ecosystem": "java",
+      "name": "joda-time:joda-time",
+      "version": null,
+      "purl": "pkg:maven/joda-time/joda-time",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "[2.10,3.0)"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.commons:commons-lang3",
+      "version": "3.14.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "3.14.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.httpcomponents:httpclient",
+      "version": "4.5.14",
+      "purl": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.14",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "4.5.14"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.jetbrains:annotations",
+      "version": "24.1.0",
+      "purl": "pkg:maven/org.jetbrains/annotations@24.1.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "24.1.0!!"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "version": "5.10.2",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "5.10.2"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.junit.platform:junit-platform-launcher",
+      "version": "1.10.2",
+      "purl": "pkg:maven/org.junit.platform/junit-platform-launcher@1.10.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "1.10.2"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.postgresql:postgresql",
+      "version": "42.7.3",
+      "purl": "pkg:maven/org.postgresql/postgresql@42.7.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "42.7.3"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.projectlombok:lombok",
+      "version": "1.18.32",
+      "purl": "pkg:maven/org.projectlombok/lombok@1.18.32",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "1.18.32"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": null,
+      "purl": "pkg:maven/org.slf4j/slf4j-api",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "slf4jVersion"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.springframework.boot:spring-boot-starter-actuator",
+      "version": null,
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-starter-actuator",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.springframework.boot:spring-boot-starter-web",
+      "version": "3.3.0",
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-starter-web@3.3.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "3.3.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.yaml:snakeyaml",
+      "version": null,
+      "purl": "pkg:maven/org.yaml/snakeyaml",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": ".",
+      "declared_range": "latest.release"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle",
+      "file_path": "build.gradle",
+      "file_hash": "166d5dfc5793784153a1467bc859b8b1ea4eae3dbfe75a0ab5b360068e7962ad",
+      "size_bytes": 2197
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "java",
+      "file": "build.gradle",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

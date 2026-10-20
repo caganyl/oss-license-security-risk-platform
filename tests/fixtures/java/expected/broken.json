@@ -1,0 +1,100 @@
+{
+  "scan_id": "golden-java-broken",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": "2.0.13",
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle",
+      "manifest_path": "a-bad-xml",
+      "declared_range": "2.0.13"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.commons:commons-lang3",
+      "version": "3.14.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": "c-bad-lock",
+      "declared_range": "3.14.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.slf4j:slf4j-api",
+      "version": "2.0.13",
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": "f-invalid-entries",
+      "declared_range": "2.0.13"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle",
+      "file_path": "a-bad-xml/build.gradle",
+      "file_hash": "ec1ed23cb68855addb7f1fc2d9741ad7f64b02ee5cdcf9d1cf53c88d89545600",
+      "size_bytes": 65
+    },
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "c-bad-lock/pom.xml",
+      "file_hash": "0d0fbd7f783e870fda3e2ae2808b987f591f777d34bcf39c6fdbad5c7f439928",
+      "size_bytes": 212
+    },
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle.kts",
+      "file_path": "f-invalid-entries/build.gradle.kts",
+      "file_hash": "1758008e65dcbb9da55d1ba7bf3ccf19c6560b5db45c60fe76bddf14b5da4d50",
+      "size_bytes": 201
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "java",
+      "file": "a-bad-xml/pom.xml",
+      "error": "XML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "java",
+      "file": "b-doctype/pom.xml",
+      "error": "XML belge türü bildirimi (DOCTYPE) desteklenmiyor."
+    },
+    {
+      "ecosystem": "java",
+      "file": "c-bad-lock/gradle.lockfile",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "java",
+      "file": "d-bad-gradle/build.gradle",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "java",
+      "file": "e-not-project/pom.xml",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "java",
+      "file": "f-invalid-entries/build.gradle.kts",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "java",
+      "file": "g-unclosed-comment/build.gradle.kts",
+      "error": "Beklenmeyen dosya yapısı."
+    }
+  ]
+}

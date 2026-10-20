@@ -17,8 +17,15 @@ export type EnrichmentStatus =
   | 'invalid_coordinates'
   | 'budget_exceeded';
 
-/** `scan_dependencies.license_source` (migration 006 CHECK). */
-export type LicenseSource = 'registry:npm' | 'registry:pypi' | 'registry:nuget' | 'lockfile (unverified)' | 'none';
+/** `scan_dependencies.license_source` (migration 006 CHECK; 008 += nuget; 010 += depsdev, pubdev). */
+export type LicenseSource =
+  | 'registry:npm'
+  | 'registry:pypi'
+  | 'registry:nuget'
+  | 'registry:depsdev'
+  | 'registry:pubdev'
+  | 'lockfile (unverified)'
+  | 'none';
 
 /** `license_unclassified` (migration 008): NuGet `type="file"` license or an unclassified `licenseUrl`. */
 export type LicenseUnclassified = 'file' | 'url';

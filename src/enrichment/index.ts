@@ -14,6 +14,12 @@
  *      integrity + thread (`archiveStage.ts`);
  *   5. the single `[registry]` summary line (contract section 8).
  *
+ * REQ-011 P-43: Go/Maven/Cargo/RubyGems keys (`depsdev`) and Dart keys
+ * (`pubdev`) run steps 1–3 and 5 with the same cache, limiter, budget and
+ * error classification; they have no archive stage (D-321) and no lock
+ * integrity comparison. PHP and Swift have no registry key at all
+ * (`noRegistryEcosystem`; the worker stores them as `disabled`).
+ *
  * Signals: everything runs on `AbortSignal.any([job, budget])`. A job abort
  * (time limit / shutdown) is rethrown as is; a budget abort turns the
  * remaining and in-flight keys into `budget_exceeded` and `enrich` returns
@@ -23,15 +29,17 @@
 import { ENRICHMENT_LIMITS, type EnrichmentConfig } from '../scanner/sandbox/runner.config';
 import { type DependencyScope, isRuntimeScope as isRuntimeDependencyScope } from '../types/scan';
 import { ARCHIVE_THREAD_RESOURCE_LIMITS, type ArchiveThreadOptions, runArchiveInThread } from './archive/archiveThread';
-import { type ArchiveTask, type RunArchiveThreadFn, archiveCacheKey, collectArchive, errorCodeOf, triedCandidates } from './archiveStage';
+import { type ArchiveTask, type RunArchiveThreadFn, archiveCacheKey, collectArchive, errorCodeOf, hasArchiveStage, triedCandidates } from './archiveStage';
 import { DownloadQuota, createBudgetSignal } from './budget';
 import { type CacheDb, type CachedArchive, type CachedMetadata, readArchiveCache, readMetadataCache, writeMetadataCache } from './cache';
-import { type RegistryEcosystem, asciiLower, checkCoordinates, coordinateKey, registryEcosystemOf, requestName } from './coordinates';
+import { type RegistryEcosystem, asciiLower, checkCoordinates, coordinateKey, registryEcosystemOf, registryRequestName } from './coordinates';
+import { fetchDepsDevMetadata } from './depsDevRegistry';
 import { HINT_FALLBACK_STATUSES, type SummaryEntry, lockHintOf, registrySummaryLine } from './effectiveLicense';
 import { digestKey } from './integrity';
 import { type LockIntegrity, type LockIntegrityRecord, compareLockIntegrity } from './lockIntegrity';
 import { fetchNpmMetadata } from './npmRegistry';
 import { fetchNugetMetadata, nupkgUrl } from './nugetRegistry';
+import { fetchPubDevMetadata } from './pubDevRegistry';
 import { fetchPypiMetadata } from './pypiRegistry';
 import { type RegistryClient, type RegistryClientLimits, type RegistryClock, type RegistryEndpoints, createRegistryClient } from './registryClient';
 import { sanitizeText } from './text';
@@ -128,13 +136,14 @@ export function enrichmentKeyOf(dep: EnrichmentDependency): string | null {
   const registry = registryEcosystemOf(dep.ecosystem);
   if (registry === null) return null;
   const version = versionOf(dep);
-  if (version === null) return `${registry}\u0000${requestName(registry, dep.name)}\u0000\u0001`;
+  // deps.dev names carry their system (`MAVEN:g:a`), so equal names of two systems never share a key.
+  if (version === null) return `${registry}\u0000${registryRequestName(dep.ecosystem, dep.name) as string}\u0000\u0001`;
   if (registry === 'nuget') {
     // Same key as `checkCoordinates` (lower-case id and normalized version), so cache rows and side-channel records meet.
     const check = checkCoordinates(dep.ecosystem, dep.name, version);
     return check.kind === 'ok' ? coordinateKey(check.ecosystem, check.requestName, check.version) : coordinateKey(registry, asciiLower(dep.name), asciiLower(version));
   }
-  return coordinateKey(registry, requestName(registry, dep.name), version);
+  return coordinateKey(registry, registryRequestName(dep.ecosystem, dep.name) as string, version);
 }
 
 interface KeyInfo {
@@ -196,6 +205,8 @@ function defaultLockIntegrity(info: KeyInfo, enabled: boolean): LockIntegrity | 
     case 'nuget':
       return 'not_comparable';
     case 'pypi':
+    case 'depsdev':
+    case 'pubdev':
       return null;
     default: {
       const unreachable: never = info.registry;
@@ -213,6 +224,10 @@ function fetchMetadataOf(ecosystem: RegistryEcosystem): typeof fetchNpmMetadata 
       return fetchPypiMetadata;
     case 'nuget':
       return fetchNugetMetadata;
+    case 'depsdev':
+      return fetchDepsDevMetadata;
+    case 'pubdev':
+      return fetchPubDevMetadata;
     default: {
       const unreachable: never = ecosystem;
       throw new Error(`unsupported registry ecosystem: ${String(unreachable)}`);
@@ -489,8 +504,11 @@ export function createDependencyEnricher(options: DependencyEnricherOptions): De
       return Array.isArray(list) ? list : [];
     };
 
-    // 4. Archive stage: runtime keys whose metadata was found (L-5 mismatch keys excluded).
-    const archiveInfos = requestable.filter((info) => info.runtime && found.has(info.key) && !mismatched.has(info.key));
+    // 4. Archive stage: runtime keys whose metadata was found (L-5 mismatch keys excluded);
+    //    deps.dev / pub.dev keys never have one (REQ-011 D-321).
+    const archiveInfos = requestable.filter(
+      (info) => hasArchiveStage(info.registry) && info.runtime && found.has(info.key) && !mismatched.has(info.key),
+    );
     let cachedArchives = new Map<string, CachedArchive>();
     if (archiveInfos.length > 0 && !signal.aborted) {
       const keys = archiveInfos.flatMap((info) => {

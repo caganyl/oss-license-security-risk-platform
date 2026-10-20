@@ -32,6 +32,9 @@ export const METADATA_EXTRACTOR_VERSIONS: Readonly<Record<RegistryEcosystem, num
   npm: METADATA_EXTRACTOR_VERSION,
   pypi: METADATA_EXTRACTOR_VERSION,
   nuget: 1,
+  // REQ-011 (migration 010): own counters, rows keyed `SYSTEM:name` (deps.dev) / name (pub.dev).
+  depsdev: 1,
+  pubdev: 1,
 });
 /** Bump when archive extraction changes (readers, file selection, copyright rule). */
 export const ARCHIVE_EXTRACTOR_VERSION = 1;

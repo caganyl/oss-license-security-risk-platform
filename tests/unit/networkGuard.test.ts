@@ -161,6 +161,11 @@ describe('network guard: non-loopback attempts are rejected and recorded', () =>
     await expectHostBlocked('api.nuget.org', 'GET', '/v3-flatcontainer/newtonsoft.json/13.0.3/newtonsoft.json.nuspec');
   });
 
+  it('REQ-011 AC-G-3: api.deps.dev and pub.dev are blocked (net.connect, tls.connect, https.request of a license lookup, dns.lookup)', async () => {
+    await expectHostBlocked('api.deps.dev', 'GET', '/v3/systems/MAVEN/packages/org.slf4j%3Aslf4j-api/versions/2.0.9');
+    await expectHostBlocked('pub.dev', 'GET', '/api/packages/http/score');
+  });
+
   it('REQ-006 AC-G-2: fetch (undici) of an api.nuget.org .nupkg rejects and is recorded', async () => {
     await expect(fetch('https://api.nuget.org/v3-flatcontainer/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg')).rejects.toThrow();
     const seen = takeNetworkViolations();

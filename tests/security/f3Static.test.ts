@@ -33,6 +33,20 @@ describe('ADR-006 host allow list: registry endpoints are not configurable from 
     expect(all).not.toMatch(/REGISTRY_URL|NPM_REGISTRY|npm_config_registry|PIP_INDEX_URL|PYPI_URL|REGISTRY_HOST/i);
     for (const host of ['registry.npmjs.org', 'pypi.org', 'files.pythonhosted.org']) expect(all).toContain(host);
   });
+
+  it('REQ-011 AC-G-3: the license API origins are literal https constants of the registry client (no env, no other new host)', () => {
+    const client = read('src', 'enrichment', 'registryClient.ts');
+    expect(client).toContain("depsdev: 'https://api.deps.dev'");
+    expect(client).toContain("pubdev: 'https://pub.dev'");
+    const literalOrigins = [...client.matchAll(/'(https:\/\/[a-z0-9.-]+)'/g)].map((m) => m[1]).sort();
+    expect(literalOrigins).toEqual(['https://api.deps.dev', 'https://api.nuget.org', 'https://files.pythonhosted.org', 'https://pub.dev', 'https://pypi.org', 'https://registry.npmjs.org']);
+    for (const file of ['depsDevRegistry.ts', 'pubDevRegistry.ts']) {
+      const src = read('src', 'enrichment', file);
+      // URLs appear only in comments; no string literal origin, no environment read.
+      expect(src, file).not.toMatch(/process\.env|['"`]https?:\/\//);
+      expect(src, file).toMatch(/session\.endpoints\.(depsdev|pubdev)/);
+    }
+  });
 });
 
 describe('ADR-006 Karar 14: runtime enricher wiring', () => {

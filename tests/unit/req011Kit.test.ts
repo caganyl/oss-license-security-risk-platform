@@ -87,7 +87,9 @@ describe('D-307: supported ecosystems and registry', () => {
     expect(Object.keys(KIT_PARSERS).sort()).toEqual([...KIT_ECOSYSTEMS].sort());
   });
 
-  it('phase-1 stubs: a tree with every new manifest yields no dependency, no scan file and no error', () => {
+  // Phase 2 filled the parsers, so "stubs return nothing" became an invariant every parser must keep:
+  // degenerate files never crash, never yield a package, and only produce fixed error texts.
+  it('degenerate manifests of every new ecosystem: no crash, no dependency, only fixed parse_errors texts', () => {
     const root = tree({
       'gradle.lockfile': 'x',
       'pom.xml': '<project/>',
@@ -99,7 +101,10 @@ describe('D-307: supported ecosystems and registry', () => {
       'Package.resolved': '{}',
     });
     const r = parseManifests(root, ['java', 'go', 'php', 'rust', 'ruby', 'dart', 'swift'], 'stub');
-    expect(r).toEqual({ scan_id: 'stub', status: 'completed', total_deps: 0, dependencies: [], scan_files: [], parse_errors: [] });
+    expect(r.status).toBe('completed');
+    expect(r.dependencies).toEqual([]);
+    const fixed = new Set<string>(Object.values(PARSER_MESSAGES));
+    for (const e of r.parse_errors) expect(fixed.has(e.error), e.error).toBe(true);
   });
 
   it('AC-G-1: the npm/PyPI/.NET result of a fixture is identical whether or not the new ecosystems are requested', () => {

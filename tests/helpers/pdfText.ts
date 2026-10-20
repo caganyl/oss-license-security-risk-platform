@@ -83,7 +83,9 @@ function fontCmaps(pdf: Buffer): Map<string, Map<number, string>> {
       return m[1];
     }
   };
-  const utf16 = (hex: string): string => Buffer.from(hex, 'hex').swap16().toString('utf16le');
+  // An entry may hold several code units separated by spaces (`<0049 0307>`: I + combining dot,
+  // as pdfkit writes for some DejaVu glyphs); skipping it would shift every later array entry.
+  const utf16 = (hex: string): string => Buffer.from(hex.replace(/\s+/g, ''), 'hex').swap16().toString('utf16le').normalize('NFC');
   const cmapByObject = new Map<string, Map<number, string>>();
   for (const [id, body] of objects) {
     const ref = /\/ToUnicode (\d+) 0 R/.exec(body);
@@ -91,14 +93,14 @@ function fontCmaps(pdf: Buffer): Map<string, Map<number, string>> {
     const cmap = new Map<number, string>();
     const text = streamOf(objects.get(ref[1]) ?? '');
     for (const block of text.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
-      for (const p of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) cmap.set(parseInt(p[1], 16), utf16(p[2]));
+      for (const p of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f\s]+)>/g)) cmap.set(parseInt(p[1], 16), utf16(p[2]));
     }
     for (const block of text.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
       for (const r of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(\[[^\]]*\]|<[0-9A-Fa-f]+>)/g)) {
         const lo = parseInt(r[1], 16);
         const hi = parseInt(r[2], 16);
         if (r[3].startsWith('[')) {
-          [...r[3].matchAll(/<([0-9A-Fa-f]+)>/g)].forEach((d, i) => cmap.set(lo + i, utf16(d[1])));
+          [...r[3].matchAll(/<([0-9A-Fa-f\s]+)>/g)].forEach((d, i) => cmap.set(lo + i, utf16(d[1])));
         } else {
           const base = Buffer.from(r[3].slice(1, -1), 'hex');
           for (let c = lo; c <= hi; c += 1) {

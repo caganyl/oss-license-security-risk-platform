@@ -1,0 +1,240 @@
+{
+  "scan_id": "golden-nodejs-extra-broken",
+  "status": "completed",
+  "total_deps": 10,
+  "dependencies": [
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "bun-json",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "bun-open-comment",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "bun-structure",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "bun-version",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "pnpm-anchor",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": "1.3.0",
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": "pnpm-invalid-entry",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "pnpm-not-utf8",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "pnpm-syntax",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": null,
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad",
+      "manifest_file": "package.json",
+      "manifest_path": "pnpm-v5",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "left-pad",
+      "version": "1.3.0",
+      "declared_range": "^1.3.0",
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "manifest_file": "bun.lock",
+      "manifest_path": "z-healthy",
+      "scope": "direct"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "bun-json/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "bun-open-comment/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "bun-structure/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "bun-version/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "pnpm-anchor/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "pnpm-invalid-entry/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "pnpm-lock.yaml",
+      "file_path": "pnpm-invalid-entry/pnpm-lock.yaml",
+      "file_hash": "76d741980df93bf7dec2120747449b27c8396fbca23977c127ef6ec8487a94cb",
+      "size_bytes": 326
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "pnpm-not-utf8/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "pnpm-syntax/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "pnpm-v5/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "z-healthy/package.json",
+      "file_hash": "6fff737c66f7027bfaa60020b0c469242a823fcd57807250fee7097faf4c5762",
+      "size_bytes": 70
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "bun.lock",
+      "file_path": "z-healthy/bun.lock",
+      "file_hash": "7e243cecafe523f5e495c86f33c5ccbfaaee4255236194cb8496efc7221ba896",
+      "size_bytes": 239
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "nodejs",
+      "file": "bun-json/bun.lock",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "bun-open-comment/bun.lock",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "bun-structure/bun.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "bun-version/bun.lock",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "pnpm-anchor/pnpm-lock.yaml",
+      "error": "Desteklenmeyen YAML özelliği (çapa, takma ad, etiket veya çok belgeli akış)."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "pnpm-invalid-entry/pnpm-lock.yaml",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "pnpm-not-utf8/pnpm-lock.yaml",
+      "error": "Dosya geçerli UTF-8 değil."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "pnpm-syntax/pnpm-lock.yaml",
+      "error": "YAML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "nodejs",
+      "file": "pnpm-v5/pnpm-lock.yaml",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    }
+  ]
+}

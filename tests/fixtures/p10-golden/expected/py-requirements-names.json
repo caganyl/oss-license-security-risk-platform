@@ -119,11 +119,52 @@
    "purl": "pkg:pypi/pytest@8.1.1",
    "scope": "dev",
    "version": "8.1.1"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements-prod.txt",
+   "manifest_path": ".",
+   "name": "ignored-requirements-prod",
+   "purl": "pkg:pypi/ignored-requirements-prod@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": "==1.0.0",
+   "ecosystem": "python",
+   "manifest_file": "requirements_dev.txt",
+   "manifest_path": ".",
+   "name": "ignored-underscore-dev",
+   "purl": "pkg:pypi/ignored-underscore-dev@1.0.0",
+   "scope": "dev",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "Pipfile.lock",
+   "manifest_path": ".",
+   "name": "ignored-pipfile-lock",
+   "purl": "pkg:pypi/ignored-pipfile-lock@1.0.0",
+   "scope": "direct",
+   "version": "1.0.0"
+  },
+  {
+   "declared_range": null,
+   "ecosystem": "python",
+   "manifest_file": "uv.lock",
+   "manifest_path": ".",
+   "name": "ignored-uv-lock",
+   "purl": "pkg:pypi/ignored-uv-lock@1.0.0",
+   "scope": "transitive",
+   "version": "1.0.0"
   }
  ],
  "generator": "legacy python parsers (src/scanner/sandbox/parsers) \u2014 REQ-003 D-26, frozen",
  "parse_errors": [],
  "python": "3.14.7",
+ "revision": "REQ-011 P-39: frozen legacy output plus the deliberate new-format records (D-305 requirements-prod.txt / requirements_dev.txt, AC-P39-4 Pipfile.lock / uv.lock); every frozen record is unchanged",
  "root": "formats/py-requirements-names",
  "scan_files": [
   {
@@ -174,7 +215,35 @@
    "file_path": "sub/service/requirements-test.txt",
    "filename": "requirements-test.txt",
    "size_bytes": 14
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "1703da05f80e5a4707e3029b60f5488229520f4da5f09315a5b97f67ca6bf9d4",
+   "file_path": "requirements-prod.txt",
+   "filename": "requirements-prod.txt",
+   "size_bytes": 33
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "58a2314c336a594a627b92bd368fe8937cf3f6f959f3696f01596edd90dc14f1",
+   "file_path": "requirements_dev.txt",
+   "filename": "requirements_dev.txt",
+   "size_bytes": 30
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "5a4a423625f2f153fcb4d8ba4b9e7d1db7495146425c5ddfaa4aa96fad178284",
+   "file_path": "Pipfile.lock",
+   "filename": "Pipfile.lock",
+   "size_bytes": 176
+  },
+  {
+   "ecosystem": "python",
+   "file_hash": "425a612c5722937c314e19fe1aae6c8f4b9486f83adb2dea33b6259507e5dc7d",
+   "file_path": "uv.lock",
+   "filename": "uv.lock",
+   "size_bytes": 95
   }
  ],
- "total_deps": 12
+ "total_deps": 16
 }

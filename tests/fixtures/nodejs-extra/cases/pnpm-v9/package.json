@@ -1,0 +1,13 @@
+{
+  "name": "pnpm-v9-workspace",
+  "private": true,
+  "dependencies": {
+    "@acme/ui": "workspace:*",
+    "express": "^4.19.2",
+    "string-width-cjs": "npm:string-width@^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2",
+    "vitest": "^1.6.0"
+  }
+}

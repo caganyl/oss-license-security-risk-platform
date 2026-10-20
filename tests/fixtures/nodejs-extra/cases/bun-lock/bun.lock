@@ -1,0 +1,56 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "bun \"app\" // not a comment",
+      // runtime dependencies of the root workspace
+      "dependencies": {
+        "@acme/shared": "workspace:*",
+        "hono": "^4.4.0",
+        "zod": "^3.23.8",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.1.4",
+        "typescript": "^5.4.5",
+      },
+      "optionalDependencies": {
+        "fsevents": "^2.3.3",
+      },
+      "peerDependencies": {
+        "react": ">=18",
+      },
+    },
+    "packages/shared": {
+      "name": "@acme/shared",
+      "dependencies": {
+        "zod": "^3.22.0",
+      },
+    },
+  },
+  "packages": {
+    "@acme/shared": ["@acme/shared@workspace:packages/shared"],
+
+    "@types/bun": ["@types/bun@1.1.4", "", { "dependencies": { "bun-types": "1.1.13" } }, "sha512-ZGFmYWtlLWJ1bi10eXBlcw=="],
+
+    "@types/node": ["@types/node@20.12.14", "", { "dependencies": { "undici-types": "~5.26.4" } }, "sha512-dHlwZXMtbm9kZQ=="],
+
+    "bun-types": ["bun-types@1.1.13", "", { "dependencies": { "@types/node": "~20.12.8" } }, "sha512-YnVuLXR5cGVz"],
+
+    "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
+
+    "hono": ["hono@4.4.6", "", {}, "sha512-aG9ubw=="],
+
+    "my-fork": ["my-fork@github:acme/my-fork#0123abc", {}, "acme-my-fork-0123abc"],
+
+    "react": ["react@18.3.1", "", { "dependencies": { "loose-envify": "^1.1.0" } }, "sha512-cmVhY3Q="],
+
+    /* block comment with a "quote", a // marker and a trailing comma, */
+    "typescript": ["typescript@5.4.5", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-dHlwZXNjcmlwdA=="],
+
+    "undici-types": ["undici-types@5.26.5", "https://registry.example.com/undici-types/-/undici-types-5.26.5.tgz", {}, "sha512-dW5kaWNp"],
+
+    "zod": ["zod@3.23.8", "", {}, "sha512-em9k"],
+
+    "@acme/shared/zod": ["zod@3.22.4", "", {}, "sha512-em9kLW9sZA=="],
+  }
+}

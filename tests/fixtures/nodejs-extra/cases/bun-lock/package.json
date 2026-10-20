@@ -1,0 +1,19 @@
+{
+  "name": "bun-app",
+  "workspaces": ["packages/*"],
+  "dependencies": {
+    "@acme/shared": "workspace:*",
+    "hono": "^4.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.4",
+    "typescript": "^5.4.5"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.3"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

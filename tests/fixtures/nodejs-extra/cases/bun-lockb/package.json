@@ -1,0 +1,9 @@
+{
+  "name": "bun-binary",
+  "dependencies": {
+    "hono": "^4.4.0"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5"
+  }
+}

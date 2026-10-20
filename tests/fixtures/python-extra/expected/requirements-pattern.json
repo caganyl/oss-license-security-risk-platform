@@ -1,0 +1,146 @@
+{
+  "scan_id": "golden-python-extra-requirements-pattern",
+  "status": "completed",
+  "total_deps": 8,
+  "dependencies": [
+    {
+      "ecosystem": "python",
+      "name": "flask",
+      "version": "3.0.3",
+      "declared_range": "==3.0.3",
+      "purl": "pkg:pypi/flask@3.0.3",
+      "manifest_file": "requirements.txt",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "pytest",
+      "version": "8.2.2",
+      "declared_range": "==8.2.2",
+      "purl": "pkg:pypi/pytest@8.2.2",
+      "manifest_file": "requirements-dev.txt",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "python",
+      "name": "sphinx",
+      "version": "7.3.7",
+      "declared_range": "==7.3.7",
+      "purl": "pkg:pypi/sphinx@7.3.7",
+      "manifest_file": "requirements-docs.txt",
+      "manifest_path": "docs",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "black",
+      "version": "24.4.2",
+      "declared_range": "==24.4.2",
+      "purl": "pkg:pypi/black@24.4.2",
+      "manifest_file": "requirements-Dev-Tools.txt",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "python",
+      "name": "gunicorn",
+      "version": "22.0.0",
+      "declared_range": "==22.0.0",
+      "purl": "pkg:pypi/gunicorn@22.0.0",
+      "manifest_file": "requirements-prod.txt",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "markupsafe",
+      "version": "2.1.5",
+      "declared_range": "==2.1.5",
+      "purl": "pkg:pypi/markupsafe@2.1.5",
+      "manifest_file": "requirements.lock.txt",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "tox",
+      "version": null,
+      "declared_range": ">=4.15",
+      "purl": "pkg:pypi/tox",
+      "manifest_file": "requirements_ci.txt",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "coverage",
+      "version": "7.5.3",
+      "declared_range": "==7.5.3",
+      "purl": "pkg:pypi/coverage@7.5.3",
+      "manifest_file": "requirements_test.txt",
+      "manifest_path": ".",
+      "scope": "dev"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "python",
+      "filename": "requirements.txt",
+      "file_path": "requirements.txt",
+      "file_hash": "9c07c4225d35a82b6fb42f873d02ac383b4ac4e0aac95b536a56deac8610dfad",
+      "size_bytes": 13
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements-dev.txt",
+      "file_path": "requirements-dev.txt",
+      "file_hash": "e4154d5b2abff1c68ff438202c53d760310e7b952cbefaa0572e8de19dbd6d98",
+      "size_bytes": 14
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements-docs.txt",
+      "file_path": "docs/requirements-docs.txt",
+      "file_hash": "77921b8099dadf2863e9b53efe8d1cbb4b9e0904a363b43b068c3c2c13c648ba",
+      "size_bytes": 14
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements-Dev-Tools.txt",
+      "file_path": "requirements-Dev-Tools.txt",
+      "file_hash": "53ca3d31020ae2364dac3922da6feeba8967f9f566d3dd06ee6b7e502821ce13",
+      "size_bytes": 14
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements-prod.txt",
+      "file_path": "requirements-prod.txt",
+      "file_hash": "38fe3c5cf36fe29fc0b649dd5acf51568d58dabe6eaf8582d09b98d08de10958",
+      "size_bytes": 50
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements.lock.txt",
+      "file_path": "requirements.lock.txt",
+      "file_hash": "4a4eb87f9261aaa0eeb29a7e3b9ee71108ecc41c0d5557037ae1437b0d03e405",
+      "size_bytes": 18
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements_ci.txt",
+      "file_path": "requirements_ci.txt",
+      "file_hash": "f5612e91993d5b3d9058133f58ef58850502e66dbc3c052a72cbf72ba7ea993b",
+      "size_bytes": 10
+    },
+    {
+      "ecosystem": "python",
+      "filename": "requirements_test.txt",
+      "file_path": "requirements_test.txt",
+      "file_hash": "fd20d762810f9b02d2cbefa9bc846a677ba7224841280a52f1b3ee813d67cee5",
+      "size_bytes": 30
+    }
+  ],
+  "parse_errors": []
+}

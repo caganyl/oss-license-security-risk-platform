@@ -1,0 +1,12 @@
+[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde.workspace = true
+renamed-ws = { workspace = true, features = [] }
+local-ws = { workspace = true }
+
+[dev-dependencies]
+insta = "1.39"

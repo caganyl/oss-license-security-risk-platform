@@ -1,0 +1,119 @@
+{
+  "scan_id": "golden-golang-replace-indirect",
+  "status": "completed",
+  "total_deps": 8,
+  "dependencies": [
+    {
+      "ecosystem": "go",
+      "name": "github.com/new/fork",
+      "version": "v1.3.1",
+      "purl": "pkg:golang/github.com/new/fork@v1.3.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/pinned/lib",
+      "version": "v1.0.2",
+      "purl": "pkg:golang/github.com/pinned/lib@v1.0.2",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/pinned/lib2",
+      "version": "v1.5.0",
+      "purl": "pkg:golang/github.com/pinned/lib2@v1.5.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/sirupsen/logrus",
+      "version": "v1.9.3",
+      "purl": "pkg:golang/github.com/sirupsen/logrus@v1.9.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "golang.org/x/crypto",
+      "version": "v0.24.0",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.24.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/hand/semver",
+      "version": null,
+      "purl": "pkg:golang/github.com/hand/semver",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": "legacy",
+      "declared_range": "v1.2"
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/hand/written",
+      "version": null,
+      "purl": "pkg:golang/github.com/hand/written",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": "legacy",
+      "declared_range": "master"
+    },
+    {
+      "ecosystem": "go",
+      "name": "golang.org/x/tools",
+      "version": "v0.21.0",
+      "purl": "pkg:golang/golang.org/x/tools@v0.21.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": "tools",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "go.mod",
+      "file_hash": "e004ca2556998132c5911091ce933298fd48269d3885aa1b996eadc2223265df",
+      "size_bytes": 705
+    },
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "legacy/go.mod",
+      "file_hash": "cdd81ce0edf568b92483ff3533f1aa40811738966381b054d183a7bf5f35c2c9",
+      "size_bytes": 100
+    },
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "tools/go.mod",
+      "file_hash": "a0a52595455dd3d4049c75a4f47fb6497ec4260385a3463ff2b8ff4d57f61b78",
+      "size_bytes": 157
+    }
+  ],
+  "parse_errors": []
+}

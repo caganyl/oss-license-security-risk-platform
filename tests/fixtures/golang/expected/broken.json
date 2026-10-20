@@ -1,0 +1,44 @@
+{
+  "scan_id": "golden-golang-broken",
+  "status": "completed",
+  "total_deps": 1,
+  "dependencies": [
+    {
+      "ecosystem": "go",
+      "name": "github.com/ok/dep",
+      "version": "v0.3.0",
+      "purl": "pkg:golang/github.com/ok/dep@v0.3.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": "ok",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "ok/go.mod",
+      "file_hash": "359578587702a92dd8f659cdca193140c96671a06c51bebe56bd5f6d5afe4dab",
+      "size_bytes": 56
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "go",
+      "file": "go.mod",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "go",
+      "file": "args/go.mod",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "go",
+      "file": "quote/go.mod",
+      "error": "Beklenmeyen dosya yapısı."
+    }
+  ]
+}

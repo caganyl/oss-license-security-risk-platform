@@ -1,0 +1,6 @@
+version = 9
+
+[[package]]
+name = "serde"
+version = "1.0.203"
+source = "sparse+https://index.crates.io/"

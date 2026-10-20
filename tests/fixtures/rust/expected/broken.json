@@ -1,0 +1,100 @@
+{
+  "scan_id": "golden-rust-broken",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "rust",
+      "name": "serde",
+      "version": null,
+      "purl": "pkg:cargo/serde",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "a-bad-lock",
+      "declared_range": "1"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "log",
+      "version": "0.4.21",
+      "purl": "pkg:cargo/log@0.4.21",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": "d-invalid-entry",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "itoa",
+      "version": null,
+      "purl": "pkg:cargo/itoa",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.toml",
+      "manifest_path": "g-ok",
+      "declared_range": "1"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "a-bad-lock/Cargo.toml",
+      "file_hash": "17801f10d9189f664944abe152699311f5c21bd1a6d14231263ba82c8c44cc0f",
+      "size_bytes": 67
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.lock",
+      "file_path": "d-invalid-entry/Cargo.lock",
+      "file_hash": "241d8ad6f4ba519ed61857547620e05723eca79713720162958adb057b69bb3b",
+      "size_bytes": 403
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.toml",
+      "file_path": "g-ok/Cargo.toml",
+      "file_hash": "18883a57e77c332d762ec47678941f504a1e68f184a49da25beb2a19880a857a",
+      "size_bytes": 81
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "rust",
+      "file": "a-bad-lock/Cargo.lock",
+      "error": "TOML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "b-future-lock/Cargo.lock",
+      "error": "Desteklenmeyen kilit dosyası sürümü."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "c-bad-toml/Cargo.toml",
+      "error": "TOML ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "e-wrong-shape-toml/Cargo.toml",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "f-wrong-shape-lock/Cargo.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "d-invalid-entry/Cargo.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "rust",
+      "file": "g-ok/Cargo.toml",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

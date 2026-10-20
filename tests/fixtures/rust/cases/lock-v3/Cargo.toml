@@ -1,0 +1,23 @@
+[package]
+name = "acme-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+clap = "4.5"
+json = { package = "serde_json", version = "1" }
+bitflags = "2"
+private-crate = { version = "1", registry = "company" }
+local-helper = { path = "helper" }
+forked = { git = "https://github.com/acme/forked", branch = "main" }
+
+[build-dependencies]
+cc = "1.0.90"
+
+[dev-dependencies]
+tempfile = "3"
+serde = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser"] }

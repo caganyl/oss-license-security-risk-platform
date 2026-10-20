@@ -1,0 +1,68 @@
+{
+  "scan_id": "golden-rust-lock-v1-v2",
+  "status": "completed",
+  "total_deps": 4,
+  "dependencies": [
+    {
+      "ecosystem": "rust",
+      "name": "libc",
+      "version": "0.2.20",
+      "purl": "pkg:cargo/libc@0.2.20",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": "v1",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "unused-transitive",
+      "version": "0.1.0",
+      "purl": "pkg:cargo/unused-transitive@0.1.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": "v1",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "aho-corasick",
+      "version": "0.7.18",
+      "purl": "pkg:cargo/aho-corasick@0.7.18",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": "v2",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "rust",
+      "name": "memchr",
+      "version": "2.4.1",
+      "purl": "pkg:cargo/memchr@2.4.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Cargo.lock",
+      "manifest_path": "v2",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.lock",
+      "file_path": "v1/Cargo.lock",
+      "file_hash": "7a74b128bdbaf22f5aa56767a9ea97d160c20d34af0eceb00ae98ef704649f0f",
+      "size_bytes": 683
+    },
+    {
+      "ecosystem": "rust",
+      "filename": "Cargo.lock",
+      "file_path": "v2/Cargo.lock",
+      "file_hash": "df42c7c5290b9b21b2695681e0a93215c86458e6fc6909c8e16bc462772e04cc",
+      "size_bytes": 587
+    }
+  ],
+  "parse_errors": []
+}

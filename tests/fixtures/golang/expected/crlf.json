@@ -1,0 +1,50 @@
+{
+  "scan_id": "golden-golang-crlf",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "go",
+      "name": "github.com/fatih/color",
+      "version": "v1.17.0",
+      "purl": "pkg:golang/github.com/fatih/color@v1.17.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/spf13/cobra",
+      "version": "v1.8.0",
+      "purl": "pkg:golang/github.com/spf13/cobra@v1.8.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/spf13/pflag",
+      "version": "v1.0.5",
+      "purl": "pkg:golang/github.com/spf13/pflag@v1.0.5",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "go.mod",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "go",
+      "filename": "go.mod",
+      "file_path": "go.mod",
+      "file_hash": "eb2b5e94010b8345bb04d11d2d5b1e8f09cad0ffcc787a9dca124d277b17bd0c",
+      "size_bytes": 176
+    }
+  ],
+  "parse_errors": []
+}

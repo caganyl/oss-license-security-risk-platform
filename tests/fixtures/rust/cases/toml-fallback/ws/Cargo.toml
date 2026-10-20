@@ -1,0 +1,7 @@
+[workspace]
+members = ["member"]
+
+[workspace.dependencies]
+serde = { version = "1.0.200", features = ["derive"] }
+renamed-ws = { package = "actual", version = "0.3" }
+local-ws = { path = "local" }

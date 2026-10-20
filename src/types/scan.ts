@@ -81,6 +81,14 @@ export interface ScannedDependency {
   vulnerabilities?: Array<{ id: string; fix_versions: string[] }>;
   manifest_file: string;
   manifest_path: string;
+  /**
+   * Present (and `true`) only for a package from a non-public package server
+   * (REQ-011 security review M-5: private pub server, gem server other than
+   * rubygems.org). License enrichment never sends such a name to a registry
+   * (status `disabled`); vulnerability lookup (OSV) still does. Absent for
+   * every other package, so the existing record shape is unchanged.
+   */
+  private_source?: true;
 }
 
 /** Scan file record produced by the dependency parsers. */

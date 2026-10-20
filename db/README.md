@@ -84,6 +84,10 @@ Git Bash, `bash` veya `PATH`'te `psql` gerekmez (REQ-003 P-11, ADR-004).
   değerlerini yazar; `npm start` göç bekliyorsa başlamaz). `010`'u geri almak
   REQ-011 kodunu geri almakla birlikte yapılır. Down betiği `rust`/`dart`/`swift`
   paketlerini ve bulgularını sildiği için yalnız açık insan onayıyla çalıştırılır.
+  **Uyarı:** `010_new_ecosystems.down.sql` yıkıcıdır ve geri döndürülemez (toplu
+  silme ve toplu güncelleme; enum tipi yeniden oluşturulur). Çalıştırmadan önce
+  mutlaka tam veritabanı yedeği alın ve yedekten geri dönüşü doğrulayın; üretimde
+  yalnız açık insan onayıyla, bakım penceresinde çalıştırın.
 - Veritabanında dosyası olmayan bir sürüm varsa (veritabanı koddan yeni) ne
   araç (`up`/`down`) ne `npm start` çalışır; önce kodu güncelleyin.
 

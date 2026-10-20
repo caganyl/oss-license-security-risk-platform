@@ -28,7 +28,8 @@
  *   `scan_files` records of the used sources and the entries of one folder
  *   at once. The kit sets `ecosystem`, `manifest_path` and the purl
  *   (`purlFor`), cleans `declared_range` (control characters, at most 200
- *   code points), dedupes by `(lower(name), version)` per folder, skips
+ *   code points), keeps at most 16 source license strings of at most 256
+ *   code units each, dedupes by `(lower(name), version)` per folder, skips
  *   invalid entries with one "invalid entries skipped" record per source
  *   file, and applies the limits of AC-P40-5: 20 000 records per folder
  *   (over it: the folder's entries are dropped, one record on the source
@@ -134,6 +135,32 @@ export interface DependencyEntry {
   declaredRange?: string | null;
   /** License expressions found in the source itself (only `composer.lock`, AC-P40-7). */
   licenses?: string[];
+  /**
+   * True when the package comes from a non-public package server (a private
+   * pub server, a gem server other than rubygems.org): its name is never
+   * sent to a license registry (security review M-5). Becomes
+   * `ScannedDependency.private_source`.
+   */
+  privateSource?: boolean;
+}
+
+/** Most license strings kept per entry, and the longest one (UTF-16 code units; security review L-3). */
+export const KIT_MAX_LICENSES = 16;
+export const KIT_MAX_LICENSE_LENGTH = 256;
+
+/** Source licenses (`composer.lock`) capped to `KIT_MAX_LICENSES` strings of at most `KIT_MAX_LICENSE_LENGTH` code units. */
+function boundedLicenses(licenses: readonly string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const license of licenses ?? []) {
+    if (out.length >= KIT_MAX_LICENSES) break;
+    if (typeof license !== 'string') continue;
+    let text = license.length > KIT_MAX_LICENSE_LENGTH ? license.slice(0, KIT_MAX_LICENSE_LENGTH) : license;
+    // Never end on half of a surrogate pair.
+    const last = text.charCodeAt(text.length - 1);
+    if (text.length < license.length && last >= 0xd800 && last <= 0xdbff) text = text.slice(0, -1);
+    out.push(text);
+  }
+  return out;
 }
 
 /** Scan-wide budget shared by all kit contexts of one `parseManifests` call. */
@@ -284,17 +311,20 @@ export class ParserContext {
       if (keys.has(key) || freshKeys.has(key)) continue;
       freshKeys.add(key);
       const declared = entry.declaredRange === null || entry.declaredRange === undefined ? null : sanitizeDeclaredRange(entry.declaredRange);
-      fresh.push({
+      const dependency: ScannedDependency = {
         ecosystem: this.ecosystem,
         name: entry.name,
         version: entry.version,
         purl,
         scope: entry.scope,
-        licenses: [...(entry.licenses ?? [])],
+        licenses: boundedLicenses(entry.licenses),
         manifest_file: entry.manifestFile,
         manifest_path: folder.manifestPath,
         declared_range: declared === '' ? null : declared,
-      });
+      };
+      // Only when true, so records of public packages keep their exact shape.
+      if (entry.privateSource === true) dependency.private_source = true;
+      fresh.push(dependency);
     }
     if (keys.size + fresh.length > KIT_MAX_DEPENDENCIES_PER_FOLDER) {
       this.fileError(limitFile ?? records[0]?.file_path ?? folder.manifestPath, PARSER_MESSAGES.limit);

@@ -5,7 +5,9 @@
  * Per unique key `(registry, request name, version)`:
  *   1. classification without requests: enrichment off -> `disabled`;
  *      version NULL -> `version_unknown`; invalid name/version ->
- *      `invalid_coordinates` (AC-P14-4);
+ *      `invalid_coordinates` (AC-P14-4); a key whose every dependency
+ *      comes from a non-public package server (`private_source`, REQ-011
+ *      security review M-5) -> `disabled`, never requested;
  *   2. one bulk metadata cache read;
  *   3. metadata requests for misses (the registry client's process-wide
  *      limiter); found/not-found results are cached at once;
@@ -53,6 +55,8 @@ export interface EnrichmentDependency {
   version?: string | null;
   scope?: string;
   licenses?: string[];
+  /** Package from a non-public package server (`ScannedDependency.private_source`): never sent to a registry. */
+  private_source?: boolean;
 }
 
 /** Enrichment outcome of one key (shared by every manifest row of the key). */
@@ -152,6 +156,13 @@ interface KeyInfo {
   check: ReturnType<typeof checkCoordinates>;
   runtime: boolean;
   hasHint: boolean;
+  /**
+   * Every dependency of the key comes from a non-public package server
+   * (security review M-5): no cache read and no request, status `disabled`.
+   * One public dependency with the same name and version makes the key
+   * requestable (the name is then public anyway).
+   */
+  privateOnly: boolean;
 }
 
 function groupKeys(dependencies: readonly EnrichmentDependency[]): Map<string, KeyInfo> {
@@ -161,10 +172,12 @@ function groupKeys(dependencies: readonly EnrichmentDependency[]): Map<string, K
     if (key === null) continue;
     const runtime = isRuntimeScope(dep.scope);
     const hasHint = lockHintOf(dep.licenses ?? [], sanitizeText) !== null;
+    const isPrivate = dep.private_source === true;
     const existing = keys.get(key);
     if (existing) {
       existing.runtime ||= runtime;
       existing.hasHint ||= hasHint;
+      existing.privateOnly &&= isPrivate;
       continue;
     }
     keys.set(key, {
@@ -173,6 +186,7 @@ function groupKeys(dependencies: readonly EnrichmentDependency[]): Map<string, K
       check: checkCoordinates(dep.ecosystem, dep.name, versionOf(dep)),
       runtime,
       hasHint,
+      privateOnly: isPrivate,
     });
   }
   return keys;
@@ -308,6 +322,7 @@ export function disabledEnrichment(dependencies: readonly EnrichmentDependency[]
 }
 
 function classified(info: KeyInfo): EnrichmentStatus | null {
+  if (info.privateOnly) return 'disabled';
   if (info.check.kind === 'version_unknown') return 'version_unknown';
   if (info.check.kind !== 'ok') return 'invalid_coordinates';
   return null;

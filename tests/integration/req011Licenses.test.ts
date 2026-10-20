@@ -197,6 +197,33 @@ describe('AC-P43-1 / AC-P43-2: new-ecosystem licenses in a scan', () => {
   });
 });
 
+describe('security review M-5: private pub / gem sources never reach a license registry', () => {
+  it('private_source packages: no request, status disabled, license none; a key with one public record is still requested', async () => {
+    seed();
+    reg.route(DD('RUBYGEMS', 'acme-auth', '2.1.0'), { body: { licenses: ['MIT'] } });
+    reg.route('/api/packages/private_sdk/score', { body: { tags: ['license:mit'] } });
+    const priv = (d: Dep): Dep => ({ ...d, private_source: true });
+    const deps: Dep[] = [
+      priv(dep('ruby', 'acme-auth', '2.1.0', 'pkg:gem/acme-auth@2.1.0', [], 'Gemfile.lock')),
+      priv(dep('dart', 'private_sdk', '2.0.0', 'pkg:pub/private_sdk@2.0.0', [], 'pubspec.lock')),
+      // `rails` private in one folder and public in another: the name is public anyway, so it is looked up.
+      priv({ ...DEPS[3], manifest_path: 'internal' }),
+      DEPS[3],
+      DEPS[4],
+    ];
+    const scanId = await scan(await insertProject(), enricher(), deps);
+    expect((await scanRow(scanId)).status).toBe('completed');
+    const d = await rows(scanId);
+    expect(d['acme-auth']).toMatchObject({ license_enrichment_status: 'disabled', license_source: 'none', license_expression: null });
+    expect(d.private_sdk).toMatchObject({ license_enrichment_status: 'disabled', license_source: 'none', license_expression: null });
+    expect(d.rails).toMatchObject({ license_enrichment_status: 'ok', license_source: 'registry:depsdev', license_expression: 'MIT' });
+    expect(d.http).toMatchObject({ license_enrichment_status: 'ok', license_source: 'registry:pubdev' });
+    expect(reg.requests.map((r) => r.path).sort()).toEqual([ROUTES.gem, ROUTES.pub].sort());
+    const cached = await db.query<{ name: string }>(`SELECT name FROM registry_package_cache ORDER BY name`);
+    expect(cached.map((r) => r.name)).toEqual(['RUBYGEMS:rails', 'http']);
+  });
+});
+
 describe('AC-P43-3 / AC-G-3: failures and the off switch', () => {
   it('unreachable deps.dev and pub.dev -> license unknown (status unreachable), scan completes with the [registry] line', async () => {
     for (const p of Object.values(ROUTES)) reg.route(p, { reset: true });

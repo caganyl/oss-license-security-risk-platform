@@ -7,6 +7,11 @@
  *   a linear scan of the lock's source-less packages per member folder).
  * - M-4 YAML subset reader: a line limit checked before splitting, and no
  *   per-line object for blank/comment lines.
+ * - M-3 `pom.xml`: interpolation input capped at 1 024 characters, memoized,
+ *   and independent of the declaration order at the depth limit.
+ * - M-5 private pub / gem sources: `private_source` on the record (the
+ *   enricher side is in tests/integration/req011Licenses.test.ts).
+ * - L-2 gem names of dots only; L-3 source license strings capped.
  *
  * Time limit: like `parserLinear.test.ts`, the assertions allow
  * `PERF_LIMIT_MS` = 2 s (the inputs take tens of milliseconds with the
@@ -18,9 +23,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { checkCoordinates, isValidDepsDevName } from '../../src/enrichment/coordinates';
 import { parseManifests } from '../../src/scanner/parsers';
-import { PARSER_MESSAGES } from '../../src/scanner/parsers/kit';
+import type { TreeWalk } from '../../src/scanner/parsers/common';
+import { KIT_MAX_LICENSES, KIT_MAX_LICENSE_LENGTH, PARSER_MESSAGES, ParserContext } from '../../src/scanner/parsers/kit';
 import { DEFAULT_YAML_LIMITS, YamlSubsetError, parseYamlSubset } from '../../src/scanner/parsers/yamlSubset';
+import { osvCoordinateOf } from '../../src/vulnerability/osvCoordinates';
 
 const PERF_LIMIT_MS = 2_000;
 /** Generous per-test timeout: building the fixture trees is not measured. */
@@ -263,4 +271,118 @@ describe('M-4: YAML subset reader line limit and blank lines', () => {
     },
     TEST_TIMEOUT_MS,
   );
+});
+
+// ---------------------------------------------------------------------------
+describe('M-5: private pub / gem sources are marked private_source (inventory kept, no license lookup)', () => {
+  function hosted(name: string, url: string | null): string {
+    const description = url === null ? `      name: ${name}\n` : `      name: ${name}\n      url: "${url}"\n`;
+    return `  ${name}:\n    dependency: "direct main"\n    description:\n${description}    source: hosted\n    version: "1.0.0"`;
+  }
+
+  it('pubspec.lock: only https://pub.dev and https://pub.dartlang.org (any case, optional trailing "/") are public', () => {
+    const dir = root('dart-private', {
+      'pubspec.lock': [
+        'packages:',
+        hosted('a_pubdev', 'https://pub.dev'),
+        hosted('b_slash', 'https://pub.dev/'),
+        hosted('c_upper', 'HTTPS://PUB.DEV'),
+        hosted('d_legacy', 'https://pub.dartlang.org'),
+        hosted('e_private', 'https://pub.example.internal'),
+        hosted('f_http', 'http://pub.dev'),
+        hosted('g_lookalike', 'https://pub.dev.example.com'),
+        hosted('h_no_url', null),
+        '',
+      ].join('\n'),
+    });
+    const r = parseManifests(dir, ['dart'], 'm5-dart');
+    expect(r.parse_errors).toEqual([]);
+    expect(r.dependencies.map((d) => `${d.name}:${d.private_source === true ? 'private' : 'public'}`)).toEqual([
+      'a_pubdev:public',
+      'b_slash:public',
+      'c_upper:public',
+      'd_legacy:public',
+      'e_private:private',
+      'f_http:private',
+      'g_lookalike:private',
+      'h_no_url:private',
+    ]);
+    // Public records keep their exact shape (no `private_source: false`).
+    expect(Object.keys(r.dependencies[0])).not.toContain('private_source');
+  });
+
+  it('Gemfile.lock: a GEM section is public only when every remote is rubygems.org', () => {
+    const gem = (remotes: string[], name: string) => ['GEM', ...remotes.map((r) => `  remote: ${r}`), '  specs:', `    ${name} (1.0.0)`, ''].join('\n');
+    const dir = root('ruby-private', {
+      'Gemfile.lock': [
+        gem(['https://rubygems.org/'], 'a-public'),
+        gem(['https://RubyGems.org'], 'b-case'),
+        gem(['http://www.rubygems.org/'], 'c-www'),
+        gem(['https://gems.example.internal/'], 'd-private'),
+        gem(['https://rubygems.org/', 'https://gems.example.internal/'], 'e-mixed'),
+        gem([], 'f-no-remote'),
+        gem(['https://rubygems.org.example.com/'], 'g-lookalike'),
+        'DEPENDENCIES',
+        '  a-public',
+        '',
+      ].join('\n'),
+    });
+    const r = parseManifests(dir, ['ruby'], 'm5-ruby');
+    expect(r.parse_errors).toEqual([]);
+    expect(r.dependencies.map((d) => `${d.name}:${d.private_source === true ? 'private' : 'public'}`)).toEqual([
+      'a-public:public',
+      'b-case:public',
+      'c-www:public',
+      'd-private:private',
+      'e-mixed:private',
+      'f-no-remote:private',
+      'g-lookalike:private',
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('L-2: a gem name of dots only is not a coordinate', () => {
+  it.each(['.', '..', '...'])('%j is rejected by the OSV and the deps.dev coordinate', (name) => {
+    expect(osvCoordinateOf('ruby', name, '1.0.0')).toEqual({ kind: 'invalid_coordinates' });
+    expect(isValidDepsDevName('RUBYGEMS', name)).toBe(false);
+    expect(checkCoordinates('ruby', name, '1.0.0')).toEqual({ kind: 'invalid_coordinates' });
+  });
+
+  it.each(['rails', 'a.b', '.hidden', 'x..y'])('%j is still accepted', (name) => {
+    expect(osvCoordinateOf('ruby', name, '1.0.0').kind).toBe('ok');
+    expect(isValidDepsDevName('RUBYGEMS', name)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('L-3: source license strings are capped (16 entries x 256 code units)', () => {
+  const folder = { relDir: '', manifestPath: '.', files: new Map() };
+  const record = { ecosystem: 'php' as const, filename: 'composer.lock', file_path: 'composer.lock', file_hash: 'x', size_bytes: 1 };
+
+  it('40 strings of 300 characters become 16 strings of 256', () => {
+    const ctx = new ParserContext({} as TreeWalk, 'php');
+    ctx.commit(folder, record, [{ name: 'a/b', version: '1.0.0', scope: 'direct', manifestFile: 'composer.lock', licenses: Array.from({ length: 40 }, (_, i) => `${i}`.padEnd(300, 'y')) }]);
+    const [d] = ctx.finish().dependencies;
+    expect(d.licenses).toHaveLength(KIT_MAX_LICENSES);
+    expect(d.licenses?.every((l) => l.length === KIT_MAX_LICENSE_LENGTH)).toBe(true);
+    expect(d.licenses?.[15].startsWith('15')).toBe(true);
+  });
+
+  it('a cut never leaves half of a surrogate pair; short strings are unchanged', () => {
+    const ctx = new ParserContext({} as TreeWalk, 'php');
+    ctx.commit(folder, record, [{ name: 'a/b', version: '1.0.0', scope: 'direct', manifestFile: 'composer.lock', licenses: [`${'x'.repeat(255)}😀tail`, 'MIT'] }]);
+    const [d] = ctx.finish().dependencies;
+    expect(d.licenses).toEqual(['x'.repeat(255), 'MIT']);
+  });
+
+  it('composer.lock: a long license array joined by the parser is capped to 256 code units', () => {
+    const licenses = Array.from({ length: 100 }, (_, i) => `LicenseRef-${i}`);
+    const dir = root('php-long-license', {
+      'composer.lock': JSON.stringify({ packages: [{ name: 'acme/lib', version: '1.0.0', license: licenses }], 'packages-dev': [] }),
+    });
+    const r = parseManifests(dir, ['php'], 'l3-php');
+    expect(r.parse_errors).toEqual([]);
+    expect(r.dependencies[0].licenses?.[0]).toHaveLength(KIT_MAX_LICENSE_LENGTH);
+  });
 });

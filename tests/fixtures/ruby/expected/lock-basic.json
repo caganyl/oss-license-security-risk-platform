@@ -12,7 +12,8 @@
       "licenses": [],
       "manifest_file": "Gemfile.lock",
       "manifest_path": ".",
-      "declared_range": null
+      "declared_range": null,
+      "private_source": true
     },
     {
       "ecosystem": "ruby",

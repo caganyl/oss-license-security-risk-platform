@@ -14,7 +14,10 @@
  * - The package name is the `packages` key (pub writes the same name in
  *   `description.name`). Every hosted package is taken, whatever
  *   `description.url` says (`https://pub.dev`, the legacy
- *   `https://pub.dartlang.org`, or a private pub server / mirror).
+ *   `https://pub.dartlang.org`, or a private pub server / mirror). A
+ *   package whose URL is not one of the two public ones (or has no URL) is
+ *   marked `privateSource` (security review M-5): it stays in the
+ *   inventory and is still looked up on OSV, but never on pub.dev.
  * - `sdk` (`flutter`, `flutter_test`, ...), `git` and `path` packages are
  *   never entries (D-311). The lock has no constraints: `declaredRange` is
  *   always null.
@@ -96,9 +99,27 @@ function parsePubspecLock(text: string): PubLock {
       lock.invalid = true;
       continue;
     }
-    lock.entries.push({ name, version, scope, manifestFile: PUBSPEC_LOCK, declaredRange: null });
+    const entry: DependencyEntry = { name, version, scope, manifestFile: PUBSPEC_LOCK, declaredRange: null };
+    if (!isPublicPubServer(own(value, 'description'))) entry.privateSource = true;
+    lock.entries.push(entry);
   }
   return lock;
+}
+
+/** pub.dev and its legacy name; any other hosted URL is a private server or a mirror. */
+const PUBLIC_PUB_URLS: ReadonlySet<string> = new Set(['https://pub.dev', 'https://pub.dartlang.org']);
+
+/**
+ * True when a hosted package's `description.url` is pub.dev (security
+ * review M-5). A missing or non-string URL counts as private, so an
+ * unknown source is never sent to the pub.dev license lookup.
+ */
+function isPublicPubServer(description: unknown): boolean {
+  if (!isPyDict(description)) return false;
+  const url = own(description, 'url');
+  if (typeof url !== 'string') return false;
+  const normalized = url.toLowerCase().replace(/\/$/, '');
+  return PUBLIC_PUB_URLS.has(normalized);
 }
 
 export function parseDart(walk: TreeWalk, ctx: ParserContext): ParseResult {

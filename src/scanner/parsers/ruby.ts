@@ -17,7 +17,10 @@
  *   `RUBY VERSION`, `BUNDLED WITH`; unknown upper-case sections are
  *   ignored). CRLF/CR line ends are accepted.
  * - Every `GEM` section is read (one per gem server `remote:`; a private
- *   server or a mirror such as Artifactory is still a RubyGems source);
+ *   server or a mirror such as Artifactory is still a RubyGems source). Gems
+ *   of a section whose remotes are not all rubygems.org are marked
+ *   `privateSource` (security review M-5): kept in the inventory and still
+ *   looked up on OSV, but never sent to the deps.dev license lookup;
  *   `GIT`, `PATH` and `PLUGIN SOURCE` gems are never entries (D-311).
  * - Platform suffix: Bundler writes `version-platform` for platform gems
  *   (`1.15.4-x86_64-linux`, `9.4.3.0-java`). A canonical RubyGems version
@@ -83,7 +86,30 @@ const DEPENDENCY_LINE = /^ {2}([^\s()!]+)(?: \(([^()]*)\))?!?$/;
 interface GemSpec {
   name: string;
   version: string;
+  /** The `GEM` section it was listed in (its remotes decide `privateSource`). */
+  source: GemSource;
 }
+
+/** `remote:` values of one `GEM` section. */
+interface GemSource {
+  remotes: string[];
+}
+
+/** rubygems.org written with or without `www.`, `http`/`https` and a trailing `/`. */
+const PUBLIC_GEM_REMOTES: ReadonlySet<string> = new Set(['https://rubygems.org', 'http://rubygems.org', 'https://www.rubygems.org', 'http://www.rubygems.org']);
+
+/**
+ * True when every remote of a `GEM` section is rubygems.org (security
+ * review M-5). A section without a remote, or with any other server (a
+ * private gem server, a mirror), counts as private: its gems are never sent
+ * to the deps.dev license lookup.
+ */
+function isPublicGemSource(source: GemSource): boolean {
+  return source.remotes.length > 0 && source.remotes.every((remote) => PUBLIC_GEM_REMOTES.has(remote.toLowerCase().replace(/\/$/, '')));
+}
+
+/** `  remote: <url>` key line of a `GEM` section. */
+const REMOTE_LINE = /^ {2}remote: (\S+)$/;
 
 interface GemLock {
   specs: GemSpec[];
@@ -112,6 +138,7 @@ function isBlank(line: string): boolean {
 function parseGemfileLock(text: string): GemLock {
   const lock: GemLock = { specs: [], direct: new Map(), invalid: false };
   let section: string | null = null;
+  let gemSource: GemSource = { remotes: [] };
   let inSpecs = false;
   let known = false;
   for (const line of text.split(/\r\n|\r|\n/)) {
@@ -120,6 +147,7 @@ function parseGemfileLock(text: string): GemLock {
       if (!SECTION_LINE.test(line)) throw structureError();
       section = line;
       inSpecs = false;
+      if (line === 'GEM') gemSource = { remotes: [] };
       if (KNOWN_SECTIONS.has(line)) known = true;
       continue;
     }
@@ -129,10 +157,12 @@ function parseGemfileLock(text: string): GemLock {
         inSpecs = true;
       } else if (/^ {2}\S/.test(line)) {
         inSpecs = false; // `remote:` and other section keys
+        const remote = REMOTE_LINE.exec(line);
+        if (remote) gemSource.remotes.push(remote[1]);
       } else if (inSpecs && /^ {4}\S/.test(line)) {
         const match = SPEC_LINE.exec(line);
         const version = match ? baseVersion(match[2]) : null;
-        if (match && version !== null) lock.specs.push({ name: match[1], version });
+        if (match && version !== null) lock.specs.push({ name: match[1], version, source: gemSource });
         else lock.invalid = true;
       }
       // 6-space lines: dependencies of the spec above (resolved specs of their own).
@@ -156,13 +186,15 @@ function parseGemfileLock(text: string): GemLock {
 function gemEntries(lock: GemLock): DependencyEntry[] {
   return lock.specs.map((spec): DependencyEntry => {
     const direct = lock.direct.has(spec.name);
-    return {
+    const entry: DependencyEntry = {
       name: spec.name,
       version: spec.version,
       scope: direct ? 'direct' : 'transitive',
       manifestFile: GEMFILE_LOCK,
       declaredRange: direct ? (lock.direct.get(spec.name) ?? null) : null,
     };
+    if (!isPublicGemSource(spec.source)) entry.privateSource = true;
+    return entry;
   });
 }
 

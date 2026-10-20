@@ -99,6 +99,8 @@ const MAVEN_NAME_RE = /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$/;
 const GO_MODULE_RE = /^[A-Za-z0-9][A-Za-z0-9_~+-]*(?:\.[A-Za-z0-9_~+-]+)+(?:\/[A-Za-z0-9._~+-]+)*$/;
 const CRATE_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const GEM_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
+/** A gem name of dots only (`.`, `..`) is a path segment, not a gem (security review L-2). */
+const DOTS_ONLY_RE = /^\.+$/;
 const PUB_NAME_RE = /^[a-z0-9_]{1,64}$/;
 
 /** Package name rule of one deps.dev system (REQ-011): Maven `group:artifact`, Go module path, crate, gem. */
@@ -112,7 +114,7 @@ export function isValidDepsDevName(system: DepsDevSystem, name: string): boolean
     case 'CARGO':
       return CRATE_NAME_RE.test(name);
     case 'RUBYGEMS':
-      return GEM_NAME_RE.test(name);
+      return GEM_NAME_RE.test(name) && !DOTS_ONLY_RE.test(name);
     default: {
       const unreachable: never = system;
       throw new Error(`unsupported deps.dev system: ${String(unreachable)}`);

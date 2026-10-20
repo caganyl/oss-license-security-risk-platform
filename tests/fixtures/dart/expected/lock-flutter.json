@@ -78,7 +78,8 @@
       "licenses": [],
       "manifest_file": "pubspec.lock",
       "manifest_path": ".",
-      "declared_range": null
+      "declared_range": null,
+      "private_source": true
     }
   ],
   "scan_files": [

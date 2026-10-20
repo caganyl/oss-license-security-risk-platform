@@ -173,7 +173,8 @@ export async function renderDependencyPdf(data: ReportData, reportType: ReportTy
 
   /** Fits `text` into `w` points with "…" (REQ-010 AC-P37-4). */
   const fit = (text: string, w: number): string => {
-    const value = t(text);
+    // Pre-cut keeps the width search cheap for very long values (security review L1).
+    const value = t(text.slice(0, 300));
     if (doc.widthOfString(value) <= w) return value;
     let cut = value;
     while (cut.length > 1 && doc.widthOfString(`${cut}…`) > w) cut = cut.slice(0, -1);

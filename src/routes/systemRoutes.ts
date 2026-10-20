@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { guard } from '../middleware/rbac';
 import { enrichmentConfigFrom, vulnerabilityConfigFrom } from '../scanner/sandbox/runner.config';
 import { parseWindowsAuthHosts } from '../scanner/workspace';
+import { nvdApiKeyConfigured } from '../vulnerability/client';
 import type { HostAllowlist } from '../webscan/allowlist';
 import { parseZapConfig } from '../webscan/zap';
 
@@ -47,7 +48,7 @@ export function systemFeatures(env: Env, scanRoots: readonly string[], webAllowl
     registry_enrichment: { enabled: enrichmentConfigFrom(env).enabled },
     vulnerability_lookup: { enabled: vulnerability.lookupEnabled },
     vulnerability_recheck: { enabled: vulnerability.recheckEnabled },
-    nvd: { enabled: vulnerability.lookupEnabled && vulnerability.nvdEnabled, api_key: present(env.NVD_API_KEY) },
+    nvd: { enabled: vulnerability.lookupEnabled && vulnerability.nvdEnabled, api_key: nvdApiKeyConfigured(env) },
     repo_tokens: { enabled: present(env.ENCRYPTION_KEY) },
     windows_git_auth: { enabled: windowsHosts > 0, hosts: windowsHosts },
   };

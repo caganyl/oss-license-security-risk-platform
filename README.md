@@ -361,9 +361,11 @@ ve izin listesi dışındaki adresler atılır.
 
 ## Tek tıkla çıktılar (PDF, Excel, CSV, NOTICE)
 
-REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama
-geçmişi) sırasıyla `PDF`, `Excel`, `CSV`, `NOTICE` ve `SBOM` bağlantıları vardır; ilk dördü
-dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>` bağlantıları). Çıktılar istek anında yalnız veritabanından üretilir:
+REQ-007 (F6) P-24 / ADR-009 Karar 7–9; REQ-010 P-38. Tamamlanmış her tarama satırında (pano ve
+tarama geçmişi) tek bir **Raporlar** menüsü vardır; her seçenek bir cümleyle açıklanır:
+*Yönetici raporu (PDF)*, *Ayrıntılı tablo (Excel)*, *Paket listesi (CSV)*, *Lisans bildirimi
+(NOTICE)* ve *SBOM*. İlk dördü dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>`
+bağlantıları). Web taraması satırında yalnız web raporu (PDF) ve bulgu listesi (CSV) bulunur. Çıktılar istek anında yalnız veritabanından üretilir:
 `reports` satırı, dosya, denetim satırı veya ağ isteği oluşmaz (Raporlar ekranındaki asenkron
 raporlar aynen sürer).
 
@@ -390,14 +392,27 @@ raporlar aynen sürer).
   bulunur (formül enjeksiyonu kalkanı). Aynı tarama için CSV bayt bayt aynıdır; PDF ve Excel üretim
   zamanını içerdiği için istekten isteğe özet değişebilir. Türkçe yerel ayarlı Excel'de (ayırıcı
   `;`) `.xlsx` çıktısını kullanın.
-- **Güvenlik açığı verisi satırı (V-12):** Excel ve PDF raporlarının `Summary` bölümünün sonunda
-  `Vulnerability Data Status` satırı bulunur: `complete`, `partial (some packages could not be
-  checked)`, `unavailable (vulnerability source unreachable)`, `disabled (lookup turned off)`
-  veya (F4 öncesi taramalar) `not checked`. Asenkron raporlarda da aynıdır.
-- **PDF kesinti notu:** PDF'teki `Security Findings` (40 satır), `License Findings` (40) ve
-  `Dependency Inventory` (50) tabloları kesildiğinde tablonun altına
-  `Showing first <n> of <toplam>; see the Excel or CSV export for the full list.` yazılır. Tam
-  liste Excel/CSV'dedir.
+- **Yönetici raporu (PDF, REQ-010):** PDF Türkçedir ve yöneticiye göre kurgulanmıştır:
+  - **Genel durum:** tek cümlelik sade değerlendirme (kritik açık var / yüksek riskli bulgu var /
+    iyileştirme önerileri var / belirgin risk yok), paket, güvenlik açığı (önem dağılımıyla) ve
+    lisans uyarısı sayıları; son satır `Güvenlik açığı verisi` (`tam`, `kısmi …`, `alınamadı …`,
+    `kapalı …`, `kontrol edilmedi`).
+  - **Ne yapılmalı?:** en fazla 10 maddelik öncelikli aksiyon listesi ("X paketini A sürümünden B
+    sürümüne yükseltin", düzeltmesi olmayan açıklar için alternatif değerlendirme, yüksek riskli
+    lisanslar için hukuk birimi).
+  - Türkçe başlıklı, sütun hizalı tablolar: `Güvenlik açıkları` (40 satır), `Lisans bulguları` (40)
+    ve `Paket envanteri` (50). Kesilen tablonun altında `İlk <n> / <toplam> kayıt gösteriliyor; tam
+    liste için Excel veya CSV çıktısına bakın.` yazar.
+  - Sonda kısa `Terimler` kutusu, "hukuki görüş değildir" notu ve tarama kimliği.
+  - Türkçe karakterler için sistem fontu (Arial/Segoe UI; Linux'ta DejaVu/Liberation) kullanılır;
+    font yoksa ş/ğ/ı/İ ASCII'ye katlanır. Asenkron raporlarda da aynıdır.
+- **Excel, CSV, NOTICE, SBOM:** makine tarafından okunan biçimler olduğu için İngilizce
+  başlıklarını korur. Excel `Summary` sayfasının son satırı `Vulnerability Data Status`'tur:
+  `complete`, `partial (some packages could not be checked)`, `unavailable (vulnerability source
+  unreachable)`, `disabled (lookup turned off)` veya (F4 öncesi taramalar) `not checked`.
+- **Sistem durumu (REQ-010):** Arayüzdeki *Sistem Durumu* ekranı hangi özelliğin açık/kapalı
+  olduğunu ve kapalıysa hangi `.env` ayarıyla açılacağını gösterir (`GET /api/system/features`;
+  yalnız açık/kapalı ve sayı döner, ayar değerleri, host adları veya anahtarlar dönmez).
 
 ## Komut satırı istemcisi (`oss-risk` CLI)
 

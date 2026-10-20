@@ -102,18 +102,19 @@ async function waitFor(cond: () => boolean, what: string): Promise<void> {
 }
 
 describe('AC-P27-5: scan rows', () => {
-  it('a web scan row shows the Web badge, the target host, the grade and only the web PDF/CSV links', async () => {
+  it('a web scan row shows the Web badge, the target host, the grade and only the web PDF/CSV links (REQ-010 AC-P38-1 reports menu)', async () => {
     const { doc } = loadPage();
     await waitFor(() => !!doc.getElementById(`scan-row-${WEB_ID}`), 'rows');
     const row = doc.getElementById(`scan-row-${WEB_ID}`)!;
     expect(row.querySelector('.kind-web')?.textContent).toBe('Web');
     expect(row.textContent).toContain('portal.sirket.local');
-    expect(row.textContent).toContain('Grade C');
-    const links = Array.from(row.querySelectorAll('a')).map((a) => [a.getAttribute('href'), a.textContent?.trim()]);
+    expect(row.textContent).toContain('Güvenlik notu C');
+    const links = Array.from(row.querySelectorAll('a')).map((a) => [a.getAttribute('href'), a.querySelector('.reports-item-title')?.textContent, a.getAttribute('download')]);
     expect(links).toEqual([
-      [`/api/scans/${WEB_ID}/exports/web-report.pdf`, 'PDF'],
-      [`/api/scans/${WEB_ID}/exports/web-findings.csv`, 'CSV'],
+      [`/api/scans/${WEB_ID}/exports/web-report.pdf`, 'Web güvenlik raporu (PDF)', ''],
+      [`/api/scans/${WEB_ID}/exports/web-findings.csv`, 'Bulgu listesi (CSV)', ''],
     ]);
+    expect(row.querySelector('.reports-btn')?.getAttribute('aria-haspopup')).toBe('menu');
     // The dependency row keeps its five outputs.
     expect(doc.getElementById(`scan-row-${DEP_ID}`)!.querySelectorAll('a')).toHaveLength(5);
   });
@@ -128,7 +129,7 @@ describe('AC-P27-5: Vulnerabilities view for a web scan', () => {
     expect(calls.some((c) => c.key === `GET /api/scans/${WEB_ID}/web-findings`)).toBe(true);
     const container = doc.getElementById('findings-container')!;
     expect(container.querySelector('.web-grade')?.textContent).toBe('C');
-    expect(container.textContent).toContain('Security grade C · 64/100');
+    expect(container.textContent).toContain('Güvenlik notu C · 64/100');
     expect(container.textContent).toContain(XSS);
     expect(container.querySelector('img')).toBeNull();
     expect((dom.window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
@@ -179,6 +180,7 @@ describe('AC-P27-6 / AC-P28-7: projects view', () => {
     expect(calls.find((c) => c.key === `PATCH /api/projects/${PROJECT.id}`)?.body).toEqual({ webUrl: null, webScanMode: 'active' });
   });
 
+  // REQ-010 AC-P36-2: no ecosystem is preselected any more, so the body carries an empty list (= detect all, D-275).
   it('New Project Scan with only a web URL creates the project with webUrl and queues only a web scan', async () => {
     const { doc, calls } = loadPage({
       'POST /api/projects': () => ({ status: 201, body: { data: { id: 'p-new' } } }),
@@ -190,7 +192,7 @@ describe('AC-P27-6 / AC-P28-7: projects view', () => {
     (doc.getElementById('webUrl') as HTMLInputElement).value = 'https://portal.sirket.local/';
     (doc.getElementById('launch-btn') as HTMLButtonElement).click();
     await waitFor(() => calls.some((c) => c.key === 'POST /api/scans'), 'scan queued');
-    expect(calls.find((c) => c.key === 'POST /api/projects')?.body).toEqual({ name: 'Web only', ecosystems: ['nodejs'], webUrl: 'https://portal.sirket.local/' });
+    expect(calls.find((c) => c.key === 'POST /api/projects')?.body).toEqual({ name: 'Web only', ecosystems: [], webUrl: 'https://portal.sirket.local/' });
     expect(calls.filter((c) => c.key === 'POST /api/scans').map((c) => c.body)).toEqual([{ projectId: 'p-new', trigger: 'manual', kind: 'web' }]);
   });
 });

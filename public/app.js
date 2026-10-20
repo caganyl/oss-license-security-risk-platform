@@ -284,6 +284,7 @@ const TEXT = {
     package: 'Paket: ',
     type: 'Tür: ',
     status: 'Durum: ',
+    purl: 'PURL: ',
     fixedIn: 'Düzeltildiği sürüm: ',
     noScanTitle: 'Tarama seçilmedi',
     noScanHint: 'Bulgularını görmek için yukarıdan tamamlanmış bir tarama seçin. Liste boşsa önce Projeler ekranından bir tarama başlatın.',
@@ -1629,7 +1630,8 @@ function renderFinding(f) {
       el('div', { className: 'finding-meta' },
         el('span', null, TEXT.findings.package, el('strong', null, `${f.package_name}@${f.package_version}`)),
         el('span', null, TEXT.findings.type, el('span', { className: 'capsule' }, label(TEXT.findingType, f.finding_type))),
-        el('span', null, TEXT.findings.status, el('span', { className: 'capsule', style: 'color:var(--danger);' }, label(TEXT.findingStatus, f.status)))),
+        el('span', null, TEXT.findings.status, el('span', { className: 'capsule', style: 'color:var(--danger);' }, label(TEXT.findingStatus, f.status))),
+        f.purl ? el('span', { title: termTitle('purl') }, TEXT.findings.purl, el('code', null, f.purl)) : null),
       el('p', { className: 'finding-description' }, description),
       f.fix_version
         ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, TEXT.findings.fixedIn, el('strong', null, f.fix_version))

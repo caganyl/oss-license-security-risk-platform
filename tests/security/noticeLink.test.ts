@@ -83,32 +83,34 @@ async function waitFor(cond: () => boolean, what: string): Promise<void> {
 
 describe('AC-P15-15: NOTICE link in the scan list (contract section 7)', () => {
   // REQ-004 contract 1.5.0 section 7 / C-36 (REQ-007 D-186, contract section 8):
-  // the NOTICE link keeps href, class, style and text, gains `download` (empty)
-  // and `aria-label`, and drops target/rel; it now sits between CSV and SBOM.
-  it('AC-P15-15 (1.5.0 C-36): completed rows show NOTICE (download, no target/rel) right before SBOM, same style; href /api/scans/<id>/notice; none for running / failed / pending', async () => {
+  // the NOTICE link keeps href, gains `download` (empty) and drops target/rel;
+  // it sits between CSV and SBOM. REQ-010 AC-P38-1: the links are items of the
+  // "Raporlar" menu (class reports-item, title + description).
+  it('AC-P15-15 (1.5.0 C-36): completed rows show NOTICE (download, no target/rel) right before SBOM in the reports menu; href /api/scans/<id>/notice; none for running / failed / pending', async () => {
     const { dom } = loadPage();
     const doc = dom.window.document;
     await waitFor(() => doc.querySelectorAll('a[href$="/notice"]').length >= 2, 'NOTICE links rendered');
     const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>('a[href$="/notice"]'));
     const hrefs = new Set(links.map((a) => a.getAttribute('href')));
     expect(hrefs).toEqual(new Set([`/api/scans/${ID.done1}/notice`, `/api/scans/${ID.done2}/notice`]));
+    const title = (a: Element) => a.querySelector('.reports-item-title')?.textContent;
     for (const a of links) {
-      expect(a.textContent?.trim()).toBe('NOTICE');
-      expect(a.className).toBe('btn btn-sm');
+      expect(title(a)).toBe('Lisans bildirimi (NOTICE)');
+      expect(a.className).toBe('reports-item');
       expect(a.hasAttribute('download')).toBe(true);
       expect(a.getAttribute('download')).toBe('');
-      expect(a.getAttribute('aria-label')).toBe('Download NOTICE file');
       expect(a.hasAttribute('target')).toBe(false);
       expect(a.hasAttribute('rel')).toBe(false);
       const sbom = a.nextElementSibling as HTMLAnchorElement;
       const id = a.getAttribute('href')!.split('/')[3];
       expect(sbom.tagName).toBe('A');
       expect(sbom.getAttribute('href')).toBe(`/api/scans/${id}/sbom/download`);
-      expect(sbom.textContent?.trim()).toBe('SBOM');
+      expect(title(sbom)).toBe('SBOM');
       expect(sbom.getAttribute('target')).toBe('_blank'); // SBOM link unchanged
       expect(sbom.getAttribute('rel')).toBe('noopener');
-      expect(a.getAttribute('style')).toBe(sbom.getAttribute('style'));
-      expect(Array.from(a.parentElement!.children).map((c) => c.textContent?.trim())).toEqual(['PDF', 'Excel', 'CSV', 'NOTICE', 'SBOM']);
+      expect(a.className).toBe(sbom.className);
+      expect(Array.from(a.parentElement!.children).map(title)).toEqual(
+        ['Yönetici raporu (PDF)', 'Ayrıntılı tablo (Excel)', 'Paket listesi (CSV)', 'Lisans bildirimi (NOTICE)', 'SBOM']);
     }
     for (const id of [ID.running, ID.failed, ID.pending]) {
       expect(doc.querySelector(`a[href*="${id}"]`), id).toBeNull();

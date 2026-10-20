@@ -761,7 +761,7 @@ export class ScanWorker {
       // Class/code only, never the raw error object (ADR-004 Karar 6; security review I-6).
       this.logger.warn(`Warning: failed to fetch tech stack for project ${projectId} (${errorCode(err)}).`);
     }
-    // Empty stack: every supported ecosystem, in order (`nodejs`, `python`, `dotnet`; REQ-006 AC-P20-17).
+    // Empty stack: every supported ecosystem, in order (`SCAN_ECOSYSTEMS`; REQ-006 AC-P20-17, REQ-011 D-307).
     return ecosystems.length > 0 ? ecosystems : [...sandboxRunnerConfig.scan.supportedEcosystems];
   }
 

@@ -10,7 +10,7 @@
  */
 
 import { boundedNumber } from '../../lib/bounds';
-import type { TechEcosystem } from '../../types/scan';
+import { SCAN_ECOSYSTEMS, type TechEcosystem } from '../../types/scan';
 
 // Upper bounds of the queue settings (security review I-3). Each one keeps
 // every derived timer below the `setTimeout` limit (2^31-1 ms, ~24.8 days).
@@ -378,8 +378,9 @@ export const sandboxRunnerConfig: SandboxRunnerConfig = {
     }),
     shallowDepth: 1,
     maxRepoSizeMb: 512,
-    // Node.js, Python and .NET (NuGet; REQ-006 AC-P20-17, ADR-008 Karar 15). Order is the default stack order.
-    supportedEcosystems: ['nodejs', 'python', 'dotnet'],
+    // Node.js, Python, .NET (REQ-006 AC-P20-17) and Java, Go, PHP, Rust, Ruby, Dart, Swift
+    // (REQ-011 D-307). Order is the default stack order.
+    supportedEcosystems: [...SCAN_ECOSYSTEMS],
   },
 
   retry: {

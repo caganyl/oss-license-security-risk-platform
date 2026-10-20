@@ -15,7 +15,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ScannedDependency, ScannedFile } from '../../types/scan';
+import type { ScanEcosystem, ScannedDependency, ScannedFile } from '../../types/scan';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,6 +49,68 @@ export const PYTHON_MANIFEST_NAMES: readonly string[] = [
   'poetry.lock',
 ];
 const ALL_MANIFEST_NAMES: ReadonlySet<string> = new Set([...NODEJS_MANIFEST_NAMES, ...PYTHON_MANIFEST_NAMES]);
+
+// ---------------------------------------------------------------------------
+// Manifest specs of the opt-in ecosystems (REQ-011 D-304, ADR-012 Karar 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ecosystems whose files the walk collects through a `ManifestSpec`, apart
+ * from `byDir`: the new ecosystems (Java ... Swift) and the extra formats of
+ * Node.js and Python (pnpm, bun, Pipfile.lock, uv.lock, `requirements*.txt`).
+ * `dotnet` keeps its own map (`dotnetByDir`, ADR-008 Karar 2).
+ */
+export type SpecEcosystem = 'nodejs' | 'python' | 'java' | 'go' | 'php' | 'rust' | 'ruby' | 'dart' | 'swift';
+
+/**
+ * File names one ecosystem reads, collected per directory only when that
+ * ecosystem is requested (like .NET). A name already in `ALL_MANIFEST_NAMES`
+ * never enters a spec map (it stays in `byDir`), so `byDir`, `fileLinks` and
+ * the F4/P-10 goldens are unchanged.
+ */
+export interface ManifestSpec {
+  /** Exact file names (case-sensitive). */
+  readonly names: readonly string[];
+  /** Anchored patterns tested against the file name (linear: no nested quantifier). */
+  readonly patterns: readonly RegExp[];
+  /** A file below a directory with one of these names (any path segment, case-sensitive) is ignored for this spec. */
+  readonly ignoredDirs: ReadonlySet<string>;
+}
+
+/**
+ * Build output and vendored dependency folders of the new ecosystems: their
+ * manifests belong to third-party code (Maven/Cargo `target`, Composer/Go/
+ * Bundler `vendor`, Dart `.dart_tool`, CocoaPods `Pods`, SwiftPM `.build`,
+ * Gradle `.gradle`). `SKIP_DIRS` is not widened (its set is pinned by tests
+ * and still applies to every ecosystem).
+ */
+export const NEW_ECOSYSTEM_IGNORED_DIRS: ReadonlySet<string> = new Set(['target', 'vendor', '.dart_tool', 'Pods', '.build', '.gradle']);
+
+const NO_IGNORED_DIRS: ReadonlySet<string> = new Set();
+
+export const MANIFEST_SPECS: Readonly<Record<SpecEcosystem, ManifestSpec>> = Object.freeze({
+  nodejs: { names: ['pnpm-lock.yaml', 'bun.lock', 'bun.lockb'], patterns: [], ignoredDirs: NO_IGNORED_DIRS },
+  // `requirements.txt`, `-dev`, `-test` stay in `byDir`; the pattern adds e.g. `requirements-prod.txt` (AC-P39-5).
+  python: { names: ['Pipfile.lock', 'uv.lock'], patterns: [/^requirements.*\.txt$/], ignoredDirs: NO_IGNORED_DIRS },
+  java: { names: ['gradle.lockfile', 'pom.xml', 'build.gradle', 'build.gradle.kts'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  go: { names: ['go.mod'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  php: { names: ['composer.lock', 'composer.json'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  rust: { names: ['Cargo.lock', 'Cargo.toml'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  ruby: { names: ['Gemfile.lock'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  dart: { names: ['pubspec.lock'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+  swift: { names: ['Package.resolved'], patterns: [], ignoredDirs: NEW_ECOSYSTEM_IGNORED_DIRS },
+});
+
+const SPEC_ECOSYSTEMS = Object.keys(MANIFEST_SPECS) as SpecEcosystem[];
+
+export function isSpecEcosystem(value: string): value is SpecEcosystem {
+  return Object.prototype.hasOwnProperty.call(MANIFEST_SPECS, value);
+}
+
+/** True when `name` is one of the spec's file names (exact or pattern). */
+export function specNameMatches(spec: ManifestSpec, name: string): boolean {
+  return spec.names.includes(name) || spec.patterns.some((pattern) => pattern.test(name));
+}
 
 /** Per-file size limit (D-28 e, ADR-005 Karar 7). */
 export const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
@@ -449,11 +511,26 @@ export interface TreeWalk {
   dotnetByDir?: Map<string, Map<string, WalkedFile>>;
   /** Links (or reparse points resolving outside the root) with a .NET name (only with `{ dotnet: true }`). */
   dotnetLinks?: FileLink[];
+  /**
+   * Files of the requested spec ecosystems (REQ-011 D-304): ecosystem ->
+   * directory -> file name. Present only for ecosystems passed in
+   * `WalkOptions.ecosystems` that have a `ManifestSpec`; kept apart from
+   * `byDir`, so the existing parsers never see them.
+   */
+  specByDir?: Map<SpecEcosystem, Map<string, Map<string, WalkedFile>>>;
+  /** Links (or reparse points resolving outside the root) with a spec name, per requested spec ecosystem. */
+  specLinks?: Map<SpecEcosystem, FileLink[]>;
 }
 
 export interface WalkOptions {
   /** Also recognise .NET files (ADR-008 Karar 2). Absent or false: the walk is byte-identical to F4. */
   dotnet?: boolean;
+  /**
+   * Requested ecosystems (REQ-011 D-304): the ones with a `ManifestSpec`
+   * also get their spec files collected. Absent or without a spec
+   * ecosystem: `byDir`/`fileLinks`/`errors` are byte-identical to F4.
+   */
+  ecosystems?: readonly string[];
 }
 
 const DOTNET_FIXED_NAMES: ReadonlySet<string> = new Set(['packages.lock.json', 'Directory.Packages.props', 'packages.config']);
@@ -529,6 +606,25 @@ export function walkTree(rootDir: string, options: WalkOptions = {}): TreeWalk {
     walk.dotnetByDir = dotnetByDir;
     walk.dotnetLinks = dotnetLinks;
   }
+  const specs = SPEC_ECOSYSTEMS.filter((ecosystem) => options.ecosystems?.includes(ecosystem) === true);
+  const specByDir = new Map<SpecEcosystem, Map<string, Map<string, WalkedFile>>>(specs.map((ecosystem) => [ecosystem, new Map()]));
+  const specLinks = new Map<SpecEcosystem, FileLink[]>(specs.map((ecosystem) => [ecosystem, []]));
+  if (specs.length > 0) {
+    walk.specByDir = specByDir;
+    walk.specLinks = specLinks;
+  }
+  /** Requested spec ecosystems that claim `name` in directory `relDir` (never a `byDir` or .NET name). */
+  const specsFor = (name: string, relDir: string): SpecEcosystem[] => {
+    if (specs.length === 0 || ALL_MANIFEST_NAMES.has(name) || (dotnet && isDotnetName(name, relDir))) return [];
+    let segments: string[] | null = null;
+    return specs.filter((ecosystem) => {
+      const spec = MANIFEST_SPECS[ecosystem];
+      if (!specNameMatches(spec, name)) return false;
+      if (spec.ignoredDirs.size === 0 || relDir === '') return true;
+      segments ??= relDir.split('/');
+      return !segments.some((segment) => spec.ignoredDirs.has(segment));
+    });
+  };
   const stack: Array<{ abs: string; rel: string }> = [{ abs: rootDir, rel: '' }];
 
   while (stack.length > 0) {
@@ -570,10 +666,13 @@ export function walkTree(rootDir: string, options: WalkOptions = {}): TreeWalk {
         //   links with an unrelated name, which ADR-005 Karar 6 skipped
         //   silently; telling them apart from folder links would need the
         //   target (reported deviation, see the REQ-003 handoff).
+        const linkSpecs = specsFor(name, dir.rel);
         if (ALL_MANIFEST_NAMES.has(name)) {
           walk.fileLinks.push({ relPath: rel, name });
         } else if (dotnet && isDotnetName(name, dir.rel)) {
           dotnetLinks.push({ relPath: rel, name });
+        } else if (linkSpecs.length > 0) {
+          for (const ecosystem of linkSpecs) specLinks.get(ecosystem)?.push({ relPath: rel, name });
         } else if (!SKIP_DIRS.has(name)) {
           walk.errors.push({ ecosystem: 'filesystem', file: rel, error: LINK_NOT_FOLLOWED_MESSAGE });
         }
@@ -597,6 +696,26 @@ export function walkTree(rootDir: string, options: WalkOptions = {}): TreeWalk {
           dotnetByDir.set(dir.rel, dotnetFiles);
         }
         dotnetFiles.set(name, { absPath: abs, relPath: rel, relDir: dir.rel, name, size: stat.size });
+        continue;
+      }
+
+      const fileSpecs = stat.isFile() ? specsFor(name, dir.rel) : [];
+      if (fileSpecs.length > 0) {
+        // Same second defence as below; a spec file outside the root counts as a link of its ecosystems.
+        const outside = !isInside(realOrResolved(abs), rootReal);
+        for (const ecosystem of fileSpecs) {
+          if (outside) {
+            specLinks.get(ecosystem)?.push({ relPath: rel, name });
+            continue;
+          }
+          const byDir = specByDir.get(ecosystem) as Map<string, Map<string, WalkedFile>>;
+          let files = byDir.get(dir.rel);
+          if (!files) {
+            files = new Map();
+            byDir.set(dir.rel, files);
+          }
+          files.set(name, { absPath: abs, relPath: rel, relDir: dir.rel, name, size: stat.size });
+        }
         continue;
       }
 
@@ -666,7 +785,7 @@ export interface ReadManifest {
  * Reads a manifest once: the same buffer gives the hash/size record and the
  * text (no TOCTOU between them). Over 32 MiB the file is not read.
  */
-export function readManifest(file: WalkedFile, ecosystem: 'nodejs' | 'python' | 'dotnet'): ReadManifest {
+export function readManifest(file: WalkedFile, ecosystem: ScanEcosystem): ReadManifest {
   if (file.size > MAX_MANIFEST_BYTES) {
     throw new ManifestReadError(`${file.relPath}: ${FILE_TOO_LARGE_MESSAGE}`);
   }

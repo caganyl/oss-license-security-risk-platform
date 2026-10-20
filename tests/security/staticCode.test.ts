@@ -101,9 +101,15 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
     const files = fs.readdirSync(parsersDir).filter((n) => n.endsWith('.ts'));
     // REQ-005 ADR-007 Karar 12: lockIntegrityValue.ts (L-5 side channel) is import-free.
     // REQ-006 ADR-008 Karar 1: six NuGet modules; xmlReader.ts is import-free as well.
+    // REQ-011 D-304/D-315: one parser per new ecosystem, the parser kit, purl builders, the registry and
+    // the YAML subset reader (import-free).
     expect(files.sort()).toEqual([
       'common.ts',
+      'dart.ts',
+      'golang.ts',
       'index.ts',
+      'java.ts',
+      'kit.ts',
       'lockIntegrityValue.ts',
       'msbuildProject.ts',
       'nodejs.ts',
@@ -111,13 +117,20 @@ describe('REQ-003 P-10 parser boundary (ADR-005 Karar 1, AC-P10-15)', () => {
       'nugetAssets.ts',
       'nugetIdentity.ts',
       'nugetLock.ts',
+      'php.ts',
+      'purl.ts',
       'python.ts',
+      'registry.ts',
+      'ruby.ts',
+      'rust.ts',
+      'swift.ts',
       'thread.ts',
       'threadParser.ts',
       'toml.ts',
       'xmlReader.ts',
+      'yamlSubset.ts',
     ]);
-    const importFree = new Set(['lockIntegrityValue.ts', 'xmlReader.ts']);
+    const importFree = new Set(['lockIntegrityValue.ts', 'xmlReader.ts', 'yamlSubset.ts']);
     for (const name of importFree) expect(importsOf(path.join(parsersDir, name)), name).toEqual([]);
     const violations: string[] = [];
     for (const name of files) {

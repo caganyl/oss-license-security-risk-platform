@@ -8,17 +8,33 @@
  * `threadParser.ts`).
  */
 import type { SandboxScanResult } from '../../types/scan';
-import { emptyResult, extendResult, pyStrip, walkTree, type ParseResult, type TreeWalk } from './common';
+import {
+  LINK_NOT_FOLLOWED_MESSAGE,
+  compareCodePoints,
+  emptyResult,
+  extendResult,
+  isSpecEcosystem,
+  pyStrip,
+  walkTree,
+  type ParseErrorRecord,
+  type TreeWalk,
+  type WalkOptions,
+} from './common';
+import { KitScanBudget } from './kit';
 import type { IntegrityCollector } from './lockIntegrityValue';
-import { parse as parseNodejs } from './nodejs';
-import { parse as parseNuget } from './nuget';
-import { parse as parsePython } from './python';
+import { parserFor } from './registry';
 
-const PARSERS: Readonly<Record<string, (walk: TreeWalk, collector?: IntegrityCollector) => ParseResult>> = {
-  nodejs: parseNodejs,
-  python: (walk) => parsePython(walk),
-  dotnet: parseNuget,
-};
+/**
+ * "Link not followed" records of the spec files of `ecosystem` (REQ-011
+ * D-304), sorted by path. Written by `parseManifests` for every spec
+ * ecosystem, so the parsers never have to.
+ */
+function specLinkErrors(walk: TreeWalk, ecosystem: string): ParseErrorRecord[] {
+  if (!isSpecEcosystem(ecosystem)) return [];
+  return [...(walk.specLinks?.get(ecosystem) ?? [])]
+    .sort((a, b) => compareCodePoints(a.relPath, b.relPath))
+    .map((link) => ({ ecosystem, file: link.relPath, error: LINK_NOT_FOLLOWED_MESSAGE }));
+}
 
 export interface ParseManifestsOptions {
   /** L-5 side channel of the npm lock parsers (REQ-005, ADR-007 Karar 12); not part of the result. */
@@ -50,12 +66,14 @@ export function parseManifests(
   const result = emptyResult();
   let walk: TreeWalk | null = null;
   const list = normalizeEcosystems(ecosystems);
-  // .NET names are recognised only when `dotnet` is requested; otherwise the
-  // walk is the unchanged F4 walk (golden guarantee, ADR-008 Karar 2).
-  const walkOptions = list.includes('dotnet') ? { dotnet: true } : {};
+  // .NET names are recognised only when `dotnet` is requested, the spec files
+  // of the other ecosystems only when those are requested; `byDir` is always
+  // the unchanged F4 walk (golden guarantee, ADR-008 Karar 2, REQ-011 D-304).
+  const walkOptions: WalkOptions = list.includes('dotnet') ? { dotnet: true, ecosystems: list } : { ecosystems: list };
+  const run = { integrityCollector: options.integrityCollector, budget: new KitScanBudget() };
 
   for (const ecosystem of list) {
-    const parser = Object.prototype.hasOwnProperty.call(PARSERS, ecosystem) ? PARSERS[ecosystem] : undefined;
+    const parser = parserFor(ecosystem);
     if (!parser) {
       result.parse_errors.push({ ecosystem, file: '', error: `unsupported ecosystem '${ecosystem}'` });
       continue;
@@ -64,7 +82,17 @@ export function parseManifests(
       walk = walkTree(rootDir, walkOptions);
       result.parse_errors.push(...walk.errors);
     }
-    extendResult(result, parser(walk, options.integrityCollector));
+    const parsed = parser(walk, run);
+    const links = specLinkErrors(walk, ecosystem);
+    if (ecosystem === 'nodejs' || ecosystem === 'python') {
+      // Extra-format links come after the F4 records (whose order the goldens freeze).
+      extendResult(result, parsed);
+      result.parse_errors.push(...links);
+    } else {
+      // Like .NET: the ecosystem's link records first.
+      result.parse_errors.push(...links);
+      extendResult(result, parsed);
+    }
   }
 
   return {

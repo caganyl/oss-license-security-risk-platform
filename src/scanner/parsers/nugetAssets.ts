@@ -1,5 +1,5 @@
 /**
- * `obj/project.assets.json` v3 reader (REQ-006 AC-P20-4; ADR-008 Karar 5.3).
+ * `obj/project.assets.json` v3/v4 reader (REQ-006 AC-P20-4; ADR-008 Karar 5.3; REQ-009 P-32).
  *
  * Reads only `version`, `libraries.*.type`, `libraries.*.sha512` and
  * `project.frameworks.*.dependencies.*.version`. Nothing else (restore
@@ -25,6 +25,12 @@ import { IssueSet, parseNugetJson } from './nugetLock';
 
 export const ASSETS_FILE_NAME = 'project.assets.json';
 
+/**
+ * Accepted `version` values (REQ-009 D-259). The .NET 10 SDK writes 4; every
+ * field read here has the same shape in 3 and 4.
+ */
+const ASSETS_VERSIONS: ReadonlySet<unknown> = new Set([3, 4]);
+
 /** Direct dependency ids (`asciiLower`) -> declared range of the first framework (code point order). */
 function directDependencies(project: unknown): Map<string, string | null> {
   const direct = new Map<string, string | null>();
@@ -46,7 +52,7 @@ function directDependencies(project: unknown): Map<string, string | null> {
 export function parseNugetAssets(data: Uint8Array): NugetSourceResult {
   const root = parseNugetJson(data);
   if (!isPyDict(root)) throw new NugetFileError(NUGET_MESSAGES.structure);
-  if (root.version !== 3) throw new NugetFileError(NUGET_MESSAGES.assetsVersion);
+  if (!ASSETS_VERSIONS.has(root.version)) throw new NugetFileError(NUGET_MESSAGES.assetsVersion);
   const libraries = root.libraries;
   if (!isPyDict(libraries)) throw new NugetFileError(NUGET_MESSAGES.structure);
 

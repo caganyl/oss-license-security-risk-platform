@@ -55,6 +55,19 @@ taranamaz. Kullanıcı iki yolu birden istedi: PAT ve Windows oturum kimliği.
   Bu, yöneticinin bilinçli seçimidir; joker kabul edilmez.
 - (−) GCM'nin davranışı Git for Windows sürümüne bağlıdır; doğrulama
   kullanıcının makinesinde elle yapılır.
+- (−) Sunucu 401 dönerse git `credential reject` çağırır; GCM kullanıcının
+  Windows Credential Manager'daki o host kaydını silebilir (güvenlik
+  incelemesi L1). Kimlik sızmaz ama kullanıcı TFS bilgisini yeniden girmek
+  zorunda kalabilir. PAT yolu bu riski taşımaz.
+- (−) GCM `GCM_INTERACTIVE=never`'ı yok sayarsa klon en fazla
+  `SCAN_CLONE_TIMEOUT_MS` kadar bekler ve süreç ağacı sonlandırılır (L2).
+
+## Ek (güvenlik incelemesi, 2026-10-20)
+
+- **M1 düzeltildi:** Windows kimliği yalnız listedeki hostun varsayılan
+  (443) portuna verilir; aynı hostta standart dışı porttaki bir servis
+  kimlik almaz.
+- **L3:** IDN host adları listeye punycode (`xn--…`) biçiminde yazılır.
 
 ## Değerlendirilen alternatifler
 

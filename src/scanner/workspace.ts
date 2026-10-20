@@ -78,6 +78,11 @@ export interface GitCloneArgsOptions {
   hooksDir?: string;
   /** `win32` adds `http.sslBackend=schannel`. Default `process.platform`. */
   platform?: NodeJS.Platform;
+  /**
+   * `https://<host>[:port]/` origin that may use the Windows identity
+   * (REQ-009 P-30, ADR-011 karar 2); `null`/absent = no Windows identity.
+   */
+  windowsAuthOrigin?: string | null;
 }
 
 /**
@@ -101,6 +106,17 @@ export function buildGitCloneArgs(url: string, ref: string | null, dest: string,
     '-c', 'core.symlinks=false',
     '-c', 'core.longpaths=true',
     '-c', 'credential.helper=',
+  ];
+  // The Windows-identity entries must follow the empty `credential.helper`
+  // reset above (git applies `-c` in order and after GIT_CONFIG_*), and are
+  // scoped to the one origin so no other host is offered the identity.
+  if (options.windowsAuthOrigin) {
+    args.push(
+      '-c', `credential.${options.windowsAuthOrigin}.helper=manager`,
+      '-c', `http.${options.windowsAuthOrigin}.emptyAuth=true`,
+    );
+  }
+  args.push(
     '-c', 'filter.lfs.smudge=',
     '-c', 'filter.lfs.clean=',
     '-c', 'filter.lfs.process=',
@@ -108,7 +124,7 @@ export function buildGitCloneArgs(url: string, ref: string | null, dest: string,
     '-c', 'http.followRedirects=false',
     '-c', `core.hooksPath=${hooksDir}`,
     '-c', 'core.askPass=',
-  ];
+  );
   if (platform === 'win32') args.push('-c', 'http.sslBackend=schannel');
   args.push('clone', '--depth', '1', '--single-branch', '--no-tags');
   if (ref !== null) {
@@ -135,8 +151,12 @@ export const GIT_PROXY_ENV: readonly string[] = ['HTTPS_PROXY', 'https_proxy', '
  * else (`GIT_*`, `SSH_ASKPASS`, `CURL_CA_BUNDLE`, `USERPROFILE`, secrets) passes.
  */
 export function buildGitBaseEnv(parentEnv: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  return pickEnv(parentEnv, [...GIT_ENV_PASSTHROUGH, ...GIT_PROXY_ENV], platform);
+}
+
+/** The `allowed` variables of `parentEnv`, original key spelling kept; case-insensitive names on `win32`. */
+function pickEnv(parentEnv: NodeJS.ProcessEnv, allowed: readonly string[], platform: NodeJS.Platform): Record<string, string> {
   const windows = platform === 'win32';
-  const allowed = [...GIT_ENV_PASSTHROUGH, ...GIT_PROXY_ENV];
   const allowedSet = new Set(windows ? allowed.map((n) => n.toUpperCase()) : allowed);
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(parentEnv)) {
@@ -152,13 +172,66 @@ export interface GitCredential {
   token: string;
 }
 
-/** Basic-auth user name expected by the provider for a token (ADR-002 karar 3). */
+/**
+ * Azure DevOps repository URL: the cloud hosts, or any host whose path has a
+ * `/_git/` segment (on-premises Azure DevOps Server / TFS, whose host name
+ * cannot be known in advance; REQ-009 D-253).
+ */
+export function isAzureDevOpsUrl(url: string): boolean {
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase();
+  return host === 'dev.azure.com' || host.endsWith('.visualstudio.com') || parsed.pathname.toLowerCase().includes('/_git/');
+}
+
+/** Basic-auth user name expected by the provider for a token (ADR-002 karar 3, REQ-009 AC-P29-9). */
 function tokenUserFor(url: string): string {
-  const host = new URL(url).hostname.toLowerCase();
-  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) return '';
-  if (host.includes('gitlab')) return 'oauth2';
+  if (isAzureDevOpsUrl(url)) return '';
+  if (new URL(url).hostname.toLowerCase().includes('gitlab')) return 'oauth2';
   return 'x-access-token';
 }
+
+export const WINDOWS_AUTH_HOSTS_INVALID_MESSAGE =
+  'GIT_WINDOWS_AUTH_HOSTS geçersiz bir girdi içeriyor (yalnız tam host adı; joker, port ve şema yok).';
+
+const HOST_LABEL = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?';
+const HOST_NAME_RE = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`);
+
+/**
+ * Parses `GIT_WINDOWS_AUTH_HOSTS` (REQ-009 AC-P30-1): full host names
+ * separated by commas and/or whitespace, case-insensitive, a trailing dot
+ * ignored. Throws `Error(WINDOWS_AUTH_HOSTS_INVALID_MESSAGE)` for any other
+ * entry. Empty or absent = Windows identity off.
+ */
+export function parseWindowsAuthHosts(value: string | undefined): ReadonlySet<string> {
+  const hosts = new Set<string>();
+  for (const raw of (value ?? '').split(/[\s,]+/)) {
+    if (raw === '') continue;
+    const host = raw.toLowerCase().replace(/\.$/, '');
+    if (host.length > 253 || !HOST_NAME_RE.test(host)) throw new Error(WINDOWS_AUTH_HOSTS_INVALID_MESSAGE);
+    hosts.add(host);
+  }
+  return hosts;
+}
+
+/**
+ * Origin allowed to use the Windows identity for this clone: the URL's host
+ * is listed and the scan has no token (a token always wins, AC-P30-2).
+ */
+export function windowsAuthOriginFor(url: string, hosts: ReadonlySet<string>, hasToken: boolean): string | null {
+  if (hasToken || hosts.size === 0) return null;
+  const parsed = new URL(url);
+  // Default port only (`URL.port` is '' for 443): another service on a
+  // non-standard port of the same host is not offered the identity (REQ-009 security review M1).
+  if (parsed.port !== '') return null;
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+  return hosts.has(host) ? headerScopeFor(url) : null;
+}
+
+/**
+ * User-profile variables Git Credential Manager needs to read the Windows
+ * credential store (AC-P30-3); passed only when the Windows identity is used.
+ */
+export const GIT_WINDOWS_AUTH_ENV: readonly string[] = ['USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'USERNAME', 'USERDOMAIN'];
 
 /**
  * `https://<host>[:port]/` origin of the clone URL, used as the URL subsection
@@ -193,10 +266,12 @@ export function buildGitEnv(
   workspace: string,
   credential: GitCredential | null,
   platform: NodeJS.Platform = process.platform,
+  windowsAuth = false,
 ): Record<string, string> {
   const paths = gitIsolationPaths(workspace);
   const env: Record<string, string> = {
     ...buildGitBaseEnv(parentEnv, platform),
+    ...(windowsAuth ? pickEnv(parentEnv, GIT_WINDOWS_AUTH_ENV, platform) : {}),
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: paths.gitConfig,
     HOME: paths.home,
@@ -271,10 +346,12 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
   assertRemoteUrl(url);
   const workspace = path.dirname(dest);
   const paths = gitIsolationPaths(workspace);
-  const args = buildGitCloneArgs(url, ref, dest, { hooksDir: paths.hooks });
+  // Validated at start-up (runtime step 4c); re-read so a test or embedder sees the same rule.
+  const windowsAuthOrigin = windowsAuthOriginFor(url, parseWindowsAuthHosts(process.env.GIT_WINDOWS_AUTH_HOSTS), !!token);
+  const args = buildGitCloneArgs(url, ref, dest, { hooksDir: paths.hooks, windowsAuthOrigin });
   const credential: GitCredential | null = token ? { url, token } : null;
   const secrets = gitTokenSecretForms(credential);
-  const env = buildGitEnv(process.env, workspace, credential);
+  const env = buildGitEnv(process.env, workspace, credential, process.platform, windowsAuthOrigin !== null);
   await prepareGitIsolation(workspace);
 
   // Range-checked (I-3): a negative value used to time every clone out at once, a huge one overflowed the timer.
@@ -338,9 +415,78 @@ export const cloneRepo: CloneRepoFn = async (url, ref, dest, token, signal) => {
       maxChars: Number.POSITIVE_INFINITY,
     }).trim();
     const detail = Array.from(sanitized).slice(-MAX_ERROR_DETAIL).join('');
-    throw new Error(`git clone failed (exit code ${exitCode})${detail ? `: ${detail}` : ''}`);
+    const failure = classifyCloneFailure(sanitized);
+    const message = `git clone failed (exit code ${exitCode})${detail ? `: ${detail}` : ''}`;
+    throw new GitCloneError(failure ? `${failure.sentence} ${message}` : message, failure);
   }
 };
+
+export type CloneFailureKind = 'auth' | 'branch' | 'repo' | 'tls' | 'network';
+
+export interface CloneFailure {
+  kind: CloneFailureKind;
+  /** Guiding sentence that starts `scans.error_message` (contract REQ-009 §5). */
+  sentence: string;
+  /** `true` = retrying cannot help, the scan fails at once (AC-P31-3). */
+  permanent: boolean;
+}
+
+/** Ordered: the first matching class wins (an auth failure often also mentions the URL or a 404 page). */
+const CLONE_FAILURE_RULES: ReadonlyArray<CloneFailure & { pattern: RegExp }> = [
+  {
+    kind: 'auth',
+    pattern: /could not read (?:username|password)|authentication failed|terminal prompts disabled|\b(?:401|403)\b|unauthorized|forbidden/i,
+    sentence: 'Repository requires authentication: add a repo access token to the project, or list the host in GIT_WINDOWS_AUTH_HOSTS.',
+    permanent: true,
+  },
+  {
+    kind: 'branch',
+    pattern: /remote branch .+ not found|couldn't find remote ref/i,
+    sentence: 'Branch not found in the repository.',
+    permanent: true,
+  },
+  {
+    kind: 'repo',
+    pattern: /repository .*not found|not found\b.*repository|\b404\b|does not appear to be a git repository/i,
+    sentence: 'Repository not found or no access.',
+    permanent: true,
+  },
+  {
+    kind: 'tls',
+    pattern: /ssl certificate problem|certificate verify failed|schannel|unable to get local issuer certificate/i,
+    sentence: 'TLS certificate of the git server is not trusted.',
+    permanent: true,
+  },
+  {
+    kind: 'network',
+    pattern: /could not resolve host|failed to connect|connection (?:timed out|refused|reset)|operation timed out|couldn't connect to server/i,
+    sentence: 'Git server could not be reached.',
+    permanent: false,
+  },
+];
+
+/** Class of a failed clone from its sanitized stderr (REQ-009 AC-P31-2); `null` = unclassified. */
+export function classifyCloneFailure(stderr: string): CloneFailure | null {
+  for (const { pattern, ...failure } of CLONE_FAILURE_RULES) {
+    if (pattern.test(stderr)) return failure;
+  }
+  return null;
+}
+
+/**
+ * Failed `git clone`. `permanent` follows the class so the worker's retry
+ * policy (`isPermanentError`) fails auth/branch/repo/TLS errors at once.
+ */
+export class GitCloneError extends Error {
+  readonly permanent: boolean;
+  readonly kind: CloneFailureKind | null;
+  constructor(message: string, failure: CloneFailure | null) {
+    super(message);
+    this.name = 'GitCloneError';
+    this.permanent = failure?.permanent ?? false;
+    this.kind = failure?.kind ?? null;
+  }
+}
 
 /**
  * On Windows `child.kill()` leaves `git-remote-https.exe` running and its file

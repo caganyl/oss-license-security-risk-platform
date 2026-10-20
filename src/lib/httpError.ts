@@ -28,6 +28,8 @@ export type ErrorCode =
   | 'web_url_invalid'
   | 'web_url_not_allowed'
   | 'project_web_url_missing'
+  | 'invalid_token'
+  | 'repo_credential_not_applicable'
   | 'internal_error'
   | 'setup_state_invalid';
 

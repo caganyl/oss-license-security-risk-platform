@@ -252,6 +252,10 @@
     .form-hint { display: block; color: var(--text-muted); font-size: 0.78rem; margin-top: 0.35rem; line-height: 1.4; }
     .form-warning { display: none; color: var(--warning); font-size: 0.8rem; margin-top: 0.5rem; line-height: 1.4; }
     .form-warning.show { display: block; }
+    .scan-error { margin-top: 0.35rem; max-width: 26rem; font-size: 0.78rem; line-height: 1.4; color: var(--danger); white-space: normal; }
+    .scan-error strong { display: block; font-weight: 600; }
+    .scan-error span { color: var(--text-muted); word-break: break-word; }
+    .scan-warning { margin-top: 0.35rem; font-size: 0.75rem; color: var(--warning); cursor: help; }
     .capsule { display: inline-block; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.06); border-radius: 6px; font-size: 0.75rem; font-weight: 500; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .spin { animation: spin 1.5s linear infinite; }
@@ -645,8 +649,15 @@
       </div>
 
       <div class="form-group">
-        <label for="repoPath">Local Repository Path</label>
-        <input type="text" id="repoPath" class="form-control" placeholder="/absolute/path/to/project">
+        <label for="repoPath">Repository (local folder or https URL)</label>
+        <input type="text" id="repoPath" class="form-control" placeholder="C:\path\to\project  or  https://tfs.sirket.local/Collection/Project/_git/Repo" autocomplete="off" spellcheck="false">
+        <small class="form-hint">Yerel klasör SCAN_ROOTS altında olmalı. https adresi Azure DevOps / TFS, GitHub veya GitLab reposu olabilir; dal belirtilmezse reponun varsayılan dalı taranır.</small>
+      </div>
+
+      <div class="form-group" id="repoTokenGroup" hidden>
+        <label for="repoToken">Repo access token (PAT, optional)</label>
+        <input type="password" id="repoToken" class="form-control" autocomplete="new-password" spellcheck="false">
+        <small class="form-hint">Özel (giriş isteyen) repolar için gerekir. Azure DevOps / TFS'te: sağ üstte kullanıcı menüsü → Personal access tokens → New Token, kapsam olarak yalnız <strong>Code → Read</strong> yeterli. Token şifreli saklanır, ekranda tekrar gösterilmez. Şirket sunucusu Windows oturumunu kabul ediyorsa yönetici GIT_WINDOWS_AUTH_HOSTS ile tokensız erişimi de açabilir.</small>
       </div>
 
       <div class="form-group">
@@ -696,6 +707,27 @@
       <div class="form-actions">
         <button class="btn btn-ghost" type="button" id="web-modal-cancel-btn">Cancel</button>
         <button class="btn" type="button" id="web-modal-save-btn"><i data-lucide="check"></i> Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Repo access token modal (REQ-009 AC-UI-2) -->
+  <div class="modal" id="repoTokenModal" role="dialog" aria-modal="true" aria-labelledby="repoTokenModal-title">
+    <div class="modal-content">
+      <button class="modal-close" type="button" id="token-modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="repoTokenModal-title">Repo Access Token</h3>
+      <p class="modal-subtitle" id="repoTokenModal-subtitle">Token for a private repository.</p>
+
+      <div class="form-group">
+        <label for="repoTokenInput">Personal access token (PAT)</label>
+        <input type="password" id="repoTokenInput" class="form-control" autocomplete="new-password" spellcheck="false">
+        <small class="form-hint" id="repoTokenModal-state"></small>
+        <small class="form-hint">Azure DevOps / TFS'te: kullanıcı menüsü → Personal access tokens → New Token, kapsam <strong>Code → Read</strong>. Yeni token kaydetmek eskisinin yerine geçer. Token yalnız bu repo sunucusuna gönderilir ve ekranda tekrar gösterilmez.</small>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-ghost" type="button" id="token-modal-cancel-btn">Cancel</button>
+        <button class="btn" type="button" id="token-modal-save-btn"><i data-lucide="key-round"></i> Save token</button>
       </div>
     </div>
   </div>

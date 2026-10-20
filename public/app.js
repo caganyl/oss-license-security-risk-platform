@@ -392,6 +392,28 @@ async function downloadCycloneDxSbom(scanId) {
   }
 }
 
+/**
+ * Why a scan failed, or that it finished with warnings (REQ-009 AC-UI-3).
+ * The first sentence of a classified clone error ("Repository requires
+ * authentication: ...") is the headline; the git detail follows in muted text.
+ * Text only: the message is server data and never becomes markup.
+ */
+function scanErrorDetail(row) {
+  const message = typeof row.error_message === 'string' ? row.error_message.trim() : '';
+  if (!message) return null;
+  if (row.status === 'failed') {
+    const cut = message.search(/\.\s/);
+    const headline = cut > 0 && cut < 220 ? message.slice(0, cut + 1) : message.slice(0, 220);
+    const rest = message.slice(headline.length).trim();
+    return el('div', { className: 'scan-error' }, el('strong', null, headline), rest ? el('span', null, rest) : null);
+  }
+  if (row.status === 'completed') {
+    const count = message.split('\n').filter((line) => line.trim() !== '').length;
+    return el('div', { className: 'scan-warning', title: message }, `${count} warning${count === 1 ? '' : 's'}`);
+  }
+  return null;
+}
+
 // ── Scan rows (dashboard + history share one renderer)
 function buildScanRow(row, idPrefix, withTrigger) {
   const tr = el('tr', { className: 'scan-row', id: `${idPrefix}-${row.id}` });
@@ -402,8 +424,8 @@ function buildScanRow(row, idPrefix, withTrigger) {
       el('strong', null, row.project_name || '—'),
       web ? el('span', { className: 'kind-web', title: 'Web (URL) scan' }, 'Web') : null,
       el('br'),
-      el('small', { style: 'color:var(--text-muted);' }, web ? webHost(row.target_url) : (row.ref || 'main'))),
-    el('td', null, statusBadge(row.status)),
+      el('small', { style: 'color:var(--text-muted);' }, web ? webHost(row.target_url) : (row.ref || 'default branch'))),
+    el('td', null, statusBadge(row.status), scanErrorDetail(row)),
     el('td', null, !web && row.total_dependencies ? Number(row.total_dependencies).toLocaleString() : '—'),
     el('td', null, web ? el('span', { style: 'color: var(--text-muted);' }, '—') : licenseLabel(row)),
     el('td', null, grade ? el('span', { className: 'capsule', style: 'margin-right:0.35rem;' }, `Grade ${grade}`) : null, securityLabel(row)),
@@ -747,6 +769,15 @@ function renderProjectRow(p) {
     : null;
   const webEditButton = el('button', { className: 'btn btn-sm btn-ghost', type: 'button', dataset: { action: 'edit-web-url', ...data }, 'aria-label': 'Edit web URL' },
     icon('pencil', 'width:12px;height:12px;'), ' Web URL');
+  // REQ-009 AC-UI-2: https repositories can carry a token; its value is never shown.
+  const tokenButton = isHttpsRepo(p.repo_url)
+    ? el('button', {
+      className: 'btn btn-sm btn-ghost',
+      type: 'button',
+      dataset: { action: 'edit-repo-token', ...data },
+      title: p.has_repo_credential ? 'A repo access token is set; save a new one to replace it' : 'Add a repo access token for a private repository',
+    }, icon('key-round', 'width:12px;height:12px;'), p.has_repo_credential ? ' Token set' : ' Add token')
+    : null;
 
   // REQ-008: the web address is shown as text with its scan mode, never as a link.
   const webContent = p.web_url
@@ -761,7 +792,11 @@ function renderProjectRow(p) {
     el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted); word-break: break-all;' }, webContent),
     el('td', null, ecosystems.length ? ecosystems : el('span', { style: 'color:var(--text-muted)' }, '—')),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(p.created_at)),
-    el('td', null, el('div', { style: 'display:inline-flex; gap:0.375rem; flex-wrap:wrap;' }, scanButton, webScanButton, webEditButton)));
+    el('td', null, el('div', { style: 'display:inline-flex; gap:0.375rem; flex-wrap:wrap;' }, scanButton, webScanButton, webEditButton, tokenButton)));
+}
+
+function isHttpsRepo(value) {
+  return typeof value === 'string' && /^https:\/\//i.test(value);
 }
 
 async function loadProjectsList() {
@@ -830,6 +865,50 @@ function openWebUrlModal(projectId) {
 function closeWebUrlModal() {
   byId('webUrlModal').classList.remove('open');
   webModalProjectId = null;
+}
+
+// ── Repo access token modal (REQ-009 AC-UI-2). There is no remove action (D-262).
+let tokenModalProjectId = null;
+
+function openRepoTokenModal(projectId) {
+  const p = projectsById.get(String(projectId));
+  if (!p) return;
+  tokenModalProjectId = String(projectId);
+  setText('repoTokenModal-subtitle', `Project: ${p.name ?? '—'} · ${p.repo_url ?? ''}`);
+  setText('repoTokenModal-state', p.has_repo_credential ? 'A token is already set for this repository.' : 'No token is set yet.');
+  byId('repoTokenInput').value = '';
+  byId('repoTokenModal').classList.add('open');
+  byId('repoTokenInput').focus();
+}
+
+function closeRepoTokenModal() {
+  byId('repoTokenModal').classList.remove('open');
+  byId('repoTokenInput').value = '';
+  tokenModalProjectId = null;
+}
+
+async function saveRepoToken() {
+  if (!tokenModalProjectId) return;
+  const token = byId('repoTokenInput').value.trim();
+  if (!token) { showToast('Enter a token', 'error'); return; }
+  const button = byId('token-modal-save-btn');
+  button.disabled = true;
+  try {
+    await api(apiPath('projects', tokenModalProjectId, 'repo-credential'), { method: 'PUT', body: { token } });
+    closeRepoTokenModal();
+    showToast('Repo access token saved. Start a scan to use it.');
+    await loadProjectsList();
+  } catch (e) {
+    reportError(e, 'Failed to save the token');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function syncRepoTokenField() {
+  const https = isHttpsRepo(byId('repoPath').value.trim());
+  byId('repoTokenGroup').hidden = !https;
+  if (!https) byId('repoToken').value = '';
 }
 
 async function saveWebUrl() {
@@ -1400,6 +1479,8 @@ function closeModal() {
   byId('projectName').value = '';
   byId('repoPath').value = '';
   byId('webUrl').value = '';
+  byId('repoToken').value = '';
+  byId('repoTokenGroup').hidden = true;
 }
 
 // ── Launch Scan modal submission
@@ -1422,6 +1503,21 @@ async function launchScan() {
     if (repoPath) body.repoUrl = repoPath;
     if (webUrl) body.webUrl = webUrl;
     const { data: project } = await api('/api/projects', { method: 'POST', body });
+    // 1b. Token for a private https repository (REQ-009 AC-UI-1), before the first scan.
+    const token = byId('repoToken').value.trim();
+    if (token && isHttpsRepo(repoPath)) {
+      try {
+        await api(apiPath('projects', project.id, 'repo-credential'), { method: 'PUT', body: { token } });
+      } catch (e) {
+        // The project exists already; a scan without the token would only fail on authentication.
+        closeModal();
+        if (e && e.authRedirect) return;
+        const reason = e && e.message ? ` (${e.message})` : '';
+        showToast(`Project "${name}" was created but the token was not saved${reason}. Add it with the token button on the Projects page, then scan.`, 'error');
+        await switchView('projects');
+        return;
+      }
+    }
     // 2. Queue scans: dependency scan for the code, web scan for the address (REQ-008).
     if (repoPath) await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual' } });
     if (webUrl) await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual', kind: 'web' } });
@@ -1758,6 +1854,18 @@ function bindHandlers() {
     if (e.key === 'Escape' && byId('webUrlModal').classList.contains('open')) closeWebUrlModal();
   });
 
+  // Repo access token (REQ-009).
+  byId('repoPath').addEventListener('input', syncRepoTokenField);
+  byId('token-modal-close-btn').addEventListener('click', fire(closeRepoTokenModal));
+  byId('token-modal-cancel-btn').addEventListener('click', fire(closeRepoTokenModal));
+  byId('token-modal-save-btn').addEventListener('click', fire(saveRepoToken));
+  byId('repoTokenModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeRepoTokenModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && byId('repoTokenModal').classList.contains('open')) closeRepoTokenModal();
+  });
+
   // Delegated: per-project buttons carry their values in data-* attributes.
   byId('projects-list-tbody').addEventListener('click', fire((e) => {
     const target = e.target instanceof Element ? e.target.closest('button[data-action]') : null;
@@ -1766,6 +1874,7 @@ function bindHandlers() {
     if (action === 'scan-project') return triggerManualScan(projectId, projectName);
     if (action === 'web-scan-project') return triggerWebScan(projectId, projectName);
     if (action === 'edit-web-url') return openWebUrlModal(projectId);
+    if (action === 'edit-repo-token') return openRepoTokenModal(projectId);
     return undefined;
   }));
 }

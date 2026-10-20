@@ -11,6 +11,8 @@ export function createProjectRouter(db: Pool, scanRoots: readonly string[] = [],
   router.get('/projects', guard('projects:read'), controller.listProjects);
   router.post('/projects', guard('projects:write'), controller.createProject);
   router.patch('/projects/:id', guard('projects:write'), controller.updateProject);
+  // REQ-009 P-29: no DELETE route on purpose (D-262); a new PUT replaces the token.
+  router.put('/projects/:id/repo-credential', guard('integrations:write'), controller.setRepoCredential);
 
   return router;
 }

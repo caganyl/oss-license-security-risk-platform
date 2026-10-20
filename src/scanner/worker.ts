@@ -35,6 +35,7 @@ import { computeFindingFingerprint } from '../analysis/findingFingerprint';
 import { normalizeLicense } from '../analysis/licenseNormalizer';
 import { type DependencyEnricher, type EnrichmentResult, disabledEnrichment, enrichmentKeyOf } from '../enrichment';
 import { computeBudgetMs } from '../enrichment/budget';
+import { noRegistryEcosystem } from '../enrichment/coordinates';
 import { resolveEffectiveLicense } from '../enrichment/effectiveLicense';
 import { sanitizeText } from '../enrichment/text';
 import { localDateString, systemClock, type AppClock } from '../lib/clock';
@@ -840,7 +841,12 @@ export class ScanWorker {
         // unchanged and runs on `policyInput` (fingerprint formula unchanged,
         // D-73); a `disabled` key with a lock hint gives exactly `dep.licenses` (F2).
         const enrichKey = enrichmentKeyOf(dep);
-        const enriched = enrichKey === null ? undefined : enrichment.outcomes.get(enrichKey);
+        const registryOutcome = enrichKey === null ? undefined : enrichment.outcomes.get(enrichKey);
+        // REQ-011 D-319/D-320: PHP and Swift have no registry license source.
+        // They are stored as `disabled` ("no enricher", contract 4.2), never as
+        // the pre-F3 NULL/NULL pair: a `composer.lock` license becomes
+        // `lockfile (unverified)` (AC-P40-7), Swift gets `none`.
+        const enriched = registryOutcome ?? (noRegistryEcosystem(dep.ecosystem) ? noRegistryOutcome(scope) : undefined);
         const resolved = enriched
           ? resolveEffectiveLicense({
               status: enriched.status,
@@ -1378,6 +1384,23 @@ export class ScanWorker {
 }
 
 /** Retry log line (AC-P13-8): attempt n/max, next attempt time, shortened error. */
+/**
+ * Stored enrichment fields of a PHP/Swift dependency (REQ-011 D-319, D-320):
+ * status `disabled`, no registry declaration, no archive, no lock
+ * integrity. `registry` only satisfies the type: `resolveEffectiveLicense`
+ * reads it for status `ok`, which never occurs here.
+ */
+function noRegistryOutcome(scope: Parameters<typeof isRuntimeScope>[0]): NonNullable<ReturnType<EnrichmentResult['outcomes']['get']>> {
+  return {
+    status: 'disabled',
+    registry: 'npm',
+    declaredLicense: null,
+    noticeStatus: isRuntimeScope(scope) ? 'not_attempted' : 'not_runtime',
+    noticeArchiveId: null,
+    lockIntegrity: null,
+  };
+}
+
 /** `.nuspec` `<id>` per NuGet enrichment key (= vulnerability key), for the OSV body name (ADR-008 Karar 13.2). */
 function canonicalNamesOf(enrichment: EnrichmentResult | undefined): Map<string, string> {
   const names = new Map<string, string>();

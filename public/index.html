@@ -193,6 +193,21 @@
     }
     .form-group { margin-bottom: 1.25rem; }
     .form-group label { display: block; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
+    .eco-fieldset { border: 0; padding: 0; margin-left: 0; margin-right: 0; min-width: 0; }
+    .eco-fieldset legend { padding: 0; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--text-main); }
+    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .eco-card {
+      display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.65rem 0.75rem; cursor: pointer;
+      background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .eco-card:hover { border-color: rgba(139, 92, 246, 0.5); }
+    .eco-card input { margin-top: 0.15rem; width: 1rem; height: 1rem; flex: none; accent-color: var(--primary); cursor: pointer; }
+    .eco-card strong { display: block; font-size: 0.875rem; color: var(--text-main); }
+    .eco-card small { display: block; margin-top: 0.15rem; font-size: 0.72rem; line-height: 1.35; color: var(--text-muted); word-break: break-word; }
+    .eco-card:has(input:checked) { border-color: var(--primary); background: rgba(139, 92, 246, 0.14); }
+    .eco-card:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+    @media (max-width: 520px) { .eco-grid { grid-template-columns: 1fr; } }
     .form-control {
       width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
       border-radius: 10px; padding: 0.75rem 1rem; color: white; font-family: inherit; font-size: 0.9rem;
@@ -733,15 +748,28 @@
         <small class="form-warning" id="webUrl-feature-warning" role="status"></small>
       </div>
 
-      <div class="form-group">
-        <label for="ecosystems">Teknoloji (ekosistem)</label>
-        <select id="ecosystems" class="form-control" multiple style="height: 80px;" aria-describedby="ecosystems-hint">
-          <option value="nodejs">Node.js (npm / Yarn)</option>
-          <option value="python">Python (pip / PyPI)</option>
-          <option value="dotnet">.NET (NuGet)</option>
-        </select>
-        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen).</small>
-      </div>
+      <fieldset class="form-group eco-fieldset" id="ecosystems" aria-describedby="ecosystems-hint">
+        <legend>Teknoloji (ekosistem)</legend>
+        <div class="eco-grid">
+          <label class="eco-card eco-auto">
+            <input type="checkbox" name="eco" value="auto" checked>
+            <span><strong>Otomatik algıla</strong><small>Önerilen. Repodaki tüm desteklenen dosyalar okunur.</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="nodejs">
+            <span><strong>Node.js</strong><small>package.json, package-lock.json, yarn.lock</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="python">
+            <span><strong>Python</strong><small>requirements*.txt, pyproject.toml</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="dotnet">
+            <span><strong>.NET</strong><small>packages.lock.json, project.assets.json, *.csproj</small></span>
+          </label>
+        </div>
+        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Yalnız belirli teknolojileri taramak istiyorsanız onları seçin; desteklenenler Node.js, Python ve .NET'tir.</small>
+      </fieldset>
 
       <div class="form-actions">
         <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Vazgeç</button>

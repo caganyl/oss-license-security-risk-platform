@@ -335,12 +335,34 @@ describe('AC-P36: counters, ecosystem default, zero-package warning', () => {
     }
   });
 
-  it('AC-P36-2: no ecosystem is preselected and the hint explains auto-detection', () => {
+  it('AC-P36-2: no technology is preselected ("Otomatik algıla" is) and the hint explains auto-detection', () => {
     const doc = new JSDOM(fs.readFileSync(repoPath('public', 'index.html'), 'utf8')).window.document;
-    const options = Array.from((doc.getElementById('ecosystems') as HTMLSelectElement).options);
-    expect(options.length).toBeGreaterThan(0);
-    expect(options.filter((o) => o.selected || o.hasAttribute('selected'))).toEqual([]);
-    expect(doc.getElementById('ecosystems-hint')?.textContent).toBe('Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen).');
+    const inputs = Array.from(doc.querySelectorAll<HTMLInputElement>('#ecosystems input[name="eco"]'));
+    expect(inputs.map((i) => i.value)).toEqual(['auto', 'nodejs', 'python', 'dotnet']);
+    expect(inputs.filter((i) => i.hasAttribute('checked')).map((i) => i.value)).toEqual(['auto']);
+    expect(doc.getElementById('ecosystems-hint')?.textContent).toMatch(/^Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır \(önerilen\)\./);
+  });
+
+  it('ecosystem cards: a technology turns auto off, auto clears the technologies, clearing all returns to auto; the POST body follows', async () => {
+    const p = loadPage({ 'POST /api/projects': () => ({ status: 201, body: { data: { id: P1, name: 'x' } } }), 'POST /api/scans': () => ({ status: 201, body: { data: scan() } }) });
+    await dashboardReady(p);
+    const box = (v: string) => p.doc.querySelector<HTMLInputElement>(`#ecosystems input[value="${v}"]`)!;
+    const toggle = (v: string) => box(v).click();
+    toggle('dotnet');
+    expect(box('auto').checked).toBe(false);
+    expect(box('dotnet').checked).toBe(true);
+    toggle('python');
+    toggle('auto');
+    expect(['nodejs', 'python', 'dotnet'].map((v) => box(v).checked)).toEqual([false, false, false]);
+    toggle('nodejs');
+    toggle('nodejs');
+    expect(box('auto').checked).toBe(true);
+    toggle('dotnet');
+    (p.doc.getElementById('projectName') as HTMLInputElement).value = 'Eco';
+    (p.doc.getElementById('repoPath') as HTMLInputElement).value = 'C:\\work\\eco';
+    (p.doc.getElementById('launch-btn') as HTMLButtonElement).click();
+    await waitFor(() => p.calls.some((c) => c.key === 'POST /api/projects'), 'project POST');
+    expect((p.calls.find((c) => c.key === 'POST /api/projects')!.body as { ecosystems: string[] }).ecosystems).toEqual(['dotnet']);
   });
 
   it('AC-P36-3: a completed dependency scan with 0 packages shows "Paket bulunamadı" and likely causes; web scans and non-zero scans do not', async () => {

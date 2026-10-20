@@ -2214,8 +2214,28 @@ function closeModal() {
   byId('webUrl').value = '';
   byId('repoToken').value = '';
   byId('repoTokenGroup').hidden = true;
-  // AC-P36-2: the next project starts again with no ecosystem preselected (auto-detect).
-  Array.from(byId('ecosystems').options).forEach((o) => { o.selected = false; });
+  // AC-P36-2: the next project starts again with auto-detect (no ecosystem selected).
+  ecoInputs().forEach((input) => { input.checked = input.value === 'auto'; });
+}
+
+function ecoInputs() {
+  return Array.from(byId('ecosystems').querySelectorAll('input[name="eco"]'));
+}
+
+/** Selected ecosystems; auto-detect (or nothing) -> [] which the server reads as "all" (D-275). */
+function selectedEcosystems() {
+  return ecoInputs().filter((input) => input.checked && input.value !== 'auto').map((input) => input.value);
+}
+
+/** "Otomatik algıla" and the technology cards exclude each other; clearing every card returns to auto. */
+function syncEcosystemChoice(e) {
+  const changed = e && e.target instanceof HTMLInputElement ? e.target : null;
+  if (!changed || changed.name !== 'eco') return;
+  const inputs = ecoInputs();
+  const auto = inputs.find((input) => input.value === 'auto');
+  if (changed === auto && auto.checked) inputs.forEach((input) => { if (input !== auto) input.checked = false; });
+  if (changed !== auto && changed.checked) auto.checked = false;
+  if (!inputs.some((input) => input.checked)) auto.checked = true;
 }
 
 // ── New project modal submission
@@ -2223,7 +2243,7 @@ async function launchScan() {
   const name = byId('projectName').value.trim();
   const repoPath = byId('repoPath').value.trim();
   const webUrl = byId('webUrl').value.trim();
-  const ecosystems = Array.from(byId('ecosystems').selectedOptions).map((o) => o.value);
+  const ecosystems = selectedEcosystems();
 
   if (!name) { showToast(TEXT.modal.nameRequired, 'error'); return; }
   if (!repoPath && !webUrl) { showToast(TEXT.modal.sourceRequired, 'error'); return; }
@@ -2593,6 +2613,7 @@ function bindHandlers() {
 
   // Repo access token (REQ-009).
   byId('repoPath').addEventListener('input', syncRepoTokenField);
+  byId('ecosystems').addEventListener('change', syncEcosystemChoice);
   byId('token-modal-close-btn').addEventListener('click', fire(closeRepoTokenModal));
   byId('token-modal-cancel-btn').addEventListener('click', fire(closeRepoTokenModal));
   byId('token-modal-save-btn').addEventListener('click', fire(saveRepoToken));

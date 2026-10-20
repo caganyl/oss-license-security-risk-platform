@@ -171,6 +171,18 @@ Tarama, bağımlılıkları ayrıştırdıktan sonra her paketin lisansını her
   - `REGISTRY_TIMEOUT_MS` — istek başına zaman aşımı, varsayılan `15000` (1 ms – 24 sa).
   - `REGISTRY_CONCURRENCY` — eşzamanlı kayıt defteri isteği, varsayılan `4` (1–32).
 - **Vekil sunucu:** Kayıt defteri istemcisi ve (F4'ten beri) OSV/NVD istemcisi yalnız `HTTPS_PROXY`/`https_proxy` ve `NO_PROXY`/`no_proxy` okur (`HTTP_PROXY`/`ALL_PROXY` okunmaz; tüm uç noktalar HTTPS'tir). `NO_PROXY` girdileri virgül ve/veya boşlukla ayrılır, büyük/küçük harf duyarsızdır: `*` (hiç vekil kullanma), `host`, `.alan`, `*.alan` veya `alan` (`example.com`, `a.example.com`'u kapsar, `badexample.com`'u kapsamaz); isteğe bağlı `:port` hedefin portuyla eşleşmelidir. IP adresleri birebir eşleşir; **CIDR (`10.0.0.0/8`) desteklenmez.** `HTTPS_PROXY` geçerli bir `http(s)://` adresi değilse hiçbir kayıt defteri/OSV/NVD bağlantısı açılmaz; paketler `unreachable` (kayıt defteri) veya "kontrol edilemedi" (OSV) sayılır. Vekil adresi kimlik bilgisi içerebilir; loglara ve hata metinlerine yazılmaz.
+- **Kurumsal HTTPS denetimi yapan vekil (REQ-010 r2):** Bazı şirket vekilleri HTTPS trafiğini
+  kendi kök sertifikalarıyla yeniden imzalar. Uygulama açılışta işletim sisteminin (Windows
+  sertifika deposu) güvenilir köklerini Node'un listesine ekler; ek ayar gerekmez ve sertifika
+  doğrulaması kapatılmaz. Açılışta `Sistem sertifika deposundan N kök sertifika eklendi` yazar.
+  Kapatmak için `USE_SYSTEM_CA=off`. Bu olmadan OSV/NVD istekleri sertifika hatasıyla düşer ve
+  tarama satırında **Kontrol edilemedi** görünür ("✓ Temiz" yalnız sorgu tamamlandıysa yazar).
+- **.NET ve git repoları:** `obj/project.assets.json` derleme çıktısıdır, git'e girmez. Bu yüzden
+  aynı proje yerel klasörden (derlenmişse) tam bağımlılık ağacıyla, git/TFS'ten ise yalnız
+  `.csproj`'daki doğrudan paketlerle taranır. TFS/git taramasında da tam ağaç için projede NuGet
+  kilit dosyasını açın (`<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>`) ve
+  oluşan `packages.lock.json` dosyalarını commit edin. Next.js/Nuxt derleme klasörleri (`.next`,
+  `.nuxt`) taranmaz.
 - **Vekil ve OSV/NVD (F4 ile değişti):** F3'te OSV/NVD istekleri vekil kullanmıyordu ve vekilli ağda sessizce "açık yok" sonucu verebiliyordu. F4'ten itibaren bu istekler de yukarıdaki `HTTPS_PROXY`/`NO_PROXY` kurallarıyla gider; ulaşılamayan OSV artık "açık yok" sayılmaz, taramanın güvenlik açığı verisi `partial`/`unavailable` olarak işaretlenir (aşağıdaki F4 bölümü).
 - **Kurumsal TLS denetimi:** Node kendi kök sertifika deposunu kullanır, Windows sertifika deposunu okumaz (Windows deposu yalnız git/clone için geçerlidir, yukarıdaki "Kurumsal vekil sunucu" notuna bakın). TLS denetimi yapan ağda şirket kök sertifikasını PEM dosyası olarak verin. Değişken süreç başlarken okunur, bu yüzden `npm start`'tan önce aynı PowerShell oturumunda tanımlanmalıdır:
 
@@ -361,9 +373,11 @@ ve izin listesi dışındaki adresler atılır.
 
 ## Tek tıkla çıktılar (PDF, Excel, CSV, NOTICE)
 
-REQ-007 (F6) P-24 / ADR-009 Karar 7–9. Tamamlanmış her tarama satırında (pano ve tarama
-geçmişi) sırasıyla `PDF`, `Excel`, `CSV`, `NOTICE` ve `SBOM` bağlantıları vardır; ilk dördü
-dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>` bağlantıları). Çıktılar istek anında yalnız veritabanından üretilir:
+REQ-007 (F6) P-24 / ADR-009 Karar 7–9; REQ-010 P-38. Tamamlanmış her tarama satırında (pano ve
+tarama geçmişi) tek bir **Raporlar** menüsü vardır; her seçenek bir cümleyle açıklanır:
+*Yönetici raporu (PDF)*, *Ayrıntılı tablo (Excel)*, *Paket listesi (CSV)*, *Lisans bildirimi
+(NOTICE)* ve *SBOM*. İlk dördü dosyayı ara ekran olmadan doğrudan indirir (düz `<a download>`
+bağlantıları). Web taraması satırında yalnız web raporu (PDF) ve bulgu listesi (CSV) bulunur. Çıktılar istek anında yalnız veritabanından üretilir:
 `reports` satırı, dosya, denetim satırı veya ağ isteği oluşmaz (Raporlar ekranındaki asenkron
 raporlar aynen sürer).
 
@@ -390,14 +404,27 @@ raporlar aynen sürer).
   bulunur (formül enjeksiyonu kalkanı). Aynı tarama için CSV bayt bayt aynıdır; PDF ve Excel üretim
   zamanını içerdiği için istekten isteğe özet değişebilir. Türkçe yerel ayarlı Excel'de (ayırıcı
   `;`) `.xlsx` çıktısını kullanın.
-- **Güvenlik açığı verisi satırı (V-12):** Excel ve PDF raporlarının `Summary` bölümünün sonunda
-  `Vulnerability Data Status` satırı bulunur: `complete`, `partial (some packages could not be
-  checked)`, `unavailable (vulnerability source unreachable)`, `disabled (lookup turned off)`
-  veya (F4 öncesi taramalar) `not checked`. Asenkron raporlarda da aynıdır.
-- **PDF kesinti notu:** PDF'teki `Security Findings` (40 satır), `License Findings` (40) ve
-  `Dependency Inventory` (50) tabloları kesildiğinde tablonun altına
-  `Showing first <n> of <toplam>; see the Excel or CSV export for the full list.` yazılır. Tam
-  liste Excel/CSV'dedir.
+- **Yönetici raporu (PDF, REQ-010):** PDF Türkçedir ve yöneticiye göre kurgulanmıştır:
+  - **Genel durum:** tek cümlelik sade değerlendirme (kritik açık var / yüksek riskli bulgu var /
+    iyileştirme önerileri var / belirgin risk yok), paket, güvenlik açığı (önem dağılımıyla) ve
+    lisans uyarısı sayıları; son satır `Güvenlik açığı verisi` (`tam`, `kısmi …`, `alınamadı …`,
+    `kapalı …`, `kontrol edilmedi`).
+  - **Ne yapılmalı?:** en fazla 10 maddelik öncelikli aksiyon listesi ("X paketini A sürümünden B
+    sürümüne yükseltin", düzeltmesi olmayan açıklar için alternatif değerlendirme, yüksek riskli
+    lisanslar için hukuk birimi).
+  - Türkçe başlıklı, sütun hizalı tablolar: `Güvenlik açıkları` (40 satır), `Lisans bulguları` (40)
+    ve `Paket envanteri` (50). Kesilen tablonun altında `İlk <n> / <toplam> kayıt gösteriliyor; tam
+    liste için Excel veya CSV çıktısına bakın.` yazar.
+  - Sonda kısa `Terimler` kutusu, "hukuki görüş değildir" notu ve tarama kimliği.
+  - Türkçe karakterler için sistem fontu (Arial/Segoe UI; Linux'ta DejaVu/Liberation) kullanılır;
+    font yoksa ş/ğ/ı/İ ASCII'ye katlanır. Asenkron raporlarda da aynıdır.
+- **Excel, CSV, NOTICE, SBOM:** makine tarafından okunan biçimler olduğu için İngilizce
+  başlıklarını korur. Excel `Summary` sayfasının son satırı `Vulnerability Data Status`'tur:
+  `complete`, `partial (some packages could not be checked)`, `unavailable (vulnerability source
+  unreachable)`, `disabled (lookup turned off)` veya (F4 öncesi taramalar) `not checked`.
+- **Sistem durumu (REQ-010):** Arayüzdeki *Sistem Durumu* ekranı hangi özelliğin açık/kapalı
+  olduğunu ve kapalıysa hangi `.env` ayarıyla açılacağını gösterir (`GET /api/system/features`;
+  yalnız açık/kapalı ve sayı döner, ayar değerleri, host adları veya anahtarlar dönmez).
 
 ## Komut satırı istemcisi (`oss-risk` CLI)
 

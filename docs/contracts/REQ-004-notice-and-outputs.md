@@ -2,9 +2,10 @@
 
 - **Status:** Accepted — Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10;
   1.4.0 revizyonu Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11;
-  1.5.0 revizyonu Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11
+  1.5.0 revizyonu Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11;
+  1.6.0 revizyonu Onaylandı (REQ-010 manifest onayı, 2026-10-20)
 - **status:** approved
-- **Sürüm:** 1.5.0 (revizyon: bkz. bölüm 13)
+- **Sürüm:** 1.6.0 (revizyon: bkz. bölüm 13)
 - **Tarih:** 2026-10-10 (1.4.0 ve 1.5.0: 2026-10-11)
 - **Revizyon dayanağı (1.5.0):** `docs/product/REQ-007.md` r1 (AC-P24-3, AC-P24-4, AC-P24-8,
   AC-P24-10, AC-P24-11, AC-P24-12; D-186, D-187, D-188),
@@ -932,7 +933,12 @@ kaydından gelen hücreler başta olmak üzere. 1.0.0'da kalkan yalnız
   Mevcut 15 satırın (`Report Type` … `License Violations`) sırası, metni ve tipleri değişmez;
   yeni satır 16. veri satırıdır (başlık hariç). Tüm Excel rapor türlerinde (aynı
   `renderExcelReport`) bulunur.
-- **PDF:** `Summary` anahtar-değer listesinin **son** öğesi:
+- **PDF (1.6.0, REQ-010 P-37):** PDF Türkçedir. "Genel durum" anahtar-değer listesinin **son**
+  öğesi `Güvenlik açığı verisi: <Türkçe metin>`; Türkçe eşleme: `complete` → `tam`, `partial` →
+  `kısmi (bazı paketler kontrol edilemedi)`, `unavailable` → `alınamadı (güvenlik açığı kaynağına
+  ulaşılamadı)`, `disabled` → `kapalı (sorgu devre dışı)`, `NULL`/tanınmayan → `kontrol edilmedi`.
+  Excel metinleri (yukarıdaki tablo) değişmez. 1.5.0 metni (tarihsel):
+  **PDF (1.5.0):** `Summary` anahtar-değer listesinin **son** öğesi:
   `Vulnerability Data Status: <eşleme metni>` (mevcut `writePdfKeyValues` biçimi; `License
   violations` satırından sonra). Tüm PDF rapor türlerinde bulunur.
 - Asenkron (`ExportWorker`) ve eşzamanlı (REQ-007 `renderExport`) yollar aynı oluşturucuyu
@@ -954,6 +960,10 @@ kaydından gelen hücreler başta olmak üzere. 1.0.0'da kalkan yalnız
 
   `Showing first <n> of <N>; see the Excel or CSV export for the full list.`
 
+- **1.6.0 (REQ-010 P-37):** Bölüm adları `Güvenlik açıkları`, `Lisans bulguları`, `Paket envanteri`;
+  sınırlar aynı. Not metni Türkçedir (birebir): `İlk <n> / <N> kayıt gösteriliyor; tam liste için
+  Excel veya CSV çıktısına bakın.` Tablolar sütun hizalıdır (28 karakter kesimi yerine sütun
+  genişliğine sığdırma ve `…`); sayfa sonunda başlık satırı tekrarlanır; boş tabloda `Kayıt yok.`
 - `N ≤ sınır` ise (`N = 0` ve `No records found.` dahil) satır **yoktur**. Not her tablo için
   ayrı değerlendirilir (bir PDF'te 0–3 not). Satır sayıları ve `writePdfRows` 28 karakter kesimi
   değişmez; not satırına kesim uygulanmaz.
@@ -1437,3 +1447,4 @@ ADR-006 ve repo kodu (`src/controllers/sbomController.ts`,
 | 1.3.0 | 2026-10-10 | **L-2 (REQ-005 güvenlik incelemesi):** `REGISTRY_ENRICHMENT` F4 anahtarlarıyla aynı ayrıştırmaya bağlandı: `on/off/true/false/1/0/yes/no` (harf duyarsız), boş/tanımsız → açık, **diğer değer → kapalı** + yalnız ad içeren tek uyarı (4.2 notu; C-24). F3'teki "geçersiz → açık" davranışı değişti. Çıktı biçimleri, OpenAPI ve `NOTICE format: 1` değişmez. ADR-006 Karar 14 ve REQ-004 AC-P14-16 metinlerinin bu karara göre güncellenmesi solution-architect / product-analyst işidir. | `docs/quality/security-reports/REQ-005-security-review.md` (L-2); REQ-005 contract 1.1.0 bölüm 7.1 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-10 |
 | 1.4.0 | 2026-10-11 | **REQ-006 F5 (NuGet):** `license_source` += `registry:nuget` (4.1); yeni `scan_dependencies.license_unclassified` (`file`/`url`) ve gösterimi (4.5; C-25…C-27); Excel `License Source` öncelik zinciri ve iki yeni metin (4.1, 5.1); NOTICE etiketi `nuget`, sıralama `npm` < `nuget` < `pypi`, NuGet tekillik anahtarı (3.3; C-28), NuGet alan notları (3.4), `.nupkg` lisans dosyaları (3.5), satır 7a NuGet `no_candidate` metni (C-31), satır 14'ün `dotnet` için kalkması (C-13 daraltıldı), `license_unclassified` öneki (4.3); `lock_integrity` NuGet anlamı (4.4; C-32); SBOM NuGet `L` ve purl `pkg:nuget/<id>@<sürüm>` harf biçimi korunarak (6); proje formu `.NET (NuGet)` seçeneği (7.1; C-33); `[registry]` sayımlarına NuGet, şablonlar değişmeden (8); `Dependencies.License` kuralı değişmez (C-29); `NOTICE format: 1` kalır (11; C-30); test yükümlülükleri (10); OpenAPI `info.version` 1.1.0 (bilgi amaçlı `LicenseSource` enum'una additive `registry:nuget`, `LicenseUnclassified` şeması). NuGet'siz taramalarda çıktılar 1.3.0 ile bayt bayt aynı. | `docs/product/REQ-006.md` r1 (AC-P20-17, -18, AC-P21-5…14, D-130, D-133, D-134, D-137, D-139, D-144); ADR-008 Karar 4, 9–12, 14–16 ve netleştirmeler 1–3, 12, 13 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11 |
 | 1.5.0 | 2026-10-11 | **REQ-007 F6:** Excel `Summary` son satırı ve PDF `Summary` son öğesi `Vulnerability Data Status` (beş sabit metin; 5.3; C-34); PDF `Security Findings` (40), `License Findings` (40), `Dependency Inventory` (50) tablolarında `N > sınır` iken `Showing first <n> of <N>; see the Excel or CSV export for the full list.` notu (5.4; C-35); NOTICE bağlantısı `download` + `aria-label`, `target`/`rel` kaldırıldı, `href` aynı; tarama satırı bağlantılarının tamamı REQ-007 contract bölüm 8'de (7; C-36); 5.1a ve 5.2'ye istisna notları; test yükümlülükleri (10); sürüm notu (11). Mevcut satır/sütunlar, NOTICE (`NOTICE format: 1`), SBOM ve OpenAPI (1.1.0) değişmez; göç yok. | `docs/product/REQ-007.md` r1 (AC-P24-8, -10, -11, -12; D-186, D-187, D-188); ADR-009 Karar 9, 10, N-7; `docs/contracts/REQ-007-cli-and-exports.md` 1.0.0 | Onaylandı (kullanıcı daimi talimatı, önerilen seçenek), 2026-10-11 |
+| 1.6.0 | 2026-10-20 | **REQ-010:** PDF bağımlılık raporu Türkçe ve yönetici odaklı (Genel durum, Ne yapılmalı?, Terimler); 5.3 PDF satırı `Güvenlik açığı verisi` + Türkçe eşleme (Excel değişmez); 5.4 Türkçe bölüm adları ve not metni, sınırlar aynı, sütun hizalı tablolar. Excel, CSV, NOTICE, SBOM ve OpenAPI değişmez; göç yok. | `docs/product/REQ-010.md` r1 (P-37, D-277…D-280) | Onaylandı (REQ-010 manifest onayı), 2026-10-20 |

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "req_id": "REQ-010",
+  "title": "REQ-010: Anlaşılır arayüz ve raporlar — Türkçe arayüz, sistem durumu, yönetici özeti (P-33…P-38)",
+  "status": "approved",
+  "approval": {
+    "approved_by": "Çağan Yılmaz (oturum içi yanıt, 2026-10-20: REQ-010 manifest sorusuna \"Onaylıyorum (Önerilen)\"; kapsam: arayüzün tamamen Türkçeleştirilmesi, terim açıklamaları/yardım, sistem durumu paneli, dashboard sayaçlarının düzeltilmesi, Node.js varsayılan seçim tuzağının kaldırılması, bağımlılık PDF'ine Türkçe yönetici özeti ve 'Ne yapılmalı?', indirme düğmelerinin açıklamalı tek menüde toplanması; yazma alanları src, public, tests, README.md; merge insan kapısında; Claude tarafından kaydedildi)",
+    "approved_at": "2026-10-20T10:40:00Z"
+  },
+  "references": {
+    "requirement": "docs/product/REQ-010.md",
+    "acceptance_criteria": "docs/product/REQ-010.md",
+    "contracts": [
+      "docs/contracts/REQ-010-system-features.md",
+      "docs/contracts/REQ-007-cli-and-exports.md",
+      "docs/contracts/REQ-008-web-scan.md",
+      "docs/contracts/REQ-009-repo-credential.md"
+    ],
+    "adrs": [
+      "docs/architecture/adr/ADR-009-cli-ci-ve-tek-tik-ciktilar.md",
+      "docs/architecture/adr/ADR-010-web-url-guvenlik-taramasi.md"
+    ]
+  },
+  "owners": [
+    { "agent": "backend-engineer",  "write_paths": ["src", "README.md"] },
+    { "agent": "frontend-engineer", "write_paths": ["public/app.js", "public/index.html"] },
+    { "agent": "qa-automation",     "write_paths": ["tests"] }
+  ]
+}

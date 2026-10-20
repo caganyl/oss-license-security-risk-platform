@@ -11,6 +11,475 @@
 // data, so no escaping helper is needed; inline on* handlers are not used.
 // ════════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════════
+// User-visible texts (REQ-010 P-33, D-271): every string the page shows is
+// kept in this one dictionary. Turkish only; no multi-language machinery.
+// Parameterised texts are small functions; their arguments are rendered as
+// text by el()/textContent like any other value.
+// ════════════════════════════════════════════════════════════════════
+const TEXT = {
+  product: 'OSS Risk Platformu',
+  locale: 'tr-TR',
+  common: {
+    dash: '—',
+    unexpected: 'Beklenmeyen bir hata oluştu.',
+    unknownError: 'bilinmeyen hata',
+    requestFailed: (status) => `İstek başarısız oldu (HTTP ${status}).`,
+    retryAfter: (seconds) => ` ${seconds} saniye sonra tekrar deneyin.`,
+    network: 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.',
+    unexpectedResponse: 'Sunucudan beklenmeyen bir yanıt geldi.',
+    defaultBranch: 'varsayılan dal',
+  },
+  health: {
+    ok: 'Veritabanı bağlı',
+    dbError: 'Veritabanı hatası',
+    offline: 'Sunucuya ulaşılamıyor',
+  },
+  time: {
+    justNow: 'az önce',
+    minutes: (n) => `${n} dk önce`,
+    hours: (n) => `${n} saat önce`,
+    days: (n) => `${n} gün önce`,
+  },
+  bytes: ['bayt', 'KB', 'MB'],
+  status: {
+    pending: 'Bekliyor',
+    queued: 'Sırada',
+    running: 'Taranıyor',
+    completed: 'Tamamlandı',
+    failed: 'Başarısız',
+    cancelled: 'İptal',
+    timeout: 'Zaman aşımı',
+  },
+  severity: { critical: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük', info: 'Bilgi', none: 'Yok' },
+  licenseRisk: { critical: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük', safe: 'Güvenli', unknown: 'Bilinmiyor' },
+  findingStatus: {
+    open: 'Açık',
+    in_review: 'İncelemede',
+    resolved: 'Çözüldü',
+    accepted: 'Risk kabul edildi',
+    false_positive: 'Hatalı tespit',
+    wont_fix: 'Düzeltilmeyecek',
+  },
+  findingType: { security: 'Güvenlik açığı', license: 'Lisans', copyright: 'Telif' },
+  trigger: {
+    manual: 'Elle',
+    scheduled: 'Zamanlanmış',
+    pre_release: 'Sürüm öncesi',
+    pull_request: 'Pull request',
+    file_upload: 'Dosya yükleme',
+  },
+  ecosystem: {
+    nodejs: 'Node.js', python: 'Python', java: 'Java', dotnet: '.NET', go: 'Go', php: 'PHP', ruby: 'Ruby', container: 'Konteyner', other: 'Diğer',
+  },
+  role: {
+    admin: 'Yönetici',
+    security_analyst: 'Güvenlik analisti',
+    legal_reviewer: 'Hukuk inceleyici',
+    developer: 'Geliştirici',
+    manager: 'Yönetici (iş birimi)',
+  },
+  userStatus: { active: 'Etkin', inactive: 'Pasif', pending: 'Onay bekliyor' },
+
+  // AC-P33-4 (D-272): API messages stay English; the page shows these texts by `code`.
+  errors: {
+    unauthenticated: 'Oturumunuz yok veya sona erdi. Lütfen yeniden giriş yapın.',
+    invalid_credentials: 'Parola hatalı. Kontrol edip tekrar deneyin.',
+    invalid_password: 'Parola kurallara uymuyor. En az 12 karakterlik, tahmin edilmesi zor bir parola seçin.',
+    forbidden: 'Bu işlem için yetkiniz yok. Gerekirse yöneticinizden yetki isteyin.',
+    not_found: 'Kayıt bulunamadı; silinmiş olabilir. Sayfayı yenileyip tekrar deneyin.',
+    path_not_allowed: 'Bu yerel klasör taranamaz: klasör, sunucuda SCAN_ROOTS ayarıyla izin verilen bir kökün altında olmalı. Yöneticinizden klasörü eklemesini isteyin veya https repo adresi girin.',
+    repo_url_not_allowed: 'Bu repo adresi kabul edilmedi. Yalnız https:// ile başlayan, kullanıcı adı veya parola içermeyen bir repo adresi girin (Azure DevOps / TFS, GitHub, GitLab).',
+    project_source_missing: 'Projede taranacak kod konumu yok. Projeye bir yerel klasör veya https repo adresi ekleyin.',
+    web_url_invalid: 'Web adresi geçersiz. http:// veya https:// ile başlayan, kullanıcı bilgisi ve # içermeyen tam bir adres girin.',
+    web_url_not_allowed: 'Bu web adresi taranamaz: sunucu WEB_SCAN_ALLOWED_HOSTS listesinde değil. Yöneticinizden eklemesini isteyin (Sistem Durumu ekranına bakın).',
+    project_web_url_missing: 'Projede web adresi tanımlı değil. Projeler ekranındaki “Web adresi” düğmesiyle ekleyin.',
+    invalid_token: 'Token geçersiz: boşluk içermemeli ve en fazla 1024 karakter olmalı. Token’ı yeniden kopyalayıp yapıştırın.',
+    repo_credential_not_applicable: 'Token yalnız https:// ile başlayan repo adresleri için kaydedilebilir.',
+    too_many_attempts: 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.',
+    payload_too_large: 'Gönderilen veri çok büyük. Daha kısa bir değerle tekrar deneyin.',
+    export_busy: 'Sunucu şu anda başka raporlar hazırlıyor. Birkaç saniye sonra tekrar deneyin.',
+    origin_rejected: 'İstek güvenlik nedeniyle reddedildi. Sayfayı sunucunun kendi adresinden açıp tekrar deneyin.',
+    host_rejected: 'İstek güvenlik nedeniyle reddedildi. Sayfayı sunucunun kendi adresinden açıp tekrar deneyin.',
+    internal_error: 'Sunucuda beklenmeyen bir hata oluştu. Tekrar deneyin; sürerse yöneticinizden sunucu kayıtlarını kontrol etmesini isteyin.',
+  },
+
+  // AC-P33-5 (D-283): REQ-009 contract section 5 class sentences -> Turkish headline.
+  cloneErrors: [
+    ['Repository requires authentication: add a repo access token to the project, or list the host in GIT_WINDOWS_AUTH_HOSTS.',
+      'Repo giriş istiyor: projeye bir repo erişim anahtarı (PAT) ekleyin veya yöneticinizden sunucuyu GIT_WINDOWS_AUTH_HOSTS listesine eklemesini isteyin.'],
+    ['Branch not found in the repository.', 'İstenen dal (branch) repoda bulunamadı.'],
+    ['Repository not found or no access.', 'Repo bulunamadı veya erişim izni yok. Adresi ve token’ın Code → Read yetkisini kontrol edin.'],
+    ['TLS certificate of the git server is not trusted.', 'Git sunucusunun TLS sertifikasına güvenilmiyor. Yöneticiniz kurumun kök sertifikasını sunucuya tanıtmalı.'],
+    ['Git server could not be reached.', 'Git sunucusuna ulaşılamadı. Ağ/VPN bağlantısını kontrol edip taramayı yeniden başlatın.'],
+  ],
+
+  auth: {
+    checking: 'Oturum kontrol ediliyor...',
+    setupTitle: 'Yönetici parolasını belirleyin',
+    loginTitle: 'Giriş yap',
+    setupIntro: 'Bu kurulum için henüz parola belirlenmemiş. Kurulumu tamamlamak için bir parola seçin; ardından otomatik olarak giriş yapılır.',
+    loginIntro: 'Devam etmek için parolanızı girin.',
+    newPassword: 'Yeni parola',
+    passwordLabel: 'Parola',
+    confirmPassword: 'Parolayı tekrar girin',
+    passwordHint: (min) => `En az ${min} karakter. Sunucu da ayrıca doğrular.`,
+    tooShort: (min) => `Parola en az ${min} karakter olmalı.`,
+    tooLong: (max) => `Parola en fazla ${max} karakter olabilir.`,
+    mismatch: 'Parolalar eşleşmiyor.',
+    required: 'Parola gerekli.',
+    submitSetup: ' Parolayı kaydet ve devam et',
+    submitLogin: ' Giriş yap',
+    alreadySet: 'Parola zaten belirlenmiş. Lütfen giriş yapın.',
+    notSetYet: 'Henüz parola belirlenmemiş. Devam etmek için bir parola oluşturun.',
+    sessionEnded: 'Oturumunuz sona erdi. Lütfen yeniden giriş yapın.',
+    signedOut: 'Bu tarayıcı oturumundan çıkış yaptınız.',
+    alreadyEnded: 'Oturumunuz zaten sona ermişti. Lütfen yeniden giriş yapın.',
+    logoutFailed: 'Çıkış yapılamadı',
+    verifyFailed: (msg) => `Oturum doğrulanamadı: ${msg}`,
+    signedIn: 'Giriş yapıldı',
+    requestFailed: 'İstek başarısız oldu',
+  },
+
+  views: {
+    dashboard: { title: 'Genel Bakış', subtitle: 'Tüm projelerinizin lisans ve güvenlik durumunu tek bakışta gösterir; sayılar her projenin en son tamamlanmış bağımlılık taramasından hesaplanır.' },
+    scans: { title: 'Tarama Geçmişi', subtitle: 'Başlatılan taramaları (en yeni 50) durumları, sonuçları ve raporlarıyla birlikte listeler.' },
+    findings: { title: 'Güvenlik ve Lisans Bulguları', subtitle: 'Seçtiğiniz taramada bulunan güvenlik açıklarını ve lisans risklerini, düzeltme bilgisiyle birlikte gösterir.' },
+    projects: { title: 'Projeler', subtitle: 'Taranan kod tabanlarını ve web adreslerini yönetir; buradan tarama başlatabilir, repo erişim anahtarı ekleyebilirsiniz.' },
+    sbom: { title: 'SBOM Merkezi', subtitle: 'Bir taramanın yazılım malzeme listesini (SBOM) müşteri ve denetimler için standart biçimlerde üretip indirmenizi sağlar.' },
+    users: { title: 'Kullanıcılar ve Roller', subtitle: 'Platforma erişebilen kullanıcıları ve rollerini (yetkilerini) gösterir.' },
+    'api-keys': { title: 'API Anahtarları', subtitle: 'oss-risk komut satırı aracı ve CI hatları için kişisel API anahtarınızı oluşturur veya iptal eder.' },
+    system: { title: 'Sistem Durumu', subtitle: 'Hangi özelliklerin açık veya kapalı olduğunu ve kapalı olanların nasıl açılacağını gösterir.' },
+    help: { title: 'Yardım', subtitle: 'Platformun nasıl kullanılacağını adım adım anlatır ve ekranlarda geçen terimleri açıklar.' },
+  },
+
+  scans: {
+    lastUpdated: (time) => `Son güncelleme: ${time}`,
+    kindWeb: 'Web',
+    kindWebTitle: 'Web (URL) taraması',
+    grade: (g) => `Güvenlik notu ${g}`,
+    clean: '✓ Temiz',
+    unchecked: 'Kontrol edilemedi',
+    uncheckedHint: 'Güvenlik açığı kaynağına (OSV) ulaşılamadı veya sorgu kapalı; paketler kontrol edilmedi. Sistem Durumu ekranına ve proxy/sertifika ayarlarına bakın, sonra yeniden tarayın.',
+    partial: 'Kısmen kontrol edildi',
+    partialHint: 'Bazı paketler kontrol edilemedi; sonuç eksik olabilir. Yeniden taramayı deneyin.',
+    critical: (n) => `${n} Kritik`,
+    high: (n) => `${n} Yüksek`,
+    medLow: (n) => `${n} Orta/Düşük`,
+    licenseOk: 'Sorun yok',
+    licenseAlerts: (n) => `${n} uyarı`,
+    warnings: (n) => `${n} uyarı`,
+    noPackages: 'Paket bulunamadı',
+    noPackagesHint: 'Olası nedenler: yanlış klasör veya repo seçildi; seçilen ekosistem projeyi kapsamıyor (boş bırakmak tümünü algılar); projede kilit/manifest dosyası yok (ör. package-lock.json, packages.lock.json veya *.csproj, requirements.txt).',
+    historyEmpty: 'Henüz tarama yok. Genel Bakış ekranındaki “Yeni proje taraması” düğmesiyle veya Projeler ekranındaki “Şimdi tara” düğmesiyle bir tarama başlatın.',
+    historyFailed: 'Tarama geçmişi yüklenemedi',
+    notFound: 'Tarama bulunamadı',
+    completedToast: (name) => `"${name}" taraması tamamlandı.`,
+    failedToast: (name) => `"${name}" taraması başarısız oldu.`,
+    scheduling: (name) => `"${name}" için tarama planlanıyor...`,
+    schedulingWeb: (name) => `"${name}" için web taraması planlanıyor...`,
+    queued: 'Tarama kuyruğa alındı.',
+    webQueued: 'Web taraması kuyruğa alındı.',
+    triggerFailed: 'Tarama başlatılamadı',
+    webTriggerFailed: 'Web taraması başlatılamadı',
+  },
+
+  // P-38: one "Raporlar" menu per completed scan row; descriptions are one sentence each.
+  reports: {
+    button: ' Raporlar',
+    menuLabel: 'Raporlar',
+    pdf: ['Yönetici raporu (PDF)', 'Genel durum, risk özeti ve “Ne yapılmalı?” listesi; yöneticilerle paylaşmak için.'],
+    excel: ['Ayrıntılı tablo (Excel)', 'Tüm paketler, lisanslar ve bulgular; filtreleyip ayrıntılı incelemek için.'],
+    csv: ['Paket listesi (CSV)', 'Paket ve lisans listesi; başka araçlara aktarmak için düz metin.'],
+    notice: ['Lisans bildirimi (NOTICE)', 'Lisans ve telif bildirimleri; ürünle birlikte dağıtmak için.'],
+    sbom: ['SBOM', 'Müşteri ve denetimler için makine okunur yazılım malzeme listesi (CycloneDX JSON).'],
+    webPdf: ['Web güvenlik raporu (PDF)', 'Güvenlik notu, bulgular ve öneriler; yöneticilerle paylaşmak için.'],
+    webCsv: ['Bulgu listesi (CSV)', 'Tüm web bulguları; takip etmek veya başka araçlara aktarmak için.'],
+  },
+
+  stats: { unavailable: '—' },
+
+  vuln: {
+    runLabels: {
+      completed: 'Tamamlandı',
+      partial: 'Kısmi',
+      failed: 'Başarısız',
+      interrupted: 'Yarıda kesildi',
+      disabled: 'Atlandı (sorgu kapalı)',
+    },
+    projectStatus: {
+      partial: 'güvenlik açığı verisi kısmi',
+      unavailable: 'güvenlik açığı verisine ulaşılamadı',
+      disabled: 'güvenlik açığı sorgusu kapalı',
+    },
+    notChecked: 'henüz kontrol edilmedi',
+    rowRecheck: 'Günlük yeniden kontrol',
+    rowLastRun: 'Son yeniden kontrol',
+    rowNewFindings: 'Yeni bulgular (son kontrol)',
+    rowUnchecked: 'Kontrol edilemeyen paketler (son kontrol)',
+    rowNext: 'Sonraki kontrol',
+    rowReopened: 'Yeniden açılan risk kabulleri (son 7 gün)',
+    rowExpiry: 'Son süre dolumu kontrolü',
+    recheckOff: 'Kapalı (VULNERABILITY_RECHECK=off)',
+    lookupOff: 'Kapalı (VULNERABILITY_LOOKUP=off)',
+    every: (h) => `Her ${h} saatte bir`,
+    runningSince: (t) => `Sürüyor (başlangıç: ${t})`,
+    neverRun: 'Henüz çalışmadı',
+    paused: 'Duraklatıldı',
+    dueNow: 'Şimdi bekleniyor',
+    notEvaluated: 'Henüz yapılmadı',
+    allComplete: 'Tüm projelerin güvenlik açığı verisi tam.',
+    incomplete: (n) => `Güvenlik açığı verisi eksik projeler (${n})`,
+    truncated: 'İlk 500 proje gösteriliyor.',
+    loading: 'Güvenlik açığı verisi durumu yükleniyor...',
+    loadFailed: 'Güvenlik açığı verisi durumu alınamadı.',
+  },
+
+  projects: {
+    empty: 'Henüz proje yok. Yukarıdaki “Proje ekle” düğmesiyle ilk projenizi ekleyin.',
+    loadFailed: 'Projeler yüklenemedi',
+    scanNow: ' Şimdi tara',
+    webScan: ' Web taraması',
+    webUrl: ' Web adresi',
+    webUrlAria: 'Web adresini düzenle',
+    tokenSet: ' Token tanımlı',
+    tokenAdd: ' Token ekle',
+    tokenSetTitle: 'Bu repo için bir erişim anahtarı (PAT) tanımlı; değiştirmek için yenisini kaydedin.',
+    tokenAddTitle: 'Özel (giriş isteyen) bir repo için erişim anahtarı (PAT) ekleyin.',
+    activeMode: 'aktif',
+    activeModeTitle: 'Aktif web taraması (OWASP ZAP ile gerçek saldırı istekleri)',
+    subtitle: (name) => `Proje: ${name}`,
+    tokenSubtitle: (name, repo) => `Proje: ${name} · ${repo}`,
+    tokenStateSet: 'Bu repo için zaten bir token tanımlı.',
+    tokenStateNone: 'Henüz token tanımlı değil.',
+    enterToken: 'Bir token girin',
+    tokenSaved: 'Repo erişim anahtarı kaydedildi. Kullanmak için taramayı başlatın.',
+    tokenSaveFailed: 'Token kaydedilemedi',
+    webSaved: 'Web hedefi kaydedildi.',
+    webSaveFailed: 'Web adresi kaydedilemedi',
+  },
+
+  modal: {
+    nameRequired: 'Proje adı gerekli',
+    sourceRequired: 'Bir repo yolu, bir web adresi veya ikisini birden girin',
+    creating: 'Oluşturuluyor...',
+    launch: 'Taramayı başlat',
+    launchFailed: 'Proje oluşturulamadı',
+    tokenNotSaved: (name, reason) => `"${name}" projesi oluşturuldu ancak token kaydedilemedi${reason}. Projeler ekranındaki token düğmesiyle ekleyip taramayı başlatın.`,
+    queued: (name) => `"${name}" için tarama kuyruğa alındı. Sonuçlar kısa süre içinde görünecek.`,
+    // AC-P35-3: shown only when /api/system/features says the feature is off.
+    localScanOff: 'Yerel klasör taraması şu anda kapalı (sunucuda SCAN_ROOTS boş); yalnız https repo adresi girebilirsiniz. Açmak için yöneticiniz .env dosyasındaki SCAN_ROOTS ayarına izinli klasörleri yazıp uygulamayı yeniden başlatmalı.',
+    webScanOff: 'Web taraması şu anda kapalı (sunucuda WEB_SCAN_ALLOWED_HOSTS boş); girilen adres taranamaz. Açmak için yöneticiniz .env dosyasındaki WEB_SCAN_ALLOWED_HOSTS ayarına kendi/şirket sunucularını yazıp uygulamayı yeniden başlatmalı.',
+    repoTokensOff: 'Token kaydı şu anda kapalı: sunucuda ENCRYPTION_KEY tanımlı değil, girilen token kaydedilemez. Açmak için yöneticiniz .env dosyasına ENCRYPTION_KEY ekleyip uygulamayı yeniden başlatmalı.',
+  },
+
+  findings: {
+    loadingScans: 'Tamamlanmış taramalar yükleniyor...',
+    noCompleted: 'Tamamlanmış tarama yok',
+    fetchFailed: 'Taramalar alınamadı',
+    webOption: (project, host, date) => `${project} - Web ${host} (${date})`,
+    depOption: (project, ref, date) => `${project} - ${ref} (${date})`,
+    cvss: (score) => `CVSS ${score}`,
+    licenseAlert: 'Lisans uyarısı',
+    risk: (level) => `Risk: ${level}`,
+    licenseDescription: (pkg, license, policy) => `"${pkg}" paketi "${license}" lisansını kullanıyor; bu lisans etkin politika ("${policy}") kapsamında risk oluşturuyor. Hukuk birimiyle değerlendirin.`,
+    defaultPolicy: 'Varsayılan yasaklı lisans listesi',
+    unknownRisk: 'Bilinmeyen politika riski',
+    package: 'Paket: ',
+    type: 'Tür: ',
+    status: 'Durum: ',
+    purl: 'PURL: ',
+    fixedIn: 'Düzeltildiği sürüm: ',
+    noScanTitle: 'Tarama seçilmedi',
+    noScanHint: 'Bulgularını görmek için yukarıdan tamamlanmış bir tarama seçin. Liste boşsa önce Projeler ekranından bir tarama başlatın.',
+    cleanTitle: 'Bulgu yok',
+    cleanHint: 'Bu taramada güvenlik açığı veya lisans riski bulunmadı.',
+    loadFailed: 'Bulgular yüklenemedi',
+    webLoadFailed: 'Web bulguları yüklenemedi',
+  },
+
+  web: {
+    engines: {
+      complete: 'tamamlandı',
+      partial: 'kısmi',
+      not_configured: 'tanımlı değil',
+      unavailable: 'ulaşılamadı',
+      failed: 'başarısız',
+      disabled: 'kapalı',
+      not_needed: 'gerekmedi',
+    },
+    engineLine: (builtin, zap, active, lookup, requests) =>
+      `Yerleşik kontroller: ${builtin} · OWASP ZAP: ${zap}${active ? ' (aktif)' : ''} · Kütüphane açık sorgusu: ${lookup} · İstek sayısı: ${requests}`,
+    gradeAria: (g) => `Güvenlik notu ${g}`,
+    heading: (g, score) => `Güvenlik notu ${g} · ${score}/100`,
+    target: (t) => `Hedef: ${t}`,
+    location: 'Konum: ',
+    source: 'Kaynak: ',
+    sourceZap: 'OWASP ZAP',
+    sourceBuiltin: 'Yerleşik',
+    component: 'Bileşen: ',
+    evidence: (e) => `Kanıt: ${e}`,
+    recommendation: (r) => `Öneri: ${r}`,
+    noFindingsTitle: 'Web bulgusu yok',
+    noFindingsHint: 'Bu hedef için çalışan kontroller bir sorun bulmadı.',
+    components: 'Tespit edilen JavaScript kütüphaneleri',
+  },
+
+  sbom: {
+    download: ' İndir',
+    generating: 'Üretiliyor...',
+    generate: 'Belge üret',
+    generated: 'SBOM belgesi üretildi.',
+    generateFailed: 'SBOM üretilemedi',
+    loadFailed: 'SBOM belgeleri yüklenemedi',
+    preparing: 'CycloneDX JSON SBOM hazırlanıyor...',
+    downloaded: 'SBOM indirildi.',
+    downloadFailed: 'SBOM indirilemedi',
+  },
+
+  users: {
+    empty: 'Henüz kullanıcı yok.',
+    loadFailed: 'Kullanıcılar yüklenemedi',
+  },
+
+  apiKeys: {
+    revoke: 'İptal et',
+    revokeAria: (prefix) => `${prefix} API anahtarını iptal et`,
+    never: 'Hiç kullanılmadı',
+    active: 'Etkin',
+    revoked: (date) => `İptal edildi ${date}`,
+    loadFailed: 'API anahtarları yüklenemedi',
+    fieldAria: 'Yeni API anahtarı',
+    copy: ' Kopyala',
+    done: 'Tamam',
+    copied: 'Panoya kopyalandı',
+    pressCtrlC: 'Kopyalamak için Ctrl+C’ye basın',
+    copyNow: 'Bu anahtarı şimdi kopyalayın. Bir daha gösterilmeyecek.',
+    confirmReplace: 'Yeni anahtar oluşturmak mevcut etkin anahtarı iptal eder. Devam edilsin mi?',
+    notShown: 'Yeni bir API anahtarı oluşturuldu ancak sayfa değiştiği için gösterilmedi. Görmek için yeni bir anahtar oluşturun.',
+    createFailed: 'API anahtarı oluşturulamadı',
+    confirmRevoke: (prefix) => `${prefix} API anahtarı iptal edilsin mi? Bu anahtarı kullanan istemciler çalışmayı durduracak.`,
+    revokedToast: 'API anahtarı iptal edildi',
+    revokeFailed: 'API anahtarı iptal edilemedi',
+  },
+
+  // P-35: one entry per feature of docs/contracts/REQ-010-system-features.md.
+  system: {
+    on: 'Açık',
+    off: 'Kapalı',
+    unknown: 'Bilinmiyor',
+    howTo: 'Nasıl açılır: ',
+    loadFailedTitle: 'Sistem durumu alınamadı',
+    loadFailedHint: 'Sunucuya ulaşılamadı veya bu bilgiyi görme yetkiniz (settings:read) yok. Sayfayı yenileyip tekrar deneyin; sürerse yöneticinize başvurun.',
+    restartNote: 'Ayar değişikliklerinin geçerli olması için uygulama yeniden başlatılmalıdır.',
+    features: [
+      {
+        key: 'local_scan',
+        name: 'Yerel klasör taraması',
+        description: 'Sunucunun erişebildiği bir klasördeki kodu tarar.',
+        enable: '.env dosyasındaki SCAN_ROOTS ayarına izin verilen klasör köklerini yazın (Windows’ta ; ile ayrılır, ör. C:\\Projeler) ve uygulamayı yeniden başlatın.',
+        count: ['roots', (n) => `İzinli klasör kökü: ${n}`],
+      },
+      {
+        key: 'web_scan',
+        name: 'Web (URL) güvenlik taraması',
+        description: 'Çalışan bir web uygulamasını adresinden güvenli (pasif) kontrollerle tarar.',
+        enable: '.env dosyasındaki WEB_SCAN_ALLOWED_HOSTS ayarına taranabilecek kendi/şirket sunucularınızı virgülle ayırarak yazın ve uygulamayı yeniden başlatın.',
+        count: ['allowed_hosts', (n) => `İzinli sunucu girdisi: ${n}`],
+      },
+      {
+        key: 'zap',
+        name: 'OWASP ZAP (aktif web taraması)',
+        description: 'Aktif modda gerçek saldırı simülasyonu yapan OWASP ZAP aracına bağlanır.',
+        enable: '.env dosyasında ZAP_API_URL (gerekiyorsa ZAP_API_KEY) ayarını çalışan ZAP adresine göre tanımlayın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'registry_enrichment',
+        name: 'Lisans bilgisi zenginleştirme',
+        description: 'Eksik lisans ve telif bilgisini paket kayıt defterlerinden (npm, PyPI, NuGet) tamamlar.',
+        enable: '.env dosyasında REGISTRY_ENRICHMENT=on yapın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'vulnerability_lookup',
+        name: 'Güvenlik açığı sorgusu',
+        description: 'Tarama sırasında paketleri OSV veritabanındaki bilinen açıklara karşı kontrol eder.',
+        enable: '.env dosyasında VULNERABILITY_LOOKUP=on yapın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'vulnerability_recheck',
+        name: 'Günlük yeniden kontrol',
+        description: 'Taranmış projeleri, kodu yeniden indirmeden, yeni duyurulan açıklara karşı her gün yeniden kontrol eder.',
+        enable: '.env dosyasında VULNERABILITY_RECHECK=on yapın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'nvd',
+        name: 'NVD CVSS puanları',
+        description: 'Açıkların önem puanını (CVSS) ABD NVD veritabanından tamamlar.',
+        enable: '.env dosyasında NVD_ENABLED=true yapın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'repo_tokens',
+        name: 'Repo erişim anahtarı (PAT) saklama',
+        description: 'Özel repolar için girilen erişim anahtarlarını şifreli saklar.',
+        enable: '.env dosyasında ENCRYPTION_KEY ayarına uzun, rastgele bir değer yazın ve uygulamayı yeniden başlatın.',
+      },
+      {
+        key: 'windows_git_auth',
+        name: 'Windows kimliğiyle git erişimi',
+        description: 'Şirket içi TFS / Azure DevOps sunucusuna tokensız, sunucunun Windows oturumuyla bağlanır.',
+        enable: '.env dosyasındaki GIT_WINDOWS_AUTH_HOSTS ayarına git sunucusunun tam adını yazın (ör. tfs.sirket.local) ve uygulamayı yeniden başlatın.',
+        count: ['hosts', (n) => `Tanımlı sunucu: ${n}`],
+      },
+    ],
+    nvdKeySet: 'NVD API anahtarı: tanımlı',
+    nvdKeyMissing: 'NVD API anahtarı: tanımlı değil (isteğe bağlı; NVD_API_KEY tanımlanırsa sorgular hızlanır)',
+  },
+
+  // P-34 (AC-P34-3/4, D-281): glossary used for the Help view and the term tooltips.
+  glossary: {
+    sbom: ['SBOM', 'Yazılım malzeme listesi: bir üründe kullanılan tüm açık kaynak paketlerin, sürümlerinin ve lisanslarının makine tarafından okunabilir listesi. Müşteriler ve denetimler giderek daha sık ister.'],
+    cyclonedx: ['CycloneDX', 'OWASP’ın geliştirdiği yaygın bir SBOM biçimi (JSON veya XML); güvenlik araçlarıyla paylaşım için uygundur.'],
+    spdx: ['SPDX', 'Linux Foundation’ın SBOM standardı (ISO/IEC 5962); özellikle lisans uyumu ve hukuki süreçlerde tercih edilir.'],
+    cve: ['CVE', 'Kamuya duyurulmuş bir güvenlik açığının standart kimliği (ör. CVE-2024-12345); aynı açığı farklı araçlarda aynı adla bulmanızı sağlar.'],
+    cvss: ['CVSS', 'Bir güvenlik açığının ciddiyetini 0–10 arasında puanlayan standart: 9,0 ve üzeri Kritik, 7,0–8,9 Yüksek, 4,0–6,9 Orta, altı Düşük.'],
+    purl: ['PURL', 'Paket adresi (package URL): bir paketi ekosistemi, adı ve sürümüyle tek satırda tanımlayan kimlik (ör. pkg:npm/lodash@4.17.21).'],
+    license: ['Lisans riski / copyleft', 'Bir paketin lisansının ürününüzü dağıtmanızı ne kadar kısıtladığı. Copyleft lisanslar (ör. GPL) türetilen ürünün de aynı lisansla açık kaynak paylaşılmasını isteyebilir; hukuk birimiyle değerlendirilmelidir.'],
+    dependency: ['Doğrudan / dolaylı bağımlılık', 'Doğrudan bağımlılık projenizin kendisinin eklediği pakettir; dolaylı (geçişli) bağımlılık o paketlerin kullandığı paketlerdir. Dolaylı paketlerdeki açıklar da ürününüzü etkiler.'],
+    notice: ['NOTICE', 'Kullanılan açık kaynak paketlerin lisans ve telif bildirimlerini toplayan dosya; çoğu lisans ürünle birlikte dağıtılmasını şart koşar.'],
+    owasp: ['OWASP', 'Web uygulaması güvenliği için açık standartlar yayımlayan vakıf. “OWASP Top 10” en yaygın web güvenlik risklerinin listesidir (ör. A05:2021 güvenlik yanlış yapılandırması).'],
+    cwe: ['CWE', 'Yazılım zayıflık türlerinin kataloğu (ör. CWE-79 siteler arası betik çalıştırma); bir bulgunun hangi hata türünden kaynaklandığını gösterir.'],
+    grade: ['Güvenlik notu (A–F)', 'Web taramasındaki bulguların önem ve sayısına göre hesaplanan 0–100 puanın harf karşılığı; A en iyi, F en kötü durumdur.'],
+    webscan: ['Pasif / aktif web taraması', 'Pasif tarama yalnız okuma yapan güvenli kontrollerdir, canlı sistemde kullanılabilir. Aktif tarama OWASP ZAP ile gerçek saldırı istekleri gönderir; yalnız test ortamında kullanılmalıdır.'],
+    pat: ['PAT', 'Kişisel erişim anahtarı (personal access token): özel bir repoya parola yerine kullanılan, yetkisi sınırlandırılabilen anahtar. Bu platform için yalnız Code → Read (okuma) yetkisi yeterlidir.'],
+  },
+
+  help: {
+    stepsTitle: 'İlk adımlar',
+    steps: [
+      ['Proje ekleyin', 'Genel Bakış ekranındaki “Yeni proje taraması” veya Projeler ekranındaki “Proje ekle” düğmesiyle projenin adını, kod konumunu (yerel klasör veya https repo adresi) ve isterseniz web adresini girin. Özel repolar için bir PAT ekleyin.'],
+      ['Taramayı başlatın', 'Proje oluşturulunca tarama otomatik olarak kuyruğa alınır; daha sonra Projeler ekranındaki “Şimdi tara” düğmesiyle yeniden tarayabilirsiniz. İlerleme Genel Bakış ekranında görünür.'],
+      ['Sonuçları inceleyin', 'Bulgular ekranında taramayı seçin: güvenlik açıkları önem derecesine, lisans sorunları risk düzeyine göre listelenir; düzeltme sürümü biliniyorsa gösterilir.'],
+      ['Rapor indirin', 'Tarama satırındaki “Raporlar” menüsünden yöneticiler için PDF, ayrıntılı Excel/CSV listeleri, NOTICE dosyası veya SBOM indirin.'],
+    ],
+    troubleTitle: 'Bir şey çalışmıyorsa',
+    trouble: 'Sistem Durumu ekranı hangi özelliklerin kapalı olduğunu ve nasıl açılacağını gösterir. Başarısız bir taramanın nedeni tarama satırında yazar.',
+    glossaryTitle: 'Sözlük',
+  },
+};
+
+/** Text for `key` in a TEXT label map, or `fallback` (default: the raw value as text). */
+function label(map, key, fallback) {
+  if (map !== null && typeof map === 'object' && typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+  if (fallback !== undefined) return fallback;
+  return key === null || key === undefined || key === '' ? TEXT.common.dash : String(key);
+}
+
+/** Tooltip text of a glossary term (AC-P34-3). */
+function termTitle(key) {
+  const entry = label(TEXT.glossary, key, null);
+  return entry ? `${entry[0]}: ${entry[1]}` : undefined;
+}
+
 /** True for same-origin absolute paths and http(s) URLs; anything else (javascript:, data:, mailto:, //host) is refused. */
 function isAllowedHref(value) {
   const s = String(value);
@@ -89,10 +558,10 @@ function refreshIcons() {
   }
 }
 
-function setButtonContent(button, iconName, label, spinning) {
+function setButtonContent(button, iconName, text, spinning) {
   if (!button) return;
   clear(button);
-  append(button, [icon(iconName, undefined, spinning ? 'spin' : undefined), ' ' + label]);
+  append(button, [icon(iconName, undefined, spinning ? 'spin' : undefined), ' ' + text]);
   refreshIcons();
 }
 
@@ -122,7 +591,7 @@ function onUnexpectedError(err) {
   if (err && err.authRedirect) return;
   try {
     if (document && document.getElementById('toast-msg')) {
-      showToast(err && err.message ? err.message : 'Unexpected error', 'error');
+      showToast(err && err.message ? err.message : TEXT.common.unexpected, 'error');
     }
   } catch {
     /* page is being torn down */
@@ -140,6 +609,7 @@ function fire(fn) {
   };
 }
 
+/** Central error display: ApiError messages are already the Turkish text for their `code` (see api()). */
 function reportError(err, fallback) {
   if (err && err.authRedirect) return; // the auth form already explains what happened
   showToast(err && err.message ? err.message : fallback, 'error');
@@ -152,6 +622,17 @@ class ApiError extends Error {
     this.code = code;
     this.authRedirect = false;
   }
+}
+
+/**
+ * Message shown for an API error (AC-P33-4): a known `code` becomes its Turkish
+ * text from TEXT.errors; an unknown code keeps the server message, which is
+ * only ever rendered as text.
+ */
+function apiErrorMessage(status, code, serverMessage) {
+  const known = label(TEXT.errors, code, null);
+  if (known) return known;
+  return serverMessage || TEXT.common.requestFailed(status);
 }
 
 /**
@@ -168,25 +649,30 @@ async function api(path, options = {}) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
-  const response = await fetch(path, init);
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    // Browser network errors carry English text ("Failed to fetch"); show ours instead.
+    throw new ApiError(0, 'network_error', TEXT.common.network);
+  }
   let payload = null;
   if (response.status !== 204) {
     try { payload = await response.json(); } catch { payload = null; }
   }
   if (!response.ok) {
     const code = payload && typeof payload.code === 'string' ? payload.code : '';
-    let message = payload && typeof payload.message === 'string' && payload.message
-      ? payload.message
-      : `Request failed (HTTP ${response.status})`;
+    const serverMessage = payload && typeof payload.message === 'string' ? payload.message : '';
+    let message = apiErrorMessage(response.status, code, serverMessage);
     if (response.status === 429) {
       const retryAfter = Number.parseInt(response.headers.get('Retry-After') || '', 10);
-      if (Number.isFinite(retryAfter) && retryAfter > 0) message += ` Try again in ${retryAfter} seconds.`;
+      if (Number.isFinite(retryAfter) && retryAfter > 0) message += TEXT.common.retryAfter(retryAfter);
     }
     const err = new ApiError(response.status, code, message);
     if (response.status === 401 && authRedirect) {
       err.authRedirect = true;
       if (code === 'setup_required') showAuth('setup', '');
-      else showAuth('login', currentUser ? 'Your session has ended. Please sign in again.' : '');
+      else showAuth('login', currentUser ? TEXT.auth.sessionEnded : '');
     }
     throw err;
   }
@@ -212,7 +698,7 @@ function showToast(msg, type = 'success') {
   if (toastIcon) toastIcon.setAttribute('data-lucide', kind === 'success' ? 'check-circle' : 'alert-circle');
   refreshIcons();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+  toastTimer = setTimeout(() => { t.className = ''; }, 4500);
 }
 
 // ── Health checker
@@ -226,42 +712,46 @@ async function checkHealth() {
         dot.style.background = 'var(--success)';
         dot.style.boxShadow = '0 0 6px var(--success)';
       }
-      setText('db-status-text', 'Database connected');
+      setText('db-status-text', TEXT.health.ok);
     } else {
       if (dot) dot.style.background = 'var(--danger)';
-      setText('db-status-text', 'DB error');
+      setText('db-status-text', TEXT.health.dbError);
     }
   } catch {
     if (dot) dot.style.background = 'var(--danger)';
-    setText('db-status-text', 'Backend offline');
+    setText('db-status-text', TEXT.health.offline);
   }
 }
 
-// ── Formatter helpers
+// ── Formatter helpers (AC-P33-3: tr-TR dates/numbers, Turkish relative time)
 function timeAgo(iso) {
-  if (!iso) return '—';
+  if (!iso) return TEXT.common.dash;
   const diff = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(diff)) return '—';
+  if (!Number.isFinite(diff)) return TEXT.common.dash;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return TEXT.time.justNow;
+  if (mins < 60) return TEXT.time.minutes(mins);
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return TEXT.time.hours(hrs);
+  return TEXT.time.days(Math.floor(hrs / 24));
+}
+
+function formatNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString(TEXT.locale) : TEXT.common.dash;
 }
 
 function formatBytes(bytes) {
   const n = Number(bytes);
-  if (!n || !Number.isFinite(n)) return '0 Bytes';
+  if (!n || !Number.isFinite(n)) return `0 ${TEXT.bytes[0]}`;
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB'];
-  const i = Math.min(Math.floor(Math.log(n) / Math.log(k)), sizes.length - 1);
-  return parseFloat((n / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(k)), TEXT.bytes.length - 1);
+  return (n / Math.pow(k, i)).toLocaleString(TEXT.locale, { maximumFractionDigits: 2 }) + ' ' + TEXT.bytes[i];
 }
 
 function formatDate(value) {
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? TEXT.common.dash : d.toLocaleString(TEXT.locale);
 }
 
 /** Maps API severity / risk strings onto the fixed set of tag classes. */
@@ -275,7 +765,7 @@ function webHost(value) {
   try {
     return new URL(String(value)).host;
   } catch {
-    return '—';
+    return TEXT.common.dash;
   }
 }
 
@@ -285,7 +775,7 @@ function webLocation(value) {
     const u = new URL(String(value));
     return `${u.origin}${u.pathname}`;
   } catch {
-    return '—';
+    return TEXT.common.dash;
   }
 }
 
@@ -294,11 +784,19 @@ function isWebScan(row) {
 }
 
 function securityLabel(row) {
-  if (!row.total_vulnerabilities) return el('span', { style: 'color: var(--success);' }, '✓ Clean');
+  // REQ-010 r2: zero findings only means "clean" when the lookup actually ran.
+  const data = row.vulnerability_data_status;
+  if (!row.total_vulnerabilities && (data === 'unavailable' || data === 'disabled')) {
+    return el('span', { style: 'color: var(--warning);', title: TEXT.scans.uncheckedHint }, TEXT.scans.unchecked);
+  }
+  if (!row.total_vulnerabilities && data === 'partial') {
+    return el('span', { style: 'color: var(--warning);', title: TEXT.scans.partialHint }, TEXT.scans.partial);
+  }
+  if (!row.total_vulnerabilities) return el('span', { style: 'color: var(--success);' }, TEXT.scans.clean);
   const parts = [];
-  if (row.critical_vulns) parts.push(el('span', { style: 'color: var(--danger);' }, `${row.critical_vulns} Critical`));
-  if (row.high_vulns) parts.push(el('span', { style: 'color: var(--warning);' }, `${row.high_vulns} High`));
-  if (!parts.length) parts.push(el('span', { style: 'color: var(--text-muted);' }, `${row.total_vulnerabilities} Med/Low`));
+  if (row.critical_vulns) parts.push(el('span', { style: 'color: var(--danger);' }, TEXT.scans.critical(formatNumber(row.critical_vulns))));
+  if (row.high_vulns) parts.push(el('span', { style: 'color: var(--warning);' }, TEXT.scans.high(formatNumber(row.high_vulns))));
+  if (!parts.length) parts.push(el('span', { style: 'color: var(--text-muted);' }, TEXT.scans.medLow(formatNumber(row.total_vulnerabilities))));
   const wrap = el('span');
   parts.forEach((p, i) => append(wrap, [i ? ' / ' : null, p]));
   return wrap;
@@ -306,22 +804,23 @@ function securityLabel(row) {
 
 function licenseLabel(row) {
   const n = Number(row.license_violations) || 0;
-  if (n === 0) return el('span', { style: 'color: var(--success);' }, 'All Safe');
-  return el('span', { style: 'color: var(--warning);' }, `${n} Alert${n > 1 ? 's' : ''}`);
+  if (n === 0) return el('span', { style: 'color: var(--success);' }, TEXT.scans.licenseOk);
+  return el('span', { style: 'color: var(--warning);' }, TEXT.scans.licenseAlerts(formatNumber(n)));
 }
 
 const STATUS_BADGES = {
-  completed: { cls: 'status-healthy', icon: 'check-circle', label: 'Completed' },
-  running: { cls: 'status-scanning', icon: 'refresh-cw', label: 'Scanning...', spin: true },
-  pending: { cls: 'status-pending', icon: 'clock', label: 'Pending' },
-  queued: { cls: 'status-pending', icon: 'clock', label: 'Pending' },
-  failed: { cls: 'status-critical', icon: 'x-circle', label: 'Failed' },
-  cancelled: { cls: 'status-pending', icon: 'minus-circle', label: 'Cancelled' },
+  completed: { cls: 'status-healthy', icon: 'check-circle', label: TEXT.status.completed },
+  running: { cls: 'status-scanning', icon: 'refresh-cw', label: TEXT.status.running, spin: true },
+  pending: { cls: 'status-pending', icon: 'clock', label: TEXT.status.pending },
+  queued: { cls: 'status-pending', icon: 'clock', label: TEXT.status.queued },
+  failed: { cls: 'status-critical', icon: 'x-circle', label: TEXT.status.failed },
+  cancelled: { cls: 'status-pending', icon: 'minus-circle', label: TEXT.status.cancelled },
+  timeout: { cls: 'status-critical', icon: 'x-circle', label: TEXT.status.timeout },
 };
 
 function statusBadge(status) {
   const def = Object.prototype.hasOwnProperty.call(STATUS_BADGES, status) ? STATUS_BADGES[status] : null;
-  if (!def) return el('span', { className: 'status-badge status-pending' }, String(status ?? '—'));
+  if (!def) return el('span', { className: 'status-badge status-pending' }, String(status ?? TEXT.common.dash));
   return el('span', { className: `status-badge ${def.cls}` },
     icon(def.icon, 'width:13px;height:13px;', def.spin ? 'spin' : undefined), def.label);
 }
@@ -330,49 +829,136 @@ function isActiveStatus(status) {
   return ['pending', 'queued', 'running'].includes(status);
 }
 
+// ── Reports menu (REQ-010 P-38, D-276): one native menu button per completed
+// scan row. Items are the same <a> links as before (same href, download,
+// target/rel), only grouped and described.
+let reportsMenuSeq = 0;
+let openReports = null; // { button, menu } of the open menu
+
+function reportsItem(href, text, linkProps) {
+  return el('a', {
+    role: 'menuitem',
+    className: 'reports-item',
+    tabindex: '-1',
+    href,
+    ...linkProps,
+  },
+  el('span', { className: 'reports-item-title' }, text[0]),
+  el('span', { className: 'reports-item-desc' }, text[1]));
+}
+
+function reportsMenu(items) {
+  const menuId = `reports-menu-${++reportsMenuSeq}`;
+  const button = el('button', {
+    type: 'button',
+    className: 'btn btn-sm reports-btn',
+    'aria-haspopup': 'menu',
+    'aria-expanded': 'false',
+    'aria-controls': menuId,
+  }, icon('file-down', 'width:12px;height:12px;'), TEXT.reports.button, icon('chevron-down', 'width:12px;height:12px;'));
+  const menu = el('div', { className: 'reports-menu', id: menuId, role: 'menu', 'aria-label': TEXT.reports.menuLabel, hidden: true }, items);
+  return el('div', { className: 'reports' }, button, menu);
+}
+
 function scanActions(row) {
   if (isActiveStatus(row.status)) {
     return el('div', { className: 'progress-bar-container', style: 'width:80px;' },
       el('div', { className: 'progress-bar', style: `width: ${row.status === 'running' ? '65' : '15'}%;` }));
   }
+  // One-click exports (REQ-007 AC-P24-8, contract section 8): plain same-origin
+  // <a download> links, no fetch/Blob and no waiting screen. An empty `download`
+  // value lets the browser use the server's Content-Disposition file name.
+  // On 429 export_busy / 404 the browser reports the download as failed; the
+  // README tells the user to retry after a few seconds (accepted limitation).
+  const download = { download: true };
   if (row.status === 'completed' && isWebScan(row)) {
-    // REQ-008 AC-P27-5: web scans offer only their own PDF and CSV.
-    const linkStyle = 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;';
-    const webLink = (href, label, text) => el('a', { className: 'btn btn-sm', href, download: true, 'aria-label': label, style: linkStyle },
-      icon('download', 'width:12px;height:12px;'), ' ' + text);
-    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem; flex-wrap:wrap;' },
-      webLink(apiPath('scans', row.id, 'exports', 'web-report.pdf'), 'Download web security report (PDF)', 'PDF'),
-      webLink(apiPath('scans', row.id, 'exports', 'web-findings.csv'), 'Download web findings (CSV)', 'CSV'));
+    // REQ-008 AC-P27-5 / REQ-010 AC-P38-1: web scans offer only their own PDF and CSV.
+    return reportsMenu([
+      reportsItem(apiPath('scans', row.id, 'exports', 'web-report.pdf'), TEXT.reports.webPdf, download),
+      reportsItem(apiPath('scans', row.id, 'exports', 'web-findings.csv'), TEXT.reports.webCsv, download),
+    ]);
   }
   if (row.status === 'completed') {
-    // One-click exports (REQ-007 AC-P24-8, contract section 8): plain same-origin
-    // <a download> links, no fetch/Blob and no waiting screen. An empty `download`
-    // value lets the browser use the server's Content-Disposition file name.
-    // On 429 export_busy / 404 the browser reports the download as failed; the
-    // README tells the user to retry after a few seconds (accepted limitation).
-    const linkStyle = 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;';
-    const downloadLink = (href, label, text) => el('a', {
-      className: 'btn btn-sm',
-      href,
-      download: true,
-      'aria-label': label,
-      style: linkStyle,
-    }, icon('download', 'width:12px;height:12px;'), ' ' + text);
-    const pdfLink = downloadLink(apiPath('scans', row.id, 'exports', 'project-report.pdf'), 'Download project PDF report', 'PDF');
-    const excelLink = downloadLink(apiPath('scans', row.id, 'exports', 'license-inventory.xlsx'), 'Download license inventory (Excel)', 'Excel');
-    const csvLink = downloadLink(apiPath('scans', row.id, 'exports', 'license-inventory.csv'), 'Download license inventory (CSV)', 'CSV');
-    const noticeLink = downloadLink(apiPath('scans', row.id, 'notice'), 'Download NOTICE file', 'NOTICE');
-    const sbomLink = el('a', {
-      className: 'btn btn-sm',
-      href: apiPath('scans', row.id, 'sbom', 'download'),
-      target: '_blank',
-      rel: 'noopener',
-      style: linkStyle,
-    }, icon('download', 'width:12px;height:12px;'), ' SBOM');
-    return el('div', { style: 'display:inline-flex; align-items:center; gap:0.375rem; flex-wrap:wrap;' },
-      pdfLink, excelLink, csvLink, noticeLink, sbomLink);
+    return reportsMenu([
+      reportsItem(apiPath('scans', row.id, 'exports', 'project-report.pdf'), TEXT.reports.pdf, download),
+      reportsItem(apiPath('scans', row.id, 'exports', 'license-inventory.xlsx'), TEXT.reports.excel, download),
+      reportsItem(apiPath('scans', row.id, 'exports', 'license-inventory.csv'), TEXT.reports.csv, download),
+      reportsItem(apiPath('scans', row.id, 'notice'), TEXT.reports.notice, { ...download, title: termTitle('notice') }),
+      reportsItem(apiPath('scans', row.id, 'sbom', 'download'), TEXT.reports.sbom, { target: '_blank', rel: 'noopener', title: termTitle('sbom') }),
+    ]);
   }
-  return el('span', { style: 'color: var(--text-muted); font-size:0.8rem;' }, '—');
+  return el('span', { style: 'color: var(--text-muted); font-size:0.8rem;' }, TEXT.common.dash);
+}
+
+function reportsMenuItems(menu) {
+  return Array.from(menu.querySelectorAll('[role="menuitem"]'));
+}
+
+function focusReportsItem(menu, index) {
+  const items = reportsMenuItems(menu);
+  if (items.length === 0) return;
+  items[((index % items.length) + items.length) % items.length].focus();
+}
+
+function closeReportsMenu(focusButton) {
+  if (!openReports) return;
+  const { button, menu } = openReports;
+  openReports = null;
+  menu.hidden = true;
+  button.setAttribute('aria-expanded', 'false');
+  if (focusButton && button.isConnected) button.focus();
+}
+
+function openReportsMenu(button, focusFirst) {
+  const menu = byId(button.getAttribute('aria-controls') || '');
+  if (!menu) return;
+  closeReportsMenu(false);
+  menu.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  openReports = { button, menu };
+  if (focusFirst) focusReportsItem(menu, 0);
+}
+
+function onReportsClick(e) {
+  const target = e.target instanceof Element ? e.target : null;
+  const button = target ? target.closest('.reports-btn') : null;
+  if (button) {
+    if (openReports && openReports.button === button) closeReportsMenu(false);
+    // detail === 0: activated from the keyboard (Enter/Space) -> focus moves into the menu.
+    else openReportsMenu(button, e.detail === 0);
+    return;
+  }
+  if (!openReports) return;
+  const inside = target !== null && openReports.menu.contains(target);
+  // Choosing an item lets the browser follow the link (download), then closes the menu.
+  if (inside && target.closest('[role="menuitem"]')) closeReportsMenu(true);
+  else if (!inside) closeReportsMenu(false);
+}
+
+function onReportsKeydown(e) {
+  const target = e.target instanceof Element ? e.target : null;
+  if (!openReports) {
+    if (target && target.matches('.reports-btn') && e.key === 'ArrowDown') {
+      e.preventDefault();
+      openReportsMenu(target, true);
+    }
+    return;
+  }
+  const { button, menu } = openReports;
+  if (!button.isConnected) { openReports = null; return; }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeReportsMenu(true);
+    return;
+  }
+  if (e.key === 'Tab') { closeReportsMenu(false); return; }
+  if (!target || !(target === button || menu.contains(target))) return;
+  const index = reportsMenuItems(menu).indexOf(target);
+  if (e.key === 'ArrowDown') { e.preventDefault(); focusReportsItem(menu, index + 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); focusReportsItem(menu, index < 0 ? -1 : index - 1); }
+  else if (e.key === 'Home') { e.preventDefault(); focusReportsItem(menu, 0); }
+  else if (e.key === 'End') { e.preventDefault(); focusReportsItem(menu, -1); }
+  else if (e.key === ' ' && index >= 0) { e.preventDefault(); target.click(); }
 }
 
 // ── Direct Download helper (failsafe)
@@ -382,36 +968,54 @@ function downloadDoc(docId) {
 
 // ── Generate and download CycloneDX JSON (default fast download)
 async function downloadCycloneDxSbom(scanId) {
-  showToast('Generating CycloneDX JSON SBOM...', 'success');
+  showToast(TEXT.sbom.preparing, 'success');
   try {
     const { data } = await api(apiPath('scans', scanId, 'sbom'), { method: 'POST', body: { format: 'cyclonedx_json' } });
     downloadDoc(data.id);
-    showToast('SBOM downloaded successfully!');
+    showToast(TEXT.sbom.downloaded);
   } catch (e) {
-    reportError(e, 'Failed to trigger SBOM download');
+    reportError(e, TEXT.sbom.downloadFailed);
   }
 }
 
 /**
  * Why a scan failed, or that it finished with warnings (REQ-009 AC-UI-3).
- * The first sentence of a classified clone error ("Repository requires
- * authentication: ...") is the headline; the git detail follows in muted text.
- * Text only: the message is server data and never becomes markup.
+ * A classified clone error (REQ-009 contract section 5) gets its Turkish
+ * headline (REQ-010 AC-P33-5, D-283); the git detail that follows the class
+ * sentence is kept as it is, in muted text. Other messages: the first sentence
+ * is the headline. Text only: the message is server data and never becomes markup.
  */
 function scanErrorDetail(row) {
   const message = typeof row.error_message === 'string' ? row.error_message.trim() : '';
   if (!message) return null;
   if (row.status === 'failed') {
-    const cut = message.search(/\.\s/);
-    const headline = cut > 0 && cut < 220 ? message.slice(0, cut + 1) : message.slice(0, 220);
-    const rest = message.slice(headline.length).trim();
+    const known = TEXT.cloneErrors.find(([sentence]) => message.startsWith(sentence));
+    let headline;
+    let rest;
+    if (known) {
+      headline = known[1];
+      rest = message.slice(known[0].length).trim();
+    } else {
+      const cut = message.search(/\.\s/);
+      headline = cut > 0 && cut < 220 ? message.slice(0, cut + 1) : message.slice(0, 220);
+      rest = message.slice(headline.length).trim();
+    }
     return el('div', { className: 'scan-error' }, el('strong', null, headline), rest ? el('span', null, rest) : null);
   }
   if (row.status === 'completed') {
     const count = message.split('\n').filter((line) => line.trim() !== '').length;
-    return el('div', { className: 'scan-warning', title: message }, `${count} warning${count === 1 ? '' : 's'}`);
+    return el('div', { className: 'scan-warning', title: message }, TEXT.scans.warnings(formatNumber(count)));
   }
   return null;
+}
+
+/** AC-P36-3: a completed dependency scan that found no package says so and why that may be. */
+function noPackagesNote(row) {
+  if (row.status !== 'completed' || isWebScan(row)) return null;
+  if (row.total_dependencies === null || row.total_dependencies === undefined || Number(row.total_dependencies) !== 0) return null;
+  return el('div', { className: 'scan-nopkg' },
+    el('strong', null, TEXT.scans.noPackages),
+    el('span', null, TEXT.scans.noPackagesHint));
 }
 
 // ── Scan rows (dashboard + history share one renderer)
@@ -421,16 +1025,16 @@ function buildScanRow(row, idPrefix, withTrigger) {
   const grade = web && row.web_summary && typeof row.web_summary.grade === 'string' ? row.web_summary.grade : null;
   return append(tr, [
     el('td', null,
-      el('strong', null, row.project_name || '—'),
-      web ? el('span', { className: 'kind-web', title: 'Web (URL) scan' }, 'Web') : null,
+      el('strong', null, row.project_name || TEXT.common.dash),
+      web ? el('span', { className: 'kind-web', title: TEXT.scans.kindWebTitle }, TEXT.scans.kindWeb) : null,
       el('br'),
-      el('small', { style: 'color:var(--text-muted);' }, web ? webHost(row.target_url) : (row.ref || 'default branch'))),
-    el('td', null, statusBadge(row.status), scanErrorDetail(row)),
-    el('td', null, !web && row.total_dependencies ? Number(row.total_dependencies).toLocaleString() : '—'),
-    el('td', null, web ? el('span', { style: 'color: var(--text-muted);' }, '—') : licenseLabel(row)),
-    el('td', null, grade ? el('span', { className: 'capsule', style: 'margin-right:0.35rem;' }, `Grade ${grade}`) : null, securityLabel(row)),
+      el('small', { style: 'color:var(--text-muted);' }, web ? webHost(row.target_url) : (row.ref || TEXT.common.defaultBranch))),
+    el('td', null, statusBadge(row.status), scanErrorDetail(row), noPackagesNote(row)),
+    el('td', null, !web && row.total_dependencies ? formatNumber(row.total_dependencies) : TEXT.common.dash),
+    el('td', null, web ? el('span', { style: 'color: var(--text-muted);' }, TEXT.common.dash) : licenseLabel(row)),
+    el('td', null, grade ? el('span', { className: 'capsule', style: 'margin-right:0.35rem;', title: termTitle('grade') }, TEXT.scans.grade(grade)) : null, securityLabel(row)),
     withTrigger
-      ? el('td', { style: 'text-transform: capitalize;' }, el('span', { className: 'capsule' }, row.trigger || 'manual'))
+      ? el('td', null, el('span', { className: 'capsule' }, label(TEXT.trigger, row.trigger || 'manual')))
       : null,
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(row.completed_at || row.started_at || row.queued_at)),
     el('td', null, scanActions(row)),
@@ -460,7 +1064,7 @@ function pollScanUntilDone(scanId) {
   const interval = setInterval(fire(async () => {
     try {
       const { data } = await api(apiPath('scans', scanId));
-      if (!data) throw new Error('Scan not found');
+      if (!data) throw new Error(TEXT.scans.notFound);
 
       const rowDashboard = byId(`scan-row-${scanId}`);
       if (rowDashboard) rowDashboard.replaceWith(renderScanRow(data));
@@ -470,8 +1074,8 @@ function pollScanUntilDone(scanId) {
 
       if (!isActiveStatus(data.status)) {
         stopPolling(scanId);
-        if (data.status === 'completed') showToast(`Scan for "${data.project_name}" completed!`);
-        else if (data.status === 'failed') showToast(`Scan for "${data.project_name}" failed!`, 'error');
+        if (data.status === 'completed') showToast(TEXT.scans.completedToast(data.project_name));
+        else if (data.status === 'failed') showToast(TEXT.scans.failedToast(data.project_name), 'error');
         if (currentActiveView === 'dashboard') await updateStats();
       }
     } catch {
@@ -510,21 +1114,38 @@ async function loadScans() {
       if (isActiveStatus(scan.status)) pollScanUntilDone(scan.id);
     }
     refreshIcons();
-    setText('last-updated', `Last updated: ${new Date().toLocaleTimeString()}`);
+    setText('last-updated', TEXT.scans.lastUpdated(new Date().toLocaleTimeString(TEXT.locale)));
   } catch {
     loading.style.display = 'none';
     empty.style.display = 'block';
   }
 }
 
+/**
+ * AC-P36-1 (D-274): per project only the most recent completed dependency
+ * scan counts; web scans and older scans of the same project are ignored.
+ * /api/scans is ordered newest first, so on equal timestamps the first wins.
+ */
+function latestDependencyScans(scans) {
+  const latest = new Map();
+  for (const s of scans) {
+    if (!s || typeof s !== 'object' || s.status !== 'completed' || isWebScan(s)) continue;
+    const key = String(s.project_id ?? s.project_name ?? s.id);
+    const time = new Date(s.completed_at || s.started_at || s.queued_at || 0).getTime() || 0;
+    const prev = latest.get(key);
+    if (!prev || time > prev.time) latest.set(key, { time, scan: s });
+  }
+  return Array.from(latest.values()).map((v) => v.scan);
+}
+
 // ── Update Dashboard statistics counters
 async function updateStats() {
   try {
     const projData = await api('/api/projects');
-    setText('stat-projects', Array.isArray(projData.data) ? projData.data.length : 0);
+    animateNumber('stat-projects', Array.isArray(projData.data) ? projData.data.length : 0);
 
     const scanData = await api('/api/scans');
-    const scans = (Array.isArray(scanData.data) ? scanData.data : []).filter((s) => s.status === 'completed');
+    const scans = latestDependencyScans(Array.isArray(scanData.data) ? scanData.data : []);
 
     const totalPkgs = scans.reduce((acc, s) => acc + (Number(s.total_dependencies) || 0), 0);
     const totalLicAlerts = scans.reduce((acc, s) => acc + (Number(s.license_violations) || 0), 0);
@@ -534,22 +1155,31 @@ async function updateStats() {
     animateNumber('stat-license-alerts', totalLicAlerts);
     animateNumber('stat-critical-cves', totalCritical);
   } catch {
-    ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach((id) => setText(id, '—'));
+    ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach(resetStat);
   }
+}
+
+function resetStat(id) {
+  const node = byId(id);
+  if (!node) return;
+  node.textContent = TEXT.stats.unavailable;
+  delete node.dataset.value;
 }
 
 function animateNumber(id, target) {
   const node = byId(id);
   if (!node) return;
-  const start = parseInt(node.textContent, 10) || 0;
-  if (start === target) { node.textContent = target.toLocaleString(); return; }
+  // The shown text is tr-TR formatted ("1.234"), so the raw value is kept in data-value.
+  const start = Number.parseInt(node.dataset.value || '0', 10) || 0;
+  node.dataset.value = String(target);
+  if (start === target) { node.textContent = formatNumber(target); return; }
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduceMotion || typeof requestAnimationFrame !== 'function') { node.textContent = target.toLocaleString(); return; }
+  if (reduceMotion || typeof requestAnimationFrame !== 'function') { node.textContent = formatNumber(target); return; }
   const duration = 600;
   const startTime = performance.now();
   function step(now) {
     const p = Math.min((now - startTime) / duration, 1);
-    node.textContent = Math.round(start + (target - start) * p).toLocaleString();
+    node.textContent = formatNumber(Math.round(start + (target - start) * p));
     if (p < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -558,19 +1188,6 @@ function animateNumber(id, target) {
 // ── Dashboard "Vulnerability data" panel (REQ-005 contract section 6).
 // Read-only: one GET, no write request. Every API value reaches the DOM
 // as text only (el()/textContent); none goes into style/href/className.
-const VULN_RUN_LABELS = {
-  completed: 'Completed',
-  partial: 'Partial',
-  failed: 'Failed',
-  interrupted: 'Interrupted',
-  disabled: 'Skipped (lookup disabled)',
-};
-
-const VULN_PROJECT_STATUS_TEXT = {
-  partial: 'vulnerability data partial',
-  unavailable: 'vulnerability data unavailable',
-  disabled: 'vulnerability lookup disabled',
-};
 
 // Guards against an older response overwriting a newer one (load + 30 s refresh can overlap).
 let vulnDataRequestSeq = 0;
@@ -579,15 +1196,15 @@ function hasOwn(obj, key) {
   return obj !== null && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-/** Locale time for an ISO timestamp; null/invalid -> `fallback`. */
+/** tr-TR time for an ISO timestamp; null/invalid -> `fallback`. */
 function vulnTime(iso, fallback) {
   if (typeof iso !== 'string' || iso === '') return fallback;
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? fallback : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? fallback : d.toLocaleString(TEXT.locale);
 }
 
 function vulnNumber(value) {
-  return Number(value).toLocaleString();
+  return Number(value).toLocaleString(TEXT.locale);
 }
 
 function vulnMutedParagraph(text) {
@@ -603,27 +1220,27 @@ function setVulnDataBody(state, children) {
 }
 
 function vulnRecheckValue(settings) {
-  if (settings.recheck_enabled === false) return 'Disabled (VULNERABILITY_RECHECK=off)';
-  if (settings.lookup_enabled === false) return 'Disabled (VULNERABILITY_LOOKUP=off)';
-  return `Every ${vulnNumber(settings.interval_hours)} h`;
+  if (settings.recheck_enabled === false) return TEXT.vuln.recheckOff;
+  if (settings.lookup_enabled === false) return TEXT.vuln.lookupOff;
+  return TEXT.vuln.every(vulnNumber(settings.interval_hours));
 }
 
 function vulnLastRunValue(scheduler, lastRun) {
-  if (scheduler.current_run) return `Running since ${vulnTime(scheduler.current_run.started_at, '—')}`;
-  if (lastRun === null || lastRun === undefined) return 'Never run';
-  const label = hasOwn(VULN_RUN_LABELS, lastRun.status) ? VULN_RUN_LABELS[lastRun.status] : String(lastRun.status ?? '—');
-  return `${label} · ${vulnTime(lastRun.finished_at, '—')}`;
+  if (scheduler.current_run) return TEXT.vuln.runningSince(vulnTime(scheduler.current_run.started_at, TEXT.common.dash));
+  if (lastRun === null || lastRun === undefined) return TEXT.vuln.neverRun;
+  const runLabel = hasOwn(TEXT.vuln.runLabels, lastRun.status) ? TEXT.vuln.runLabels[lastRun.status] : String(lastRun.status ?? TEXT.common.dash);
+  return `${runLabel} · ${vulnTime(lastRun.finished_at, TEXT.common.dash)}`;
 }
 
 function vulnNextCheckValue(scheduler, generatedAt) {
-  if (scheduler.paused === true) return 'Paused';
+  if (scheduler.paused === true) return TEXT.vuln.paused;
   const next = scheduler.next_check_earliest_at;
-  if (next === null || next === undefined) return '—';
+  if (next === null || next === undefined) return TEXT.common.dash;
   const nextMs = new Date(next).getTime();
   const nowMs = new Date(generatedAt).getTime();
-  if (Number.isNaN(nextMs)) return '—';
-  if (!Number.isNaN(nowMs) && nextMs <= nowMs) return 'Due now';
-  return vulnTime(next, '—');
+  if (Number.isNaN(nextMs)) return TEXT.common.dash;
+  if (!Number.isNaN(nowMs) && nextMs <= nowMs) return TEXT.vuln.dueNow;
+  return vulnTime(next, TEXT.common.dash);
 }
 
 function vulnDataRows(data) {
@@ -633,22 +1250,22 @@ function vulnDataRows(data) {
   const expiry = data.risk_acceptance_expiry || {};
 
   const rows = [
-    ['Daily recheck', vulnRecheckValue(settings)],
-    ['Last recheck', vulnLastRunValue(scheduler, lastRun)],
-    ['New findings (last recheck)', lastRun === null ? '—' : vulnNumber(lastRun.findings_opened)],
+    [TEXT.vuln.rowRecheck, vulnRecheckValue(settings)],
+    [TEXT.vuln.rowLastRun, vulnLastRunValue(scheduler, lastRun)],
+    [TEXT.vuln.rowNewFindings, lastRun === null ? TEXT.common.dash : vulnNumber(lastRun.findings_opened)],
   ];
   if (lastRun !== null && Number(lastRun.packages_unchecked) > 0) {
-    rows.push(['Packages not checked (last recheck)', vulnNumber(lastRun.packages_unchecked)]);
+    rows.push([TEXT.vuln.rowUnchecked, vulnNumber(lastRun.packages_unchecked)]);
   }
   rows.push(
-    ['Next check', vulnNextCheckValue(scheduler, data.generated_at)],
-    ['Risk acceptances reopened (last 7 days)', vulnNumber(expiry.reopened_last_7_days)],
-    ['Last expiry check', vulnTime(expiry.last_evaluated_at, 'Not yet evaluated')],
+    [TEXT.vuln.rowNext, vulnNextCheckValue(scheduler, data.generated_at)],
+    [TEXT.vuln.rowReopened, vulnNumber(expiry.reopened_last_7_days)],
+    [TEXT.vuln.rowExpiry, vulnTime(expiry.last_evaluated_at, TEXT.vuln.notEvaluated)],
   );
 
   return el('table', null,
-    el('tbody', null, rows.map(([label, value]) => el('tr', null,
-      el('th', { scope: 'row', style: 'width: 45%; padding: 0.75rem 1rem;', text: label }),
+    el('tbody', null, rows.map(([rowLabel, value]) => el('tr', null,
+      el('th', { scope: 'row', style: 'width: 45%; padding: 0.75rem 1rem;', text: rowLabel }),
       el('td', { style: 'padding: 0.75rem 1rem;', text: value })))));
 }
 
@@ -663,21 +1280,21 @@ function vulnDataWarnings(data) {
 
   const nodes = [];
   if (incomplete.length === 0 && total === 0) {
-    nodes.push(el('p', { style: 'margin-top: 1rem;', text: 'All projects have complete vulnerability data.' }));
+    nodes.push(el('p', { style: 'margin-top: 1rem;', text: TEXT.vuln.allComplete }));
   } else {
-    nodes.push(el('p', { style: 'margin-top: 1rem; font-weight: 600;', text: `Projects with incomplete vulnerability data (${vulnNumber(total)})` }));
+    nodes.push(el('p', { style: 'margin-top: 1rem; font-weight: 600;', text: TEXT.vuln.incomplete(vulnNumber(total)) }));
     nodes.push(el('ul', { id: 'vuln-data-warnings', style: 'margin: 0.5rem 0 0 1.25rem;' },
       incomplete.map((p) => {
         const status = p.vulnerability_data_status;
         let description;
-        if (status === null || status === undefined) description = 'not checked yet';
-        else if (hasOwn(VULN_PROJECT_STATUS_TEXT, status)) description = VULN_PROJECT_STATUS_TEXT[status];
+        if (status === null || status === undefined) description = TEXT.vuln.notChecked;
+        else if (hasOwn(TEXT.vuln.projectStatus, status)) description = TEXT.vuln.projectStatus[status];
         else description = String(status);
         return el('li', { text: `${String(p.project_name ?? '')}: ${description}` });
       })));
   }
   if (data.projects_truncated === true) {
-    nodes.push(vulnMutedParagraph('Showing the first 500 projects.'));
+    nodes.push(vulnMutedParagraph(TEXT.vuln.truncated));
   }
   return nodes;
 }
@@ -688,7 +1305,7 @@ async function loadVulnerabilityDataStatus() {
   const seq = ++vulnDataRequestSeq;
   // Loading text only until the first successful render; a refresh keeps the current panel.
   if (body.dataset.state !== 'ready') {
-    setVulnDataBody('loading', [vulnMutedParagraph('Loading vulnerability data status...')]);
+    setVulnDataBody('loading', [vulnMutedParagraph(TEXT.vuln.loading)]);
   }
   try {
     const { data } = await api('/api/vulnerability-data/status');
@@ -700,7 +1317,7 @@ async function loadVulnerabilityDataStatus() {
     if (seq !== vulnDataRequestSeq) return;
     if (err && err.authRedirect) return; // the auth form already explains what happened
     // Server message is intentionally not shown (contract 6.3); previous content is dropped.
-    setVulnDataBody('error', [vulnMutedParagraph('Vulnerability data status could not be loaded.')]);
+    setVulnDataBody('error', [vulnMutedParagraph(TEXT.vuln.loadFailed)]);
   }
 }
 
@@ -721,7 +1338,7 @@ async function loadAllScansHistory() {
     container.style.display = 'block';
 
     if (!Array.isArray(data) || data.length === 0) {
-      emptyRow(tbody, 8, 'No scans registered');
+      emptyRow(tbody, 8, TEXT.scans.historyEmpty);
       return;
     }
 
@@ -732,7 +1349,7 @@ async function loadAllScansHistory() {
     refreshIcons();
   } catch (e) {
     loading.style.display = 'none';
-    reportError(e, 'Failed to load scan history');
+    reportError(e, TEXT.scans.historyFailed);
   }
 }
 
@@ -752,45 +1369,47 @@ function renderProjectRow(p) {
   const repoHref = safeExternalHref(p.repo_url);
   const repoContent = repoHref
     ? el('a', { href: repoHref, target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary); text-decoration: none;' }, p.repo_url)
-    : (p.repo_url || '—');
+    : (p.repo_url || TEXT.common.dash);
 
   const ecosystems = (Array.isArray(p.ecosystems) ? p.ecosystems : [])
-    .map((e) => el('span', { className: 'capsule', style: 'margin-right:0.25rem;' }, e));
+    .map((e) => el('span', { className: 'capsule', style: 'margin-right:0.25rem;' }, label(TEXT.ecosystem, e)));
 
   // Values travel in data-* attributes and are read back from dataset — never interpolated into code.
   const data = { projectId: String(p.id ?? ''), projectName: String(p.name ?? '') };
   const scanButton = p.repo_url
     ? el('button', { className: 'btn btn-sm', type: 'button', dataset: { action: 'scan-project', ...data } },
-      icon('play', 'width:12px;height:12px;'), ' Scan Now')
+      icon('play', 'width:12px;height:12px;'), TEXT.projects.scanNow)
     : null;
   const webScanButton = p.web_url
     ? el('button', { className: 'btn btn-sm', type: 'button', dataset: { action: 'web-scan-project', ...data } },
-      icon('globe', 'width:12px;height:12px;'), ' Web Scan')
+      icon('globe', 'width:12px;height:12px;'), TEXT.projects.webScan)
     : null;
-  const webEditButton = el('button', { className: 'btn btn-sm btn-ghost', type: 'button', dataset: { action: 'edit-web-url', ...data }, 'aria-label': 'Edit web URL' },
-    icon('pencil', 'width:12px;height:12px;'), ' Web URL');
+  const webEditButton = el('button', { className: 'btn btn-sm btn-ghost', type: 'button', dataset: { action: 'edit-web-url', ...data }, 'aria-label': TEXT.projects.webUrlAria },
+    icon('pencil', 'width:12px;height:12px;'), TEXT.projects.webUrl);
   // REQ-009 AC-UI-2: https repositories can carry a token; its value is never shown.
   const tokenButton = isHttpsRepo(p.repo_url)
     ? el('button', {
       className: 'btn btn-sm btn-ghost',
       type: 'button',
       dataset: { action: 'edit-repo-token', ...data },
-      title: p.has_repo_credential ? 'A repo access token is set; save a new one to replace it' : 'Add a repo access token for a private repository',
-    }, icon('key-round', 'width:12px;height:12px;'), p.has_repo_credential ? ' Token set' : ' Add token')
+      title: p.has_repo_credential ? TEXT.projects.tokenSetTitle : TEXT.projects.tokenAddTitle,
+    }, icon('key-round', 'width:12px;height:12px;'), p.has_repo_credential ? TEXT.projects.tokenSet : TEXT.projects.tokenAdd)
     : null;
 
   // REQ-008: the web address is shown as text with its scan mode, never as a link.
   const webContent = p.web_url
     ? el('span', null, String(p.web_url),
-      p.web_scan_mode === 'active' ? el('span', { className: 'capsule', style: 'margin-left:0.35rem; color: var(--warning);' }, 'active') : null)
-    : '—';
+      p.web_scan_mode === 'active'
+        ? el('span', { className: 'capsule', style: 'margin-left:0.35rem; color: var(--warning);', title: TEXT.projects.activeModeTitle }, TEXT.projects.activeMode)
+        : null)
+    : TEXT.common.dash;
 
   return el('tr', null,
-    el('td', null, el('strong', null, p.name ?? '—')),
-    el('td', null, el('span', { className: 'status-badge', style: critStyle }, p.criticality ?? '—')),
+    el('td', null, el('strong', null, p.name ?? TEXT.common.dash)),
+    el('td', null, el('span', { className: 'status-badge', style: critStyle }, label(TEXT.severity, p.criticality))),
     el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted);' }, repoContent),
     el('td', { style: 'font-family: monospace; font-size: 0.8rem; color: var(--text-muted); word-break: break-all;' }, webContent),
-    el('td', null, ecosystems.length ? ecosystems : el('span', { style: 'color:var(--text-muted)' }, '—')),
+    el('td', null, ecosystems.length ? ecosystems : el('span', { style: 'color:var(--text-muted)' }, TEXT.common.dash)),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(p.created_at)),
     el('td', null, el('div', { style: 'display:inline-flex; gap:0.375rem; flex-wrap:wrap;' }, scanButton, webScanButton, webEditButton, tokenButton)));
 }
@@ -816,7 +1435,7 @@ async function loadProjectsList() {
 
     projectsById.clear();
     if (!Array.isArray(data) || data.length === 0) {
-      emptyRow(tbody, 7, 'No projects registered');
+      emptyRow(tbody, 7, TEXT.projects.empty);
       return;
     }
 
@@ -827,7 +1446,7 @@ async function loadProjectsList() {
     refreshIcons();
   } catch (e) {
     loading.style.display = 'none';
-    reportError(e, 'Failed to load projects');
+    reportError(e, TEXT.projects.loadFailed);
   }
 }
 
@@ -836,13 +1455,13 @@ const projectsById = new Map();
 let webModalProjectId = null;
 
 async function triggerWebScan(projectId, name) {
-  showToast(`Scheduling web scan for "${name}"...`, 'success');
+  showToast(TEXT.scans.schedulingWeb(name), 'success');
   try {
     await api('/api/scans', { method: 'POST', body: { projectId, trigger: 'manual', kind: 'web' } });
-    showToast('Web scan queued successfully!');
+    showToast(TEXT.scans.webQueued);
     await switchView('dashboard');
   } catch (e) {
-    reportError(e, 'Failed to trigger web scan');
+    reportError(e, TEXT.scans.webTriggerFailed);
   }
 }
 
@@ -854,7 +1473,7 @@ function openWebUrlModal(projectId) {
   const p = projectsById.get(String(projectId));
   if (!p) return;
   webModalProjectId = String(projectId);
-  setText('webUrlModal-subtitle', `Project: ${p.name ?? '—'}`);
+  setText('webUrlModal-subtitle', TEXT.projects.subtitle(p.name ?? TEXT.common.dash));
   byId('webUrlInput').value = p.web_url || '';
   byId('webScanMode').value = p.web_scan_mode === 'active' ? 'active' : 'passive';
   syncWebModeWarning();
@@ -872,13 +1491,15 @@ let tokenModalProjectId = null;
 
 function openRepoTokenModal(projectId) {
   const p = projectsById.get(String(projectId));
-  if (!p) return;
+  if (!p) return undefined;
   tokenModalProjectId = String(projectId);
-  setText('repoTokenModal-subtitle', `Project: ${p.name ?? '—'} · ${p.repo_url ?? ''}`);
-  setText('repoTokenModal-state', p.has_repo_credential ? 'A token is already set for this repository.' : 'No token is set yet.');
+  setText('repoTokenModal-subtitle', TEXT.projects.tokenSubtitle(p.name ?? TEXT.common.dash, p.repo_url ?? ''));
+  setText('repoTokenModal-state', p.has_repo_credential ? TEXT.projects.tokenStateSet : TEXT.projects.tokenStateNone);
   byId('repoTokenInput').value = '';
+  applyFeatureHints(systemFeatures);
   byId('repoTokenModal').classList.add('open');
   byId('repoTokenInput').focus();
+  return refreshFeatureHints('repoTokenModal');
 }
 
 function closeRepoTokenModal() {
@@ -890,16 +1511,16 @@ function closeRepoTokenModal() {
 async function saveRepoToken() {
   if (!tokenModalProjectId) return;
   const token = byId('repoTokenInput').value.trim();
-  if (!token) { showToast('Enter a token', 'error'); return; }
+  if (!token) { showToast(TEXT.projects.enterToken, 'error'); return; }
   const button = byId('token-modal-save-btn');
   button.disabled = true;
   try {
     await api(apiPath('projects', tokenModalProjectId, 'repo-credential'), { method: 'PUT', body: { token } });
     closeRepoTokenModal();
-    showToast('Repo access token saved. Start a scan to use it.');
+    showToast(TEXT.projects.tokenSaved);
     await loadProjectsList();
   } catch (e) {
-    reportError(e, 'Failed to save the token');
+    reportError(e, TEXT.projects.tokenSaveFailed);
   } finally {
     button.disabled = false;
   }
@@ -920,31 +1541,31 @@ async function saveWebUrl() {
   try {
     await api(apiPath('projects', webModalProjectId), { method: 'PATCH', body: { webUrl: webUrl === '' ? null : webUrl, webScanMode } });
     closeWebUrlModal();
-    showToast('Web target saved.');
+    showToast(TEXT.projects.webSaved);
     await loadProjectsList();
   } catch (e) {
-    reportError(e, 'Failed to save web URL');
+    reportError(e, TEXT.projects.webSaveFailed);
   } finally {
     button.disabled = false;
   }
 }
 
 async function triggerManualScan(projectId, name) {
-  showToast(`Scheduling scan for "${name}"...`, 'success');
+  showToast(TEXT.scans.scheduling(name), 'success');
   try {
     await api('/api/scans', { method: 'POST', body: { projectId, trigger: 'manual' } });
-    showToast('Scan queued successfully!');
+    showToast(TEXT.scans.queued);
     // Return to main dashboard view to display scanning progress
     await switchView('dashboard');
   } catch (e) {
-    reportError(e, 'Failed to trigger scan');
+    reportError(e, TEXT.scans.triggerFailed);
   }
 }
 
 // ── Dropdowns Populator for Scans (Vulnerabilities and SBOM)
 async function populateScansDropdown(selectId, loader, options = {}) {
   const select = byId(selectId);
-  setPlaceholderOption(select, 'Loading completed scans...');
+  setPlaceholderOption(select, TEXT.findings.loadingScans);
 
   try {
     const { data } = await api('/api/scans');
@@ -954,27 +1575,32 @@ async function populateScansDropdown(selectId, loader, options = {}) {
     clear(select);
 
     if (completed.length === 0) {
-      setPlaceholderOption(select, 'No completed scans found');
-      return;
-    }
-
-    for (const scan of completed) {
-      const web = isWebScan(scan);
-      select.appendChild(el('option', { value: String(scan.id), dataset: { kind: web ? 'web' : 'dependency' } },
-        web
-          ? `${scan.project_name} - Web ${webHost(scan.target_url)} (${formatDate(scan.completed_at)})`
-          : `${scan.project_name} - ${scan.ref} (${formatDate(scan.completed_at)})`));
+      setPlaceholderOption(select, TEXT.findings.noCompleted);
+    } else {
+      for (const scan of completed) {
+        const web = isWebScan(scan);
+        select.appendChild(el('option', { value: String(scan.id), dataset: { kind: web ? 'web' : 'dependency' } },
+          web
+            ? TEXT.findings.webOption(scan.project_name, webHost(scan.target_url), formatDate(scan.completed_at))
+            : TEXT.findings.depOption(scan.project_name, scan.ref || TEXT.common.defaultBranch, formatDate(scan.completed_at))));
+      }
     }
   } catch (e) {
-    setPlaceholderOption(select, 'Failed to fetch scans');
-    reportError(e, 'Failed to fetch scans');
+    setPlaceholderOption(select, TEXT.findings.fetchFailed);
+    reportError(e, TEXT.findings.fetchFailed);
     return;
   }
-  // Load the view for the first (pre-selected) scan.
+  // Load the view for the first (pre-selected) scan; with no scan it shows the empty state.
   await loader();
 }
 
 // ── Load Vulnerabilities Tab
+function severityIcon(sev) {
+  if (sev === 'critical' || sev === 'high') return ['var(--danger)', 'rgba(239,68,68,0.15)'];
+  if (sev === 'medium') return ['var(--warning)', 'rgba(245,158,11,0.15)'];
+  return ['var(--text-muted)', 'rgba(255,255,255,0.06)'];
+}
+
 function renderFinding(f) {
   const badges = el('div');
   let iconName;
@@ -984,78 +1610,65 @@ function renderFinding(f) {
   if (f.finding_type === 'security') {
     const sev = tagLevel(f.severity);
     append(badges, [
-      el('span', { className: `tag tag-${sev}` }, f.severity ?? 'medium'),
+      el('span', { className: `tag tag-${sev}` }, label(TEXT.severity, String(f.severity ?? 'medium').toLowerCase())),
       ' ',
-      el('span', { className: `tag tag-${sev}` }, `CVSS ${f.cvss_score || '—'}`),
+      el('span', { className: `tag tag-${sev}`, title: termTitle('cvss') }, TEXT.findings.cvss(f.cvss_score || TEXT.common.dash)),
     ]);
-    if (f.cve_id) append(badges, [' ', el('span', { className: 'capsule' }, f.cve_id)]);
-
+    if (f.cve_id) append(badges, [' ', el('span', { className: 'capsule', title: termTitle('cve') }, f.cve_id)]);
     iconName = 'shield-alert';
-    if (sev === 'critical' || sev === 'high') {
-      iconColor = 'var(--danger)';
-      iconBg = 'rgba(239,68,68,0.15)';
-    } else if (sev === 'medium') {
-      iconColor = 'var(--warning)';
-      iconBg = 'rgba(245,158,11,0.15)';
-    } else {
-      iconColor = 'var(--text-muted)';
-      iconBg = 'rgba(255,255,255,0.06)';
-    }
+    [iconColor, iconBg] = severityIcon(sev);
   } else {
     iconName = 'scale';
     iconColor = 'var(--warning)';
     iconBg = 'rgba(245,158,11,0.15)';
     const riskText = String(f.risk_level || 'medium').toLowerCase();
     append(badges, [
-      el('span', { className: 'tag tag-violation' }, 'License Alert'),
+      el('span', { className: 'tag tag-violation', title: termTitle('license') }, TEXT.findings.licenseAlert),
       ' ',
-      el('span', { className: `tag tag-${tagLevel(riskText)}` }, `${riskText} risk`),
+      el('span', { className: `tag tag-${tagLevel(riskText)}` }, TEXT.findings.risk(label(TEXT.licenseRisk, riskText))),
     ]);
     if (f.detected_license) append(badges, [' ', el('span', { className: 'capsule' }, f.detected_license)]);
   }
 
   const description = f.vuln_description
-    || `Package "${f.package_name}" is using license "${f.detected_license}" which triggers risk constraints under active policy "${f.applied_policy || 'Default prohibited list'}".`;
+    || TEXT.findings.licenseDescription(f.package_name, f.detected_license, f.applied_policy || TEXT.findings.defaultPolicy);
 
   return el('div', { className: 'finding-item' },
     el('div', { className: 'finding-icon', style: `background: ${iconBg}; color: ${iconColor};` }, icon(iconName)),
     el('div', { className: 'finding-info' },
       el('div', { className: 'finding-title-row' },
-        el('h4', { className: 'finding-title' }, f.vuln_title || f.normalized_license || 'Unknown Policy Risk'),
+        el('h4', { className: 'finding-title' }, f.vuln_title || f.normalized_license || TEXT.findings.unknownRisk),
         badges),
       el('div', { className: 'finding-meta' },
-        el('span', null, 'Package: ', el('strong', null, `${f.package_name}@${f.package_version}`)),
-        el('span', null, 'Type: ', el('span', { className: 'capsule', style: 'text-transform: capitalize;' }, f.finding_type ?? '—')),
-        el('span', null, 'Status: ', el('span', { className: 'capsule', style: 'color:var(--danger);' }, f.status ?? '—'))),
+        el('span', null, TEXT.findings.package, el('strong', null, `${f.package_name}@${f.package_version}`)),
+        el('span', null, TEXT.findings.type, el('span', { className: 'capsule' }, label(TEXT.findingType, f.finding_type))),
+        el('span', null, TEXT.findings.status, el('span', { className: 'capsule', style: 'color:var(--danger);' }, label(TEXT.findingStatus, f.status))),
+        f.purl ? el('span', { title: termTitle('purl') }, TEXT.findings.purl, el('code', null, f.purl)) : null),
       el('p', { className: 'finding-description' }, description),
       f.fix_version
-        ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, 'Fixed in: ', el('strong', null, f.fix_version))
+        ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, TEXT.findings.fixedIn, el('strong', null, f.fix_version))
         : null));
 }
 
 // ── Web scan findings (REQ-008 AC-P27-5)
-const WEB_SEVERITY_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
-const WEB_ENGINE_LABELS = { complete: 'complete', partial: 'partial', not_configured: 'not configured', unavailable: 'unreachable', failed: 'failed', disabled: 'off', not_needed: 'not needed' };
-
-function hasLabel(map, key) {
-  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : '—';
-}
-
 function renderWebSummary(data) {
   const grade = ['A', 'B', 'C', 'D', 'F'].includes(data.grade) ? data.grade : 'F';
   const summary = data.summary && typeof data.summary === 'object' ? data.summary : {};
   const engines = summary.engines && typeof summary.engines === 'object' ? summary.engines : {};
   const counts = data.counts && typeof data.counts === 'object' ? data.counts : {};
   const chips = ['critical', 'high', 'medium', 'low', 'info'].map((s) =>
-    el('span', { className: `tag tag-${tagLevel(s)}` }, `${WEB_SEVERITY_LABELS[s]}: ${Number(counts[s]) || 0}`));
-  const engineText = `Built-in: ${hasLabel(WEB_ENGINE_LABELS, engines.builtin)} · OWASP ZAP: ${hasLabel(WEB_ENGINE_LABELS, engines.zap)}`
-    + (engines.zap_mode === 'active' ? ' (active)' : '')
-    + ` · Library lookup: ${hasLabel(WEB_ENGINE_LABELS, summary.vulnerability_lookup)} · Requests: ${Number(summary.requests) || 0}`;
+    el('span', { className: `tag tag-${tagLevel(s)}` }, `${TEXT.severity[s]}: ${formatNumber(Number(counts[s]) || 0)}`));
+  const engineText = TEXT.web.engineLine(
+    label(TEXT.web.engines, engines.builtin, TEXT.common.dash),
+    label(TEXT.web.engines, engines.zap, TEXT.common.dash),
+    engines.zap_mode === 'active',
+    label(TEXT.web.engines, summary.vulnerability_lookup, TEXT.common.dash),
+    formatNumber(Number(summary.requests) || 0));
   return el('div', { className: 'web-summary' },
-    el('div', { className: `web-grade web-grade-${grade}`, 'aria-label': `Grade ${grade}` }, grade),
+    el('div', { className: `web-grade web-grade-${grade}`, 'aria-label': TEXT.web.gradeAria(grade), title: termTitle('grade') }, grade),
     el('div', { className: 'web-summary-text' },
-      el('h3', null, `Security grade ${grade} · ${Number(data.score) || 0}/100`),
-      el('p', null, `Target: ${data.scan && data.scan.target_url ? webLocation(data.scan.target_url) : '—'}`),
+      el('h3', null, TEXT.web.heading(grade, Number(data.score) || 0)),
+      el('p', null, TEXT.web.target(data.scan && data.scan.target_url ? webLocation(data.scan.target_url) : TEXT.common.dash)),
       el('p', null, engineText),
       el('div', { className: 'web-counts' }, chips)));
 }
@@ -1063,28 +1676,25 @@ function renderWebSummary(data) {
 function renderWebFinding(f) {
   const sev = tagLevel(f.severity);
   const badges = el('div', null,
-    el('span', { className: `tag tag-${sev}` }, hasLabel(WEB_SEVERITY_LABELS, f.severity)),
+    el('span', { className: `tag tag-${sev}` }, label(TEXT.severity, f.severity, TEXT.common.dash)),
     ' ',
-    el('span', { className: 'capsule' }, f.rule_id ?? '—'),
-    f.owasp ? [' ', el('span', { className: 'capsule' }, `OWASP ${f.owasp}`)] : null,
-    f.cwe_id ? [' ', el('span', { className: 'capsule' }, `CWE-${f.cwe_id}`)] : null,
+    el('span', { className: 'capsule' }, f.rule_id ?? TEXT.common.dash),
+    f.owasp ? [' ', el('span', { className: 'capsule', title: termTitle('owasp') }, `OWASP ${f.owasp}`)] : null,
+    f.cwe_id ? [' ', el('span', { className: 'capsule', title: termTitle('cwe') }, `CWE-${f.cwe_id}`)] : null,
     f.advisory_id ? [' ', el('span', { className: 'capsule' }, f.advisory_id)] : null);
-  let iconColor = 'var(--text-muted)';
-  let iconBg = 'rgba(255,255,255,0.06)';
-  if (sev === 'critical' || sev === 'high') { iconColor = 'var(--danger)'; iconBg = 'rgba(239,68,68,0.15)'; }
-  else if (sev === 'medium') { iconColor = 'var(--warning)'; iconBg = 'rgba(245,158,11,0.15)'; }
+  const [iconColor, iconBg] = severityIcon(sev);
   return el('div', { className: 'finding-item' },
     el('div', { className: 'finding-icon', style: `background: ${iconBg}; color: ${iconColor};` }, icon(f.source === 'zap' ? 'radar' : 'globe')),
     el('div', { className: 'finding-info' },
-      el('div', { className: 'finding-title-row' }, el('h4', { className: 'finding-title' }, f.title ?? '—'), badges),
+      el('div', { className: 'finding-title-row' }, el('h4', { className: 'finding-title' }, f.title ?? TEXT.common.dash), badges),
       el('div', { className: 'finding-meta' },
-        f.location ? el('span', null, 'Location: ', el('strong', { style: 'word-break: break-all;' }, f.location)) : null,
-        el('span', null, 'Source: ', el('span', { className: 'capsule' }, f.source === 'zap' ? 'OWASP ZAP' : 'Built-in')),
-        f.component_name ? el('span', null, 'Component: ', el('strong', null, `${f.component_name}@${f.component_version ?? '?'}`)) : null),
+        f.location ? el('span', null, TEXT.web.location, el('strong', { style: 'word-break: break-all;' }, f.location)) : null,
+        el('span', null, TEXT.web.source, el('span', { className: 'capsule' }, f.source === 'zap' ? TEXT.web.sourceZap : TEXT.web.sourceBuiltin)),
+        f.component_name ? el('span', null, TEXT.web.component, el('strong', null, `${f.component_name}@${f.component_version ?? '?'}`)) : null),
       el('p', { className: 'finding-description' }, f.description ?? ''),
-      f.evidence ? el('div', { className: 'web-finding-ev' }, `Evidence: ${f.evidence}`) : null,
-      f.fixed_version ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, 'Fixed in: ', el('strong', null, f.fixed_version)) : null,
-      el('div', { className: 'web-finding-rec' }, `Recommendation: ${f.recommendation ?? ''}`)));
+      f.evidence ? el('div', { className: 'web-finding-ev' }, TEXT.web.evidence(f.evidence)) : null,
+      f.fixed_version ? el('div', { style: 'margin-top:0.4rem; font-size:0.8rem; color:var(--success);' }, TEXT.findings.fixedIn, el('strong', null, f.fixed_version)) : null,
+      el('div', { className: 'web-finding-rec' }, TEXT.web.recommendation(f.recommendation ?? ''))));
 }
 
 async function loadWebFindings(scanId, container) {
@@ -1093,13 +1703,13 @@ async function loadWebFindings(scanId, container) {
   container.appendChild(renderWebSummary(data));
   const findings = Array.isArray(data.findings) ? data.findings : [];
   if (findings.length === 0) {
-    container.appendChild(emptyState('shield-check', 'No web findings', 'No issue was found by the checks that ran for this target.', ' color:var(--success); opacity:1;'));
+    container.appendChild(emptyState('shield-check', TEXT.web.noFindingsTitle, TEXT.web.noFindingsHint, ' color:var(--success); opacity:1;'));
   }
   for (const f of findings) container.appendChild(renderWebFinding(f));
   const components = Array.isArray(data.components) ? data.components : [];
   if (components.length > 0) {
     container.appendChild(el('div', { className: 'web-components' },
-      el('h4', null, 'Detected JavaScript libraries'),
+      el('h4', null, TEXT.web.components),
       components.map((c) => el('span', { className: 'capsule', style: 'margin:0 0.35rem 0.35rem 0;' }, `${c.name} ${c.version}`))));
   }
   refreshIcons();
@@ -1111,7 +1721,7 @@ async function loadScanFindings() {
   const loading = byId('findings-loading');
 
   if (!scanId) {
-    clear(container).appendChild(emptyState('alert-triangle', 'No scan selected', 'Select a completed scan above to view its findings.'));
+    clear(container).appendChild(emptyState('alert-triangle', TEXT.findings.noScanTitle, TEXT.findings.noScanHint));
     refreshIcons();
     return;
   }
@@ -1128,8 +1738,8 @@ async function loadScanFindings() {
     } catch (e) {
       loading.style.display = 'none';
       container.style.display = 'block';
-      clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, 'Error loading web findings')));
-      reportError(e, 'Error loading web findings');
+      clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, TEXT.findings.webLoadFailed)));
+      reportError(e, TEXT.findings.webLoadFailed);
     }
     return;
   }
@@ -1142,7 +1752,7 @@ async function loadScanFindings() {
     clear(container);
 
     if (!Array.isArray(data) || data.length === 0) {
-      container.appendChild(emptyState('shield-check', 'Compliance Clean!', 'No vulnerabilities or license risks were found for this scan.', ' color:var(--success); opacity:1;'));
+      container.appendChild(emptyState('shield-check', TEXT.findings.cleanTitle, TEXT.findings.cleanHint, ' color:var(--success); opacity:1;'));
       refreshIcons();
       return;
     }
@@ -1152,8 +1762,8 @@ async function loadScanFindings() {
   } catch (e) {
     loading.style.display = 'none';
     container.style.display = 'block';
-    clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, 'Error loading findings')));
-    reportError(e, 'Error loading findings');
+    clear(container).appendChild(el('div', { className: 'empty-state' }, el('p', null, TEXT.findings.loadFailed)));
+    reportError(e, TEXT.findings.loadFailed);
   }
 }
 
@@ -1168,8 +1778,8 @@ const SBOM_FORMAT_LABELS = {
 function renderSbomRow(doc) {
   const formatLabel = Object.prototype.hasOwnProperty.call(SBOM_FORMAT_LABELS, doc.format) ? SBOM_FORMAT_LABELS[doc.format] : doc.format;
   return el('tr', null,
-    el('td', null, el('strong', null, formatLabel ?? '—')),
-    el('td', null, el('span', { className: 'capsule' }, doc.specVersion ?? '—')),
+    el('td', null, el('strong', null, formatLabel ?? TEXT.common.dash)),
+    el('td', null, el('span', { className: 'capsule' }, doc.specVersion ?? TEXT.common.dash)),
     el('td', null, formatBytes(doc.fileSizeBytes)),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, formatDate(doc.generatedAt)),
     el('td', { style: 'font-family: monospace; font-size: 0.78rem; color: var(--text-muted);' }, `${String(doc.checksumSha256 ?? '').slice(0, 16)}...`),
@@ -1180,7 +1790,7 @@ function renderSbomRow(doc) {
         target: '_blank',
         rel: 'noopener',
         style: 'text-decoration:none; display:inline-flex; align-items:center; gap:0.25rem;',
-      }, icon('download', 'width:12px;height:12px;'), ' Download')));
+      }, icon('download', 'width:12px;height:12px;'), TEXT.sbom.download)));
 }
 
 async function loadScanSboms() {
@@ -1221,7 +1831,7 @@ async function loadScanSboms() {
     refreshIcons();
   } catch (e) {
     loading.style.display = 'none';
-    reportError(e, 'Failed to load SBOM documents');
+    reportError(e, TEXT.sbom.loadFailed);
   }
 }
 
@@ -1233,17 +1843,17 @@ async function generateNewSbom() {
   if (!scanId) return;
 
   genBtn.disabled = true;
-  setButtonContent(genBtn, 'loader-2', 'Generating...', true);
+  setButtonContent(genBtn, 'loader-2', TEXT.sbom.generating, true);
 
   try {
     await api(apiPath('scans', scanId, 'sbom'), { method: 'POST', body: { format } });
-    showToast('SBOM document generated successfully!');
+    showToast(TEXT.sbom.generated);
     await loadScanSboms();
   } catch (e) {
-    reportError(e, 'Failed to generate SBOM');
+    reportError(e, TEXT.sbom.generateFailed);
   } finally {
     genBtn.disabled = false;
-    setButtonContent(genBtn, 'plus', 'Generate Document');
+    setButtonContent(genBtn, 'plus', TEXT.sbom.generate);
   }
 }
 
@@ -1251,14 +1861,14 @@ async function generateNewSbom() {
 function renderUserRow(u) {
   const roles = (Array.isArray(u.roles) ? u.roles : []).map((role) => el('span', {
     className: 'capsule',
-    style: 'background:rgba(139,92,246,0.1); color:var(--primary); font-weight:600; text-transform:capitalize; margin-right:0.25rem;',
-  }, role));
+    style: 'background:rgba(139,92,246,0.1); color:var(--primary); font-weight:600; margin-right:0.25rem;',
+  }, label(TEXT.role, role)));
   return el('tr', null,
-    el('td', null, el('strong', null, u.display_name || '—')),
+    el('td', null, el('strong', null, u.display_name || TEXT.common.dash)),
     // Plain text: only http/https may be used as href (no mailto: built from API data).
-    el('td', { style: 'color:var(--primary);' }, u.email || '—'),
+    el('td', { style: 'color:var(--primary);' }, u.email || TEXT.common.dash),
     el('td', null, roles),
-    el('td', null, el('span', { className: 'status-badge status-healthy', style: 'text-transform: capitalize;' }, u.status || 'active')),
+    el('td', null, el('span', { className: 'status-badge status-healthy' }, label(TEXT.userStatus, u.status || 'active'))),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, timeAgo(u.created_at)));
 }
 
@@ -1278,15 +1888,136 @@ async function loadUsersList() {
     clear(tbody);
 
     if (!Array.isArray(data) || data.length === 0) {
-      emptyRow(tbody, 5, 'No users registered');
+      emptyRow(tbody, 5, TEXT.users.empty);
       return;
     }
 
     for (const u of data) tbody.appendChild(renderUserRow(u));
   } catch (e) {
     loading.style.display = 'none';
-    reportError(e, 'Failed to load users');
+    reportError(e, TEXT.users.loadFailed);
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// System status (REQ-010 P-35, contract docs/contracts/REQ-010-system-features.md).
+// The endpoint returns booleans and counts only. 401 goes to the login form
+// like every call; 403/404/network/malformed -> "Sistem durumu alınamadı".
+// ════════════════════════════════════════════════════════════════════
+
+/** Last successful `data` of GET /api/system/features, or null when unknown. */
+let systemFeatures = null;
+let systemFeaturesSeq = 0;
+
+async function loadSystemFeatures() {
+  try {
+    const { data } = await api('/api/system/features');
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('malformed body');
+    systemFeatures = data;
+  } catch (err) {
+    if (err && err.authRedirect) throw err;
+    systemFeatures = null;
+  }
+  return systemFeatures;
+}
+
+/** True only when the API explicitly reports the feature as off. */
+function featureOff(features, key) {
+  return hasOwn(features, key) && features[key] !== null && typeof features[key] === 'object' && features[key].enabled === false;
+}
+
+function setFeatureWarning(id, text) {
+  const node = byId(id);
+  if (!node) return;
+  node.textContent = text || '';
+  node.classList.toggle('show', Boolean(text));
+}
+
+/** AC-P35-3: field hints of the new-project and token modals follow the feature switches. */
+function applyFeatureHints(features) {
+  setFeatureWarning('repoPath-feature-warning', featureOff(features, 'local_scan') ? TEXT.modal.localScanOff : '');
+  setFeatureWarning('webUrl-feature-warning', featureOff(features, 'web_scan') ? TEXT.modal.webScanOff : '');
+  const tokensOff = featureOff(features, 'repo_tokens') ? TEXT.modal.repoTokensOff : '';
+  setFeatureWarning('repoToken-feature-warning', tokensOff);
+  setFeatureWarning('repoTokenModal-feature-warning', tokensOff);
+}
+
+async function refreshFeatureHints(modalId) {
+  const features = await loadSystemFeatures();
+  const modal = byId(modalId);
+  if (modal && modal.classList.contains('open')) applyFeatureHints(features);
+}
+
+function renderFeature(def, value) {
+  const known = value !== null && typeof value === 'object' && typeof value.enabled === 'boolean';
+  const enabled = known && value.enabled;
+  let badge;
+  if (!known) badge = el('span', { className: 'status-badge status-pending' }, TEXT.system.unknown);
+  else if (enabled) badge = el('span', { className: 'status-badge status-healthy' }, icon('check-circle', 'width:13px;height:13px;'), TEXT.system.on);
+  else badge = el('span', { className: 'status-badge status-critical' }, icon('x-circle', 'width:13px;height:13px;'), TEXT.system.off);
+
+  const meta = [];
+  if (known && def.count && Number.isFinite(Number(value[def.count[0]]))) meta.push(def.count[1](formatNumber(value[def.count[0]])));
+  if (known && def.key === 'nvd' && typeof value.api_key === 'boolean') meta.push(value.api_key ? TEXT.system.nvdKeySet : TEXT.system.nvdKeyMissing);
+
+  return el('div', { className: 'feature-item', dataset: { feature: def.key, enabled: known ? String(enabled) : 'unknown' } },
+    el('div', { className: 'feature-head' }, el('h3', { className: 'feature-name' }, def.name), badge),
+    el('p', { className: 'feature-desc' }, def.description),
+    meta.map((m) => el('p', { className: 'feature-meta' }, m)),
+    known && !enabled ? el('p', { className: 'feature-enable' }, el('strong', null, TEXT.system.howTo), def.enable) : null);
+}
+
+async function loadSystemStatus() {
+  const body = byId('system-status-body');
+  if (!body) return;
+  const seq = ++systemFeaturesSeq;
+  const features = await loadSystemFeatures();
+  if (seq !== systemFeaturesSeq) return;
+  clear(body);
+  if (!features) {
+    body.dataset.state = 'error';
+    body.appendChild(el('div', { className: 'empty-state', role: 'alert' },
+      icon('server-cog', 'display:block; margin:0 auto 1rem;'),
+      el('p', null, TEXT.system.loadFailedTitle),
+      el('small', null, TEXT.system.loadFailedHint)));
+    refreshIcons();
+    return;
+  }
+  body.dataset.state = 'ready';
+  append(body, [
+    el('div', { className: 'feature-list' }, TEXT.system.features.map((def) => renderFeature(def, hasOwn(features, def.key) ? features[def.key] : null))),
+    el('p', { className: 'form-hint', style: 'margin-top:1rem;' }, TEXT.system.restartNote),
+  ]);
+  refreshIcons();
+}
+
+// ── Help view (P-34 AC-P34-4, D-281): static content from TEXT, no server call.
+function renderHelp() {
+  const body = byId('help-body');
+  if (!body || body.dataset.rendered === 'true') return;
+  body.dataset.rendered = 'true';
+  append(clear(body), [
+    el('section', { className: 'help-section', 'aria-labelledby': 'help-steps-title' },
+      el('h3', { id: 'help-steps-title' }, TEXT.help.stepsTitle),
+      el('ol', { className: 'help-steps' }, TEXT.help.steps.map(([title, text]) =>
+        el('li', null, el('strong', null, title), el('span', null, text))))),
+    el('section', { className: 'help-section', 'aria-labelledby': 'help-trouble-title' },
+      el('h3', { id: 'help-trouble-title' }, TEXT.help.troubleTitle),
+      el('p', null, TEXT.help.trouble)),
+    el('section', { className: 'help-section', 'aria-labelledby': 'help-glossary-title' },
+      el('h3', { id: 'help-glossary-title' }, TEXT.help.glossaryTitle),
+      el('dl', { className: 'glossary', id: 'help-glossary' }, Object.entries(TEXT.glossary).map(([key, [term, text]]) =>
+        el('div', { className: 'glossary-entry', dataset: { term: key } }, el('dt', null, term), el('dd', null, text))))),
+  ]);
+}
+
+/** Static markup marks glossary terms with data-term; their tooltip comes from TEXT.glossary. */
+function applyTermTitles() {
+  document.querySelectorAll('[data-term]').forEach((node) => {
+    if (node.closest('#help-glossary')) return;
+    const title = termTitle(node.dataset.term);
+    if (title) node.setAttribute('title', title);
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1329,18 +2060,18 @@ function renderApiKeyRow(row) {
     action = el('button', {
       type: 'button',
       className: 'btn btn-sm',
-      'aria-label': `Revoke API key ${prefix}`,
-    }, 'Revoke');
+      'aria-label': TEXT.apiKeys.revokeAria(prefix),
+    }, TEXT.apiKeys.revoke);
     action.addEventListener('click', fire(() => revokeApiKey(row.id, prefix, action)));
   }
   return el('tr', null,
-    el('td', null, row.name ? String(row.name) : '—'),
+    el('td', null, row.name ? String(row.name) : TEXT.common.dash),
     el('td', null, el('code', null, prefix)),
     el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, formatDate(row.createdAt)),
-    el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, row.lastUsedAt ? formatDate(row.lastUsedAt) : 'Never'),
+    el('td', { style: 'color:var(--text-muted); font-size:0.85rem;' }, row.lastUsedAt ? formatDate(row.lastUsedAt) : TEXT.apiKeys.never),
     el('td', null, active
-      ? el('span', { className: 'status-badge status-healthy' }, 'Active')
-      : el('span', { className: 'status-badge status-pending' }, `Revoked ${formatDate(row.revokedAt)}`)),
+      ? el('span', { className: 'status-badge status-healthy' }, TEXT.apiKeys.active)
+      : el('span', { className: 'status-badge status-pending' }, TEXT.apiKeys.revoked(formatDate(row.revokedAt)))),
     el('td', null, action));
 }
 
@@ -1360,7 +2091,7 @@ async function loadApiKeys() {
     if (seq !== apiKeysLoadSeq) return;
     apiKeysHasActive = null;
     setApiKeysState('error');
-    reportError(e, 'Could not load API keys');
+    reportError(e, TEXT.apiKeys.loadFailed);
   }
 }
 
@@ -1377,15 +2108,15 @@ function showApiKeyReveal(keyId, keyValue) {
     readonly: true,
     autocomplete: 'off',
     spellcheck: 'false',
-    'aria-label': 'New API key',
+    'aria-label': TEXT.apiKeys.fieldAria,
     style: 'flex:1; min-width:240px; font-family:monospace;',
   });
   // Property, not attribute: the key does not appear in serialised markup.
   field.value = keyValue;
 
   const status = el('span', { id: 'api-key-copy-status', 'aria-live': 'polite', style: 'color:var(--text-muted); font-size:0.85rem;' });
-  const copyBtn = el('button', { type: 'button', id: 'api-key-copy-btn', className: 'btn btn-sm' }, icon('copy', 'width:12px;height:12px;'), ' Copy');
-  const doneBtn = el('button', { type: 'button', id: 'api-key-dismiss-btn', className: 'btn btn-sm btn-ghost' }, 'Done');
+  const copyBtn = el('button', { type: 'button', id: 'api-key-copy-btn', className: 'btn btn-sm' }, icon('copy', 'width:12px;height:12px;'), TEXT.apiKeys.copy);
+  const doneBtn = el('button', { type: 'button', id: 'api-key-dismiss-btn', className: 'btn btn-sm btn-ghost' }, TEXT.apiKeys.done);
 
   copyBtn.addEventListener('click', fire(async () => {
     const current = byId('api-key-value');
@@ -1393,11 +2124,11 @@ function showApiKeyReveal(keyId, keyValue) {
     try {
       if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(current.value);
-      status.textContent = 'Copied to clipboard';
+      status.textContent = TEXT.apiKeys.copied;
     } catch {
       current.focus();
       current.select();
-      status.textContent = 'Press Ctrl+C to copy';
+      status.textContent = TEXT.apiKeys.pressCtrlC;
     }
   }));
   doneBtn.addEventListener('click', () => {
@@ -1411,7 +2142,7 @@ function showApiKeyReveal(keyId, keyValue) {
     dataset: { keyId: String(keyId ?? '') },
     style: 'background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35); border-radius:14px; padding:1rem 1.25rem; margin-top:1rem;',
   },
-    el('p', { style: 'margin-bottom:0.75rem; font-weight:600;' }, 'Copy this key now. It will not be shown again.'),
+    el('p', { style: 'margin-bottom:0.75rem; font-weight:600;' }, TEXT.apiKeys.copyNow),
     el('div', { style: 'display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;' }, field, copyBtn, doneBtn),
     el('div', { style: 'margin-top:0.5rem; min-height:1.2rem;' }, status));
   slot.appendChild(panel);
@@ -1427,50 +2158,52 @@ async function createApiKey() {
   const name = nameInput.value.trim();
   // Unknown list state (still loading or failed) is treated as "may have an active key".
   if (apiKeysHasActive !== false
-    && !window.confirm('Creating a new key revokes the current active key. Continue?')) return;
+    && !window.confirm(TEXT.apiKeys.confirmReplace)) return;
 
   btn.disabled = true;
   const viewAtStart = currentActiveView;
   try {
     const { data } = await api('/api/auth/api-keys', { method: 'POST', body: name ? { name } : {} });
     const valid = data && typeof data.key === 'string' && data.key !== '';
-    if (!valid) throw new Error('Unexpected response from the server');
+    if (!valid) throw new Error(TEXT.common.unexpectedResponse);
     nameInput.value = '';
     if (!currentUser || currentActiveView !== 'api-keys' || viewAtStart !== 'api-keys') {
       // The view was left (or the session ended) while the request was in flight:
       // the key is not rendered into a hidden view.
-      showToast('A new API key was created but not shown because the page changed. Create another key to see it.', 'error');
+      showToast(TEXT.apiKeys.notShown, 'error');
     } else {
       showApiKeyReveal(data.id, data.key);
     }
     await loadApiKeys();
   } catch (e) {
-    reportError(e, 'Could not create API key');
+    reportError(e, TEXT.apiKeys.createFailed);
   } finally {
     btn.disabled = false;
   }
 }
 
 async function revokeApiKey(id, prefix, button) {
-  if (!window.confirm(`Revoke API key ${prefix}? Clients using it will stop working.`)) return;
+  if (!window.confirm(TEXT.apiKeys.confirmRevoke(prefix))) return;
   if (button) button.disabled = true;
   try {
     await api(apiPath('auth', 'api-keys', id), { method: 'DELETE' });
     const panel = byId('api-key-reveal');
     if (panel && panel.dataset.keyId === String(id)) removeApiKeyReveal();
-    showToast('API key revoked');
+    showToast(TEXT.apiKeys.revokedToast);
     await loadApiKeys();
   } catch (e) {
     if (button && button.isConnected) button.disabled = false;
-    reportError(e, 'Could not revoke API key');
+    reportError(e, TEXT.apiKeys.revokeFailed);
   }
 }
 
 // ── Modal Handlers
 function openModal() {
   byId('scanModal').classList.add('open');
+  applyFeatureHints(systemFeatures);
   const nameInput = byId('projectName');
   if (nameInput) nameInput.focus();
+  return refreshFeatureHints('scanModal');
 }
 function closeModal() {
   const modal = byId('scanModal');
@@ -1481,24 +2214,46 @@ function closeModal() {
   byId('webUrl').value = '';
   byId('repoToken').value = '';
   byId('repoTokenGroup').hidden = true;
+  // AC-P36-2: the next project starts again with auto-detect (no ecosystem selected).
+  ecoInputs().forEach((input) => { input.checked = input.value === 'auto'; });
 }
 
-// ── Launch Scan modal submission
+function ecoInputs() {
+  return Array.from(byId('ecosystems').querySelectorAll('input[name="eco"]'));
+}
+
+/** Selected ecosystems; auto-detect (or nothing) -> [] which the server reads as "all" (D-275). */
+function selectedEcosystems() {
+  return ecoInputs().filter((input) => input.checked && input.value !== 'auto').map((input) => input.value);
+}
+
+/** "Otomatik algıla" and the technology cards exclude each other; clearing every card returns to auto. */
+function syncEcosystemChoice(e) {
+  const changed = e && e.target instanceof HTMLInputElement ? e.target : null;
+  if (!changed || changed.name !== 'eco') return;
+  const inputs = ecoInputs();
+  const auto = inputs.find((input) => input.value === 'auto');
+  if (changed === auto && auto.checked) inputs.forEach((input) => { if (input !== auto) input.checked = false; });
+  if (changed !== auto && changed.checked) auto.checked = false;
+  if (!inputs.some((input) => input.checked)) auto.checked = true;
+}
+
+// ── New project modal submission
 async function launchScan() {
   const name = byId('projectName').value.trim();
   const repoPath = byId('repoPath').value.trim();
   const webUrl = byId('webUrl').value.trim();
-  const ecosystems = Array.from(byId('ecosystems').selectedOptions).map((o) => o.value);
+  const ecosystems = selectedEcosystems();
 
-  if (!name) { showToast('Project name is required', 'error'); return; }
-  if (!repoPath && !webUrl) { showToast('Enter a repository path, a web URL, or both', 'error'); return; }
+  if (!name) { showToast(TEXT.modal.nameRequired, 'error'); return; }
+  if (!repoPath && !webUrl) { showToast(TEXT.modal.sourceRequired, 'error'); return; }
 
   const launchBtn = byId('launch-btn');
   launchBtn.disabled = true;
-  setButtonContent(launchBtn, 'loader-2', 'Creating...', true);
+  setButtonContent(launchBtn, 'loader-2', TEXT.modal.creating, true);
 
   try {
-    // 1. Create project
+    // 1. Create project (an empty ecosystem list means "detect all", D-275).
     const body = { name, ecosystems };
     if (repoPath) body.repoUrl = repoPath;
     if (webUrl) body.webUrl = webUrl;
@@ -1513,7 +2268,7 @@ async function launchScan() {
         closeModal();
         if (e && e.authRedirect) return;
         const reason = e && e.message ? ` (${e.message})` : '';
-        showToast(`Project "${name}" was created but the token was not saved${reason}. Add it with the token button on the Projects page, then scan.`, 'error');
+        showToast(TEXT.modal.tokenNotSaved(name, reason), 'error');
         await switchView('projects');
         return;
       }
@@ -1523,70 +2278,66 @@ async function launchScan() {
     if (webUrl) await api('/api/scans', { method: 'POST', body: { projectId: project.id, trigger: 'manual', kind: 'web' } });
 
     closeModal();
-    showToast(`Scan queued for "${name}". Results will appear shortly.`);
+    showToast(TEXT.modal.queued(name));
     // Force switch to Dashboard to view progress
     await switchView('dashboard');
   } catch (e) {
-    reportError(e, 'Launch failed');
+    reportError(e, TEXT.modal.launchFailed);
   } finally {
     launchBtn.disabled = false;
-    setButtonContent(launchBtn, 'play', 'Launch Scanner');
+    setButtonContent(launchBtn, 'play', TEXT.modal.launch);
   }
 }
 
-// ── View router
+// ── View router (titles and one-sentence purposes come from TEXT.views, AC-P34-1)
 const VIEWS = {
   dashboard: {
-    title: 'OSS License & Security Dashboard',
-    subtitle: 'Real-time open source package compliance metrics',
     headerActions: true,
     load: () => Promise.all([loadScans(), updateStats(), loadVulnerabilityDataStatus()]),
     refresh: () => Promise.all([loadScans(), updateStats(), loadVulnerabilityDataStatus()]),
   },
   scans: {
-    title: 'Scan History',
-    subtitle: 'Historical log of compliance taramaları',
     load: () => loadAllScansHistory(),
     refresh: () => loadAllScansHistory(),
   },
   findings: {
-    title: 'Vulnerabilities & Findings',
-    subtitle: 'Security vulnerabilities and license policy alerts',
     load: () => populateScansDropdown('findings-scan-select', loadScanFindings),
     refresh: () => loadScanFindings(),
   },
   projects: {
-    title: 'Projects',
-    subtitle: 'Manage registered local codebases and integration repositories',
     load: () => loadProjectsList(),
     refresh: () => loadProjectsList(),
   },
   sbom: {
-    title: 'SBOM Center',
-    subtitle: 'Software Bill of Materials (SBOM) generation and download registry',
     load: () => populateScansDropdown('sbom-scan-select', loadScanSboms, { includeWeb: false }),
     refresh: () => loadScanSboms(),
   },
   users: {
-    title: 'Users & Roles',
-    subtitle: 'Access management and role-based permissions',
     load: () => loadUsersList(),
     refresh: () => loadUsersList(),
   },
   'api-keys': {
-    title: 'API Keys',
-    subtitle: 'Personal API key for the oss-risk CLI and CI',
     // refreshAll only reloads the list; it never removes or rebuilds the reveal panel.
     load: () => loadApiKeys(),
     refresh: () => loadApiKeys(),
+  },
+  system: {
+    load: () => loadSystemStatus(),
+    refresh: () => loadSystemStatus(),
+  },
+  help: {
+    load: async () => renderHelp(),
+    refresh: async () => renderHelp(),
   },
 };
 
 async function switchView(targetView) {
   if (!Object.prototype.hasOwnProperty.call(VIEWS, targetView)) return;
   const cfg = VIEWS[targetView];
+  const texts = TEXT.views[targetView];
   // A freshly created API key is shown only while the API Keys view stays open.
   if (!(targetView === 'api-keys' && currentActiveView === 'api-keys')) removeApiKeyReveal();
+  closeReportsMenu(false);
 
   document.querySelectorAll('#sidebar-nav .nav-item').forEach((b) => {
     const active = b.dataset.view === targetView;
@@ -1599,8 +2350,8 @@ async function switchView(targetView) {
   document.querySelectorAll('.view-section').forEach((sec) => { sec.style.display = 'none'; });
   byId(`view-${targetView}`).style.display = 'block';
 
-  setText('page-title', cfg.title);
-  setText('page-subtitle', cfg.subtitle);
+  setText('page-title', texts.title);
+  setText('page-subtitle', texts.subtitle);
   document.querySelector('.header-actions').style.display = cfg.headerActions ? 'flex' : 'none';
 
   await cfg.load();
@@ -1638,12 +2389,16 @@ function setAuthMessage(text, kind) {
 function clearAppData() {
   ['scans-tbody', 'scans-list-tbody', 'projects-list-tbody', 'users-list-tbody', 'sbom-documents-tbody', 'api-keys-tbody'].forEach((id) => clear(byId(id)));
   apiKeysHasActive = null;
+  systemFeatures = null;
+  openReports = null;
   const keyName = byId('api-key-name');
   if (keyName) keyName.value = '';
   ['findings-scan-select', 'sbom-scan-select'].forEach((id) => clear(byId(id)));
   const findings = byId('findings-container');
-  if (findings) clear(findings).appendChild(emptyState('alert-triangle', 'No scan selected', 'Select a completed scan above to view its dependency findings.'));
-  ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach((id) => setText(id, '—'));
+  if (findings) clear(findings).appendChild(emptyState('alert-triangle', TEXT.findings.noScanTitle, TEXT.findings.noScanHint));
+  const system = byId('system-status-body');
+  if (system) clear(system);
+  ['stat-projects', 'stat-packages', 'stat-license-alerts', 'stat-critical-cves'].forEach(resetStat);
   setText('current-user-name', '');
   setText('last-updated', '');
 }
@@ -1698,16 +2453,15 @@ function renderAuthForm(screen, mode, notice) {
     : null;
   const message = el('p', { id: 'auth-error', className: 'auth-message error', role: 'alert', 'aria-live': 'assertive' });
   const submit = el('button', { type: 'submit', className: 'btn', id: 'auth-submit' },
-    icon(isSetup ? 'key-round' : 'log-in'), isSetup ? ' Set password & continue' : ' Sign in');
+    icon(isSetup ? 'key-round' : 'log-in'), isSetup ? TEXT.auth.submitSetup : TEXT.auth.submitLogin);
 
   const form = el('form', { id: 'auth-form', novalidate: true, 'aria-labelledby': 'auth-title' },
     el('div', { className: 'form-group' },
-      el('label', { for: 'auth-password' }, isSetup ? 'New password' : 'Password'),
+      el('label', { for: 'auth-password' }, isSetup ? TEXT.auth.newPassword : TEXT.auth.passwordLabel),
       password,
-      isSetup ? el('small', { id: 'auth-password-hint', className: 'auth-hint' },
-        `At least ${MIN_PASSWORD_LENGTH} characters. The server validates it again.`) : null),
+      isSetup ? el('small', { id: 'auth-password-hint', className: 'auth-hint' }, TEXT.auth.passwordHint(MIN_PASSWORD_LENGTH)) : null),
     isSetup
-      ? el('div', { className: 'form-group' }, el('label', { for: 'auth-password-confirm' }, 'Confirm password'), confirmField)
+      ? el('div', { className: 'form-group' }, el('label', { for: 'auth-password-confirm' }, TEXT.auth.confirmPassword), confirmField)
       : null,
     message,
     el('div', { className: 'form-actions' }, submit));
@@ -1718,22 +2472,22 @@ function renderAuthForm(screen, mode, notice) {
 
     if (isSetup) {
       if (value.length < MIN_PASSWORD_LENGTH) {
-        setAuthMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, 'error');
+        setAuthMessage(TEXT.auth.tooShort(MIN_PASSWORD_LENGTH), 'error');
         password.focus();
         return;
       }
       if (value.length > MAX_PASSWORD_LENGTH) {
-        setAuthMessage(`Password must be at most ${MAX_PASSWORD_LENGTH} characters.`, 'error');
+        setAuthMessage(TEXT.auth.tooLong(MAX_PASSWORD_LENGTH), 'error');
         password.focus();
         return;
       }
       if (confirmField && value !== confirmField.value) {
-        setAuthMessage('Passwords do not match.', 'error');
+        setAuthMessage(TEXT.auth.mismatch, 'error');
         confirmField.focus();
         return;
       }
     } else if (!value) {
-      setAuthMessage('Password is required.', 'error');
+      setAuthMessage(TEXT.auth.required, 'error');
       password.focus();
       return;
     }
@@ -1751,11 +2505,11 @@ function renderAuthForm(screen, mode, notice) {
     } catch (e) {
       if (e && e.authRedirect) return;
       if (e && e.code === 'setup_already_done') {
-        showAuth('login', 'A password has already been set. Please sign in.');
+        showAuth('login', TEXT.auth.alreadySet);
       } else if (!isSetup && e && e.code === 'setup_required') {
-        showAuth('setup', 'No password has been set yet. Create one to continue.');
+        showAuth('setup', TEXT.auth.notSetYet);
       } else {
-        setAuthMessage(e && e.message ? e.message : 'Request failed', 'error');
+        setAuthMessage(e && e.message ? e.message : TEXT.auth.requestFailed, 'error');
         password.focus();
       }
     } finally {
@@ -1768,11 +2522,9 @@ function renderAuthForm(screen, mode, notice) {
   const card = el('section', { className: 'auth-card', 'aria-labelledby': 'auth-title' },
     el('div', { className: 'logo-container' },
       el('div', { className: 'logo-icon' }, icon('shield-alert')),
-      el('div', { className: 'logo-text' }, 'Compliance Hub')),
-    el('h2', { className: 'modal-title', id: 'auth-title' }, isSetup ? 'Set administrator password' : 'Sign in'),
-    el('p', { className: 'modal-subtitle' }, isSetup
-      ? 'No password has been set for this installation yet. Choose one to finish setup; you will be signed in automatically.'
-      : 'Enter your password to continue.'),
+      el('div', { className: 'logo-text' }, TEXT.product)),
+    el('h2', { className: 'modal-title', id: 'auth-title' }, isSetup ? TEXT.auth.setupTitle : TEXT.auth.loginTitle),
+    el('p', { className: 'modal-subtitle' }, isSetup ? TEXT.auth.setupIntro : TEXT.auth.loginIntro),
     form);
 
   clear(screen).appendChild(card);
@@ -1790,8 +2542,8 @@ async function enterApp() {
   clear(screen).hidden = true;
   byId('app-root').hidden = false;
 
-  const label = currentUser.displayName || currentUser.email || 'Signed in';
-  setText('current-user-name', label);
+  const userLabel = currentUser.displayName || currentUser.email || TEXT.auth.signedIn;
+  setText('current-user-name', userLabel);
   const nameEl = byId('current-user-name');
   if (nameEl) nameEl.title = currentUser.email ? String(currentUser.email) : '';
 
@@ -1804,10 +2556,10 @@ async function logout() {
   try {
     await api('/api/auth/logout', { method: 'POST', authRedirect: false });
     // Only this browser session is closed; other sessions are not affected.
-    showAuth('login', 'You have been signed out of this browser session.');
+    showAuth('login', TEXT.auth.signedOut);
   } catch (e) {
-    if (e && e.status === 401) showAuth('login', 'Your session had already ended. Please sign in again.');
-    else reportError(e, 'Logout failed');
+    if (e && e.status === 401) showAuth('login', TEXT.auth.alreadyEnded);
+    else reportError(e, TEXT.auth.logoutFailed);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1820,6 +2572,7 @@ function bindHandlers() {
   });
   byId('refresh-btn').addEventListener('click', fire(refreshAll));
   byId('new-scan-btn').addEventListener('click', fire(openModal));
+  byId('empty-new-scan-btn').addEventListener('click', fire(openModal));
   byId('add-project-btn').addEventListener('click', fire(openModal));
   byId('modal-close-btn').addEventListener('click', fire(closeModal));
   byId('modal-cancel-btn').addEventListener('click', fire(closeModal));
@@ -1834,6 +2587,10 @@ function bindHandlers() {
     return createApiKey();
   }));
   window.addEventListener('pagehide', removeApiKeyReveal);
+
+  // Reports menus are rebuilt with their rows, so their events are delegated (P-38).
+  document.addEventListener('click', onReportsClick);
+  document.addEventListener('keydown', onReportsKeydown);
 
   byId('scanModal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
@@ -1856,6 +2613,7 @@ function bindHandlers() {
 
   // Repo access token (REQ-009).
   byId('repoPath').addEventListener('input', syncRepoTokenField);
+  byId('ecosystems').addEventListener('change', syncEcosystemChoice);
   byId('token-modal-close-btn').addEventListener('click', fire(closeRepoTokenModal));
   byId('token-modal-cancel-btn').addEventListener('click', fire(closeRepoTokenModal));
   byId('token-modal-save-btn').addEventListener('click', fire(saveRepoToken));
@@ -1881,6 +2639,7 @@ function bindHandlers() {
 
 // ── Initialize App
 async function init() {
+  applyTermTitles();
   refreshIcons();
   bindHandlers();
   await checkHealth();
@@ -1888,15 +2647,15 @@ async function init() {
     await enterApp();
   } catch (e) {
     if (e && e.authRedirect) return; // setup/login form is already shown
-    showAuth('login', `Could not verify the session: ${e && e.message ? e.message : 'unknown error'}`);
+    showAuth('login', TEXT.auth.verifyFailed(e && e.message ? e.message : TEXT.common.unknownError));
   }
 }
 
 fire(init)();
 
-// Auto-refresh stats/scans every 30 seconds
+// Auto-refresh stats/scans every 30 seconds (not while a reports menu is open: the rows would be rebuilt under it)
 setInterval(fire(async () => {
-  if (currentUser && currentActiveView === 'dashboard') {
+  if (currentUser && currentActiveView === 'dashboard' && !openReports) {
     await loadScans();
     await updateStats();
     await loadVulnerabilityDataStatus();

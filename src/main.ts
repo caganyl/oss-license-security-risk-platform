@@ -8,9 +8,17 @@
  */
 import 'dotenv/config';
 import { errorCode } from './db/advisoryLock';
+import { trustSystemCertificates } from './lib/systemCa';
 import { RuntimeStartupError, createRuntime, installProcessHandlers } from './runtime';
 
 export async function main(exit: (code: number) => void = (code) => process.exit(code)): Promise<void> {
+  // Before any HTTPS client exists: corporate proxy root CAs come from the OS store (REQ-010 r2).
+  try {
+    const { added } = trustSystemCertificates();
+    if (added > 0) console.log(`Sistem sertifika deposundan ${added} kök sertifika eklendi (kurumsal proxy desteği).`);
+  } catch (err) {
+    console.warn(`Sistem sertifika deposu okunamadı (${errorCode(err)}); Node'un kendi listesi kullanılıyor.`);
+  }
   const runtime = createRuntime({ exit });
   installProcessHandlers(runtime, undefined, exit);
   try {

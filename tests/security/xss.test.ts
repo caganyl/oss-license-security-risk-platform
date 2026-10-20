@@ -231,8 +231,9 @@ describe('P-02 XSS — API data is rendered as text (AC-P02-1…3)', () => {
     await waitFor(() => page.calls.includes('GET /api/scans'), 'initial load');
     navigate(page, 'projects');
     const doc = page.dom.window.document;
+    // REQ-010: the button text is Turkish ("Şimdi tara"); it is found by its data-action.
     const findScanButton = () =>
-      Array.from(doc.querySelectorAll('button')).find((b) => /scan/i.test(b.textContent ?? '') && b.closest('tr, li, .card'));
+      Array.from(doc.querySelectorAll('button[data-action="scan-project"]')).find((b) => b.closest('tr, li, .card'));
     await waitFor(() => findScanButton() !== undefined, 'per-project scan button rendered');
     const before = payloadCount(page);
     const scanButton = findScanButton()!;
@@ -315,7 +316,9 @@ describe('P-02 UI works with the P-01 session (AC-P02-4)', () => {
       'GET /api/auth/me': unauth,
       'GET /api/scans': unauth,
       'GET /api/projects': unauth,
-      'POST /api/auth/login': () => ({ status: 401, body: { error: 'Unauthorized', message: XSS, code: 'invalid_credentials' } }),
+      // A known code (e.g. invalid_credentials) is shown as its Turkish text (REQ-010 AC-P33-4);
+      // an unmapped code keeps the server message, which must still render as text.
+      'POST /api/auth/login': () => ({ status: 401, body: { error: 'Unauthorized', message: XSS, code: 'unmapped_test_code' } }),
     });
     await waitFor(() => hasPasswordInput(page), 'login form with a password field');
     const doc = page.dom.window.document;

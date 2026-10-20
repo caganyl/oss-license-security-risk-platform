@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OSS License & Security Risk Platform</title>
-  <meta name="description" content="Enterprise open source compliance platform: license risk analysis, vulnerability tracking, SBOM generation and security findings management.">
+  <title>OSS Risk Platformu</title>
+  <meta name="description" content="Kurumsal açık kaynak uyum platformu: lisans riski analizi, güvenlik açığı takibi, SBOM üretimi ve web güvenlik taraması.">
   <!-- CSP (REQ-002 D-17): scripts are same-origin files only, no inline script, no external fonts. -->
   <!-- Lucide Icons: vendored 1.48.0. Both scripts are deferred, so lucide runs before /app.js. -->
   <script src="/vendor/lucide-1.48.0.min.js" defer></script>
@@ -119,7 +119,7 @@
     }
     .btn-ghost:hover { background: rgba(255,255,255,0.12); box-shadow: none; color: var(--text-main); }
     .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.78rem; border-radius: 8px; }
-    .btn:focus-visible, .nav-item:focus-visible, .modal-close:focus-visible, a:focus-visible {
+    .btn:focus-visible, .nav-item:focus-visible, .modal-close:focus-visible, a:focus-visible, .reports-item:focus {
       outline: 2px solid var(--scanning); outline-offset: 2px;
     }
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
@@ -193,6 +193,21 @@
     }
     .form-group { margin-bottom: 1.25rem; }
     .form-group label { display: block; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
+    .eco-fieldset { border: 0; padding: 0; margin-left: 0; margin-right: 0; min-width: 0; }
+    .eco-fieldset legend { padding: 0; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--text-main); }
+    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .eco-card {
+      display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.65rem 0.75rem; cursor: pointer;
+      background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .eco-card:hover { border-color: rgba(139, 92, 246, 0.5); }
+    .eco-card input { margin-top: 0.15rem; width: 1rem; height: 1rem; flex: none; accent-color: var(--primary); cursor: pointer; }
+    .eco-card strong { display: block; font-size: 0.875rem; color: var(--text-main); }
+    .eco-card small { display: block; margin-top: 0.15rem; font-size: 0.72rem; line-height: 1.35; color: var(--text-muted); word-break: break-word; }
+    .eco-card:has(input:checked) { border-color: var(--primary); background: rgba(139, 92, 246, 0.14); }
+    .eco-card:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+    @media (max-width: 520px) { .eco-grid { grid-template-columns: 1fr; } }
     .form-control {
       width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
       border-radius: 10px; padding: 0.75rem 1rem; color: white; font-family: inherit; font-size: 0.9rem;
@@ -283,12 +298,50 @@
         transition-duration: 0.01ms !important;
       }
     }
+    /* REQ-010: term tooltips, card notes, reports menu, system status, help */
+    [data-term] { text-decoration: underline dotted rgba(148,163,184,0.6); text-underline-offset: 3px; cursor: help; }
+    .stat-note { font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; margin-top: 0.15rem; opacity: 0.85; }
+    .card-intro { color: var(--text-muted); font-size: 0.875rem; line-height: 1.5; margin: -0.75rem 0 1.25rem; }
+    .reports { position: relative; display: inline-block; }
+    .reports-btn .lucide, .reports-btn i { flex-shrink: 0; }
+    .reports-menu {
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 320px; max-width: 80vw;
+      background: #1e293b; border: 1px solid var(--card-border); border-radius: 14px; padding: 0.4rem;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 0.15rem;
+    }
+    .reports-item {
+      display: flex; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.75rem; border-radius: 10px;
+      color: var(--text-main); text-decoration: none; outline-offset: -2px;
+    }
+    .reports-item:hover, .reports-item:focus { background: rgba(139,92,246,0.15); }
+    .reports-item-title { font-size: 0.85rem; font-weight: 600; }
+    .reports-item-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; white-space: normal; }
+    .scan-nopkg { margin-top: 0.35rem; max-width: 26rem; font-size: 0.75rem; line-height: 1.4; color: var(--warning); white-space: normal; }
+    .scan-nopkg strong { display: block; font-weight: 600; }
+    .scan-nopkg span { color: var(--text-muted); }
+    .feature-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+    .feature-item { padding: 1.1rem 1.25rem; border-radius: 16px; background: rgba(0,0,0,0.15); border: 1px solid var(--card-border); }
+    .feature-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.4rem; }
+    .feature-name { font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
+    .feature-desc { font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; }
+    .feature-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; }
+    .feature-enable { font-size: 0.8rem; color: var(--warning); margin-top: 0.5rem; line-height: 1.5; }
+    .help-section { margin-bottom: 2rem; }
+    .help-section h3 { font-family: var(--font-display); font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .help-section p { color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; }
+    .help-steps { margin-left: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .help-steps li { color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; }
+    .help-steps li strong { display: block; color: var(--text-main); }
+    .glossary { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
+    .glossary-entry { padding: 0.9rem 1rem; border-radius: 14px; background: rgba(0,0,0,0.15); border: 1px solid var(--card-border); }
+    .glossary-entry dt { font-weight: 600; margin-bottom: 0.3rem; }
+    .glossary-entry dd { color: #cbd5e1; font-size: 0.85rem; line-height: 1.5; }
   </style>
 </head>
 <body>
   <!-- Auth (login / initial password setup). Content is built by script (AC-P02-4). -->
   <div id="auth-screen" class="auth-screen">
-    <p role="status" style="color: var(--text-muted);">Checking session...</p>
+    <p role="status" style="color: var(--text-muted);">Oturum kontrol ediliyor...</p>
   </div>
 
   <div class="dashboard-container" id="app-root" hidden>
@@ -296,79 +349,85 @@
     <aside>
       <div class="logo-container">
         <div class="logo-icon"><i data-lucide="shield-alert"></i></div>
-        <div class="logo-text">Compliance Hub</div>
+        <div class="logo-text">OSS Risk Platformu</div>
       </div>
-      <nav class="nav-menu" id="sidebar-nav">
-        <button class="nav-item active" type="button" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
-        <button class="nav-item" type="button" data-view="scans"><i data-lucide="scan"></i>Scan History</button>
-        <button class="nav-item" type="button" data-view="findings"><i data-lucide="alert-triangle"></i>Vulnerabilities</button>
-        <button class="nav-item" type="button" data-view="projects"><i data-lucide="folder-git-2"></i>Projects</button>
-        <button class="nav-item" type="button" data-view="sbom"><i data-lucide="scroll"></i>SBOM Center</button>
-        <button class="nav-item" type="button" data-view="users"><i data-lucide="users"></i>Users &amp; Roles</button>
-        <button class="nav-item" type="button" data-view="api-keys"><i data-lucide="key-round"></i>API Keys</button>
+      <nav class="nav-menu" id="sidebar-nav" aria-label="Ana menü">
+        <button class="nav-item active" type="button" data-view="dashboard"><i data-lucide="layout-dashboard"></i>Genel Bakış</button>
+        <button class="nav-item" type="button" data-view="scans"><i data-lucide="scan"></i>Tarama Geçmişi</button>
+        <button class="nav-item" type="button" data-view="findings"><i data-lucide="alert-triangle"></i>Bulgular</button>
+        <button class="nav-item" type="button" data-view="projects"><i data-lucide="folder-git-2"></i>Projeler</button>
+        <button class="nav-item" type="button" data-view="sbom"><i data-lucide="scroll"></i>SBOM Merkezi</button>
+        <button class="nav-item" type="button" data-view="users"><i data-lucide="users"></i>Kullanıcılar ve Roller</button>
+        <button class="nav-item" type="button" data-view="api-keys"><i data-lucide="key-round"></i>API Anahtarları</button>
+        <button class="nav-item" type="button" data-view="system"><i data-lucide="server-cog"></i>Sistem Durumu</button>
+        <button class="nav-item" type="button" data-view="help"><i data-lucide="life-buoy"></i>Yardım</button>
       </nav>
       <div class="sidebar-footer">
         <div class="user-box">
           <span class="user-name" id="current-user-name"></span>
-          <button class="btn btn-ghost btn-sm" type="button" id="logout-btn" title="Sign out of this browser session">
-            <i data-lucide="log-out" style="width:14px;height:14px;"></i> Logout
+          <button class="btn btn-ghost btn-sm" type="button" id="logout-btn" title="Bu tarayıcı oturumundan çıkış yap">
+            <i data-lucide="log-out" style="width:14px;height:14px;"></i> Çıkış
           </button>
         </div>
         <div class="connection-status">
           <div class="status-dot" id="db-dot"></div>
-          <span id="db-status-text">Connecting...</span>
+          <span id="db-status-text">Bağlanıyor...</span>
         </div>
       </div>
     </aside>
 
     <!-- Main Content -->
     <main>
-      <!-- Header -->
+      <!-- Header: title and one-sentence purpose of the current view (REQ-010 AC-P34-1) -->
       <header>
         <div>
-          <h1 id="page-title">OSS License &amp; Security Dashboard</h1>
-          <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;" id="page-subtitle">Real-time open source package compliance metrics</p>
+          <h1 id="page-title">Genel Bakış</h1>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;" id="page-subtitle">Tüm projelerinizin lisans ve güvenlik durumunu tek bakışta gösterir.</p>
         </div>
         <div class="header-actions">
-          <button class="btn btn-ghost" type="button" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
+          <button class="btn btn-ghost" type="button" id="refresh-btn" title="Verileri yenile" aria-label="Verileri yenile">
             <i data-lucide="refresh-cw" id="refresh-icon"></i>
           </button>
           <button class="btn" type="button" id="new-scan-btn">
-            <i data-lucide="plus"></i> New Project Scan
+            <i data-lucide="plus"></i> Yeni proje taraması
           </button>
         </div>
       </header>
 
       <!-- View: Dashboard -->
       <div id="view-dashboard" class="view-section">
-        <!-- Stats -->
+        <!-- Stats (REQ-010 AC-P36-1: latest completed dependency scan per project) -->
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon" style="background: rgba(139,92,246,0.15); color: #8b5cf6;"><i data-lucide="folder-git-2"></i></div>
             <div class="stat-info">
               <div class="stat-value" id="stat-projects">—</div>
-              <div class="stat-label">Active Projects</div>
+              <div class="stat-label">Kayıtlı proje</div>
+              <div class="stat-note">Platformda kayıtlı proje sayısı.</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #10b981;"><i data-lucide="package-search"></i></div>
             <div class="stat-info">
               <div class="stat-value" id="stat-packages">—</div>
-              <div class="stat-label">Packages Monitored</div>
+              <div class="stat-label">İzlenen paket</div>
+              <div class="stat-note">Her projenin son tamamlanmış taramasındaki doğrudan ve dolaylı paketlerin toplamı.</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #f59e0b;"><i data-lucide="scale"></i></div>
             <div class="stat-info">
               <div class="stat-value" id="stat-license-alerts">—</div>
-              <div class="stat-label">License Alerts</div>
+              <div class="stat-label" data-term="license">Lisans uyarısı</div>
+              <div class="stat-note">Son taramalarda lisansı riskli veya politikaya aykırı bulunan paket sayısı.</div>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #ef4444;"><i data-lucide="bug"></i></div>
             <div class="stat-info">
               <div class="stat-value" id="stat-critical-cves">—</div>
-              <div class="stat-label">Critical CVEs</div>
+              <div class="stat-label" data-term="cve">Kritik açık</div>
+              <div class="stat-note">Son taramalarda “Kritik” önem derecesindeki bilinen güvenlik açığı sayısı.</div>
             </div>
           </div>
         </div>
@@ -376,34 +435,35 @@
         <!-- Vulnerability data (REQ-005 contract section 6) -->
         <div id="vuln-data-card" class="content-card" style="margin-top: 2rem;">
           <div class="card-header">
-            <h2 class="card-title">Vulnerability data</h2>
+            <h2 class="card-title">Güvenlik açığı verisi</h2>
           </div>
+          <p class="card-intro">Bilinen güvenlik açıkları veritabanının ne zaman yeniden kontrol edildiğini ve hangi projelerde verinin eksik olduğunu gösterir.</p>
           <div id="vuln-data-body" data-state="loading"></div>
         </div>
 
         <!-- Scans Table -->
         <div class="content-card" style="margin-top: 2rem;">
           <div class="card-header">
-            <h2 class="card-title">Recent Compliance Scans</h2>
+            <h2 class="card-title">Son taramalar</h2>
             <div class="card-actions">
               <span id="last-updated" style="color: var(--text-muted); font-size: 0.8rem;"></span>
             </div>
           </div>
           <div id="table-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading scans...</p>
+            <p>Taramalar yükleniyor...</p>
           </div>
           <div id="table-container" style="display:none;">
             <table>
               <thead>
                 <tr>
-                  <th>Project</th>
-                  <th>Status</th>
-                  <th>Packages</th>
-                  <th>License Risk</th>
-                  <th>Security Level</th>
-                  <th>Triggered</th>
-                  <th>Actions</th>
+                  <th>Proje</th>
+                  <th>Durum</th>
+                  <th data-term="dependency">Paket</th>
+                  <th data-term="license">Lisans riski</th>
+                  <th data-term="cvss">Güvenlik</th>
+                  <th>Zaman</th>
+                  <th>Raporlar</th>
                 </tr>
               </thead>
               <tbody id="scans-tbody"></tbody>
@@ -411,8 +471,9 @@
           </div>
           <div id="table-empty" class="empty-state" style="display:none;">
             <i data-lucide="scan" style="display:block; margin: 0 auto 1rem;"></i>
-            <p>No scans yet</p>
-            <small>Create a project and trigger a scan to get started.</small>
+            <p>Henüz tarama yok</p>
+            <small>Bir proje ekleyip ilk taramayı başlatın; sonuçlar burada görünür.</small>
+            <button class="btn btn-sm" type="button" id="empty-new-scan-btn" style="margin: 1rem auto 0;"><i data-lucide="plus"></i> Yeni proje taraması</button>
           </div>
         </div>
       </div>
@@ -421,24 +482,24 @@
       <div id="view-scans" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header">
-            <h2 class="card-title">All Tarama Kayıtları</h2>
+            <h2 class="card-title">Tüm taramalar</h2>
           </div>
           <div id="scans-list-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading scan history...</p>
+            <p>Tarama geçmişi yükleniyor...</p>
           </div>
           <div id="scans-list-container" style="display: none;">
             <table>
               <thead>
                 <tr>
-                  <th>Project</th>
-                  <th>Status</th>
-                  <th>Packages</th>
-                  <th>License Risks</th>
-                  <th>Security level</th>
-                  <th>Trigger type</th>
-                  <th>Triggered Time</th>
-                  <th>Actions</th>
+                  <th>Proje</th>
+                  <th>Durum</th>
+                  <th data-term="dependency">Paket</th>
+                  <th data-term="license">Lisans riski</th>
+                  <th data-term="cvss">Güvenlik</th>
+                  <th>Başlatma şekli</th>
+                  <th>Zaman</th>
+                  <th>Raporlar</th>
                 </tr>
               </thead>
               <tbody id="scans-list-tbody"></tbody>
@@ -451,21 +512,21 @@
       <div id="view-findings" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
-            <h2 class="card-title">Vulnerability and Policy Registry</h2>
+            <h2 class="card-title">Bulgu listesi</h2>
             <div class="card-actions">
-              <label for="findings-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
+              <label for="findings-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Tarama:</label>
               <select id="findings-scan-select" class="form-control" style="width: 320px;"></select>
             </div>
           </div>
           <div id="findings-loading" style="display: none; text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading findings...</p>
+            <p>Bulgular yükleniyor...</p>
           </div>
           <div id="findings-container">
             <div class="empty-state">
               <i data-lucide="alert-triangle" style="display:block; margin:0 auto 1rem;"></i>
-              <p>No scan selected</p>
-              <small>Select a completed scan above to view its dependency findings.</small>
+              <p>Tarama seçilmedi</p>
+              <small>Bulgularını görmek için yukarıdan tamamlanmış bir tarama seçin.</small>
             </div>
           </div>
         </div>
@@ -475,24 +536,24 @@
       <div id="view-projects" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header">
-            <h2 class="card-title">Monitored Codebases</h2>
-            <button class="btn btn-sm" type="button" id="add-project-btn"><i data-lucide="plus"></i> Add Project</button>
+            <h2 class="card-title">İzlenen projeler</h2>
+            <button class="btn btn-sm" type="button" id="add-project-btn"><i data-lucide="plus"></i> Proje ekle</button>
           </div>
           <div id="projects-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading projects...</p>
+            <p>Projeler yükleniyor...</p>
           </div>
           <div id="projects-container" style="display: none;">
             <table>
               <thead>
                 <tr>
-                  <th>Project Name</th>
-                  <th>Criticality</th>
-                  <th>Local Path / Repository</th>
-                  <th>Web URL</th>
-                  <th>Ecosystems</th>
-                  <th>Registered</th>
-                  <th>Actions</th>
+                  <th>Proje adı</th>
+                  <th>Önem</th>
+                  <th>Yerel klasör / repo</th>
+                  <th>Web adresi</th>
+                  <th>Ekosistemler</th>
+                  <th>Kayıt</th>
+                  <th>İşlemler</th>
                 </tr>
               </thead>
               <tbody id="projects-list-tbody"></tbody>
@@ -505,65 +566,66 @@
       <div id="view-sbom" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
-            <h2 class="card-title">SBOM Center</h2>
+            <h2 class="card-title" data-term="sbom">SBOM belgeleri</h2>
             <div class="card-actions">
-              <label for="sbom-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Target Scan:</label>
+              <label for="sbom-scan-select" style="color: var(--text-muted); font-size: 0.9rem;">Tarama:</label>
               <select id="sbom-scan-select" class="form-control" style="width: 320px;"></select>
             </div>
           </div>
 
           <div id="sbom-loading" style="display: none; text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading SBOM data...</p>
+            <p>SBOM bilgileri yükleniyor...</p>
           </div>
 
           <div id="sbom-manager-container" style="display: none; margin-top: 1rem;">
             <!-- Generator card -->
             <div style="background: rgba(0,0,0,0.18); padding: 1.5rem; border-radius: 18px; margin-bottom: 2rem; border: 1px solid var(--card-border);">
-              <h3 style="font-size: 1rem; margin-bottom: 0.8rem; font-family: var(--font-display); font-weight:600;">Generate Compliance SBOM</h3>
+              <h3 style="font-size: 1rem; margin-bottom: 0.8rem; font-family: var(--font-display); font-weight:600;">Yeni SBOM belgesi üret</h3>
               <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 240px;">
-                  <label for="sbom-format-select" style="display:block; color:var(--text-muted); font-size:0.8rem; margin-bottom:0.4rem;">Specification Standard &amp; Format</label>
+                  <label for="sbom-format-select" style="display:block; color:var(--text-muted); font-size:0.8rem; margin-bottom:0.4rem;">Standart ve biçim (<span data-term="cyclonedx">CycloneDX</span> / <span data-term="spdx">SPDX</span>)</label>
                   <select id="sbom-format-select" class="form-control">
                     <option value="cyclonedx_json">CycloneDX 1.5 (JSON)</option>
                     <option value="cyclonedx_xml">CycloneDX 1.5 (XML)</option>
                     <option value="spdx_json">SPDX 2.3 (JSON)</option>
                     <option value="spdx_tag_value">SPDX 2.3 (Tag-Value)</option>
                   </select>
+                  <small class="form-hint">Müşteriniz veya denetçiniz belirli bir biçim istemiyorsa CycloneDX (JSON) yeterlidir.</small>
                 </div>
                 <button class="btn" type="button" id="generate-sbom-btn">
-                  <i data-lucide="plus"></i> Generate Document
+                  <i data-lucide="plus"></i> Belge üret
                 </button>
               </div>
             </div>
 
             <!-- Documents Table -->
-            <h3 style="font-size: 1.1rem; margin-bottom: 1rem; font-family: var(--font-display); font-weight:600;">Generated Documents</h3>
+            <h3 style="font-size: 1.1rem; margin-bottom: 1rem; font-family: var(--font-display); font-weight:600;">Üretilen belgeler</h3>
             <div id="sbom-table-wrapper">
               <table>
                 <thead>
                   <tr>
-                    <th>Format</th>
-                    <th>Spec Version</th>
-                    <th>File Size</th>
-                    <th>Generated At</th>
-                    <th>SHA-256 Checksum</th>
-                    <th>Actions</th>
+                    <th>Biçim</th>
+                    <th>Standart sürümü</th>
+                    <th>Dosya boyutu</th>
+                    <th>Üretilme zamanı</th>
+                    <th>SHA-256 özeti</th>
+                    <th>İşlem</th>
                   </tr>
                 </thead>
                 <tbody id="sbom-documents-tbody"></tbody>
               </table>
             </div>
             <div id="sbom-docs-empty" class="empty-state" style="display: none; padding: 2rem;">
-              <p>No SBOM documents generated for this scan yet.</p>
-              <small>Choose a format above and click "Generate".</small>
+              <p>Bu tarama için henüz SBOM belgesi üretilmedi.</p>
+              <small>Yukarıdan bir biçim seçip “Belge üret” düğmesine tıklayın.</small>
             </div>
           </div>
 
           <div id="sbom-empty-state" class="empty-state">
             <i data-lucide="scroll" style="display:block; margin: 0 auto 1rem;"></i>
-            <p>No scan selected</p>
-            <small>Select a completed scan above to view or generate SBOM documents.</small>
+            <p>Tarama seçilmedi</p>
+            <small>SBOM görmek veya üretmek için yukarıdan tamamlanmış bir bağımlılık taraması seçin. Liste boşsa önce Projeler ekranından bir tarama başlatın.</small>
           </div>
         </div>
       </div>
@@ -572,21 +634,21 @@
       <div id="view-users" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header">
-            <h2 class="card-title">System User Management</h2>
+            <h2 class="card-title">Kullanıcılar</h2>
           </div>
           <div id="users-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
             <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-            <p>Loading users...</p>
+            <p>Kullanıcılar yükleniyor...</p>
           </div>
           <div id="users-container" style="display: none;">
             <table>
               <thead>
                 <tr>
-                  <th>Display Name</th>
-                  <th>Email Address</th>
-                  <th>Assigned Roles</th>
-                  <th>Account Status</th>
-                  <th>Created At</th>
+                  <th>Ad</th>
+                  <th>E-posta</th>
+                  <th>Roller</th>
+                  <th>Hesap durumu</th>
+                  <th>Oluşturulma</th>
                 </tr>
               </thead>
               <tbody id="users-list-tbody"></tbody>
@@ -599,33 +661,33 @@
       <div id="view-api-keys" class="view-section" style="display: none;">
         <div class="content-card">
           <div class="card-header">
-            <h2 class="card-title">API Keys</h2>
+            <h2 class="card-title">API anahtarınız</h2>
           </div>
-          <p id="api-keys-cli-hint" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; line-height: 1.5;">Use the key with the CLI: set OSS_RISK_API_KEY (or OSS_RISK_API_KEY_FILE) and run oss-risk scan --project &lt;name&gt;. Only one key is active at a time.</p>
+          <p id="api-keys-cli-hint" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; line-height: 1.5;">Anahtarı CLI ile kullanın: OSS_RISK_API_KEY (veya OSS_RISK_API_KEY_FILE) ortam değişkenini ayarlayıp oss-risk scan --project &lt;proje-adı&gt; komutunu çalıştırın. Aynı anda yalnız bir anahtar etkindir.</p>
           <form id="api-key-create-form" novalidate style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 240px;">
-              <label for="api-key-name" style="display:block; color:var(--text-muted); font-size:0.85rem; margin-bottom:0.4rem;">Key name (optional)</label>
+              <label for="api-key-name" style="display:block; color:var(--text-muted); font-size:0.85rem; margin-bottom:0.4rem;">Anahtar adı (isteğe bağlı)</label>
               <input type="text" id="api-key-name" name="api-key-name" class="form-control" maxlength="100" autocomplete="off">
             </div>
-            <button class="btn" type="submit" id="api-key-create-btn"><i data-lucide="plus"></i> Create API key</button>
+            <button class="btn" type="submit" id="api-key-create-btn"><i data-lucide="plus"></i> API anahtarı oluştur</button>
           </form>
           <div id="api-key-reveal-slot"></div>
           <div id="api-keys-body" data-state="loading" style="margin-top: 1.5rem;">
             <div id="api-keys-loading" style="text-align:center; padding: 2rem; color: var(--text-muted);">
               <i data-lucide="loader-2" class="spin" style="margin-bottom: 0.75rem;"></i>
-              <p>Loading API keys...</p>
+              <p>API anahtarları yükleniyor...</p>
             </div>
-            <div id="api-keys-error" role="alert" hidden style="text-align:center; padding: 2rem; color: var(--danger);">Could not load API keys.</div>
-            <div id="api-keys-empty" class="empty-state" hidden style="padding: 2rem;">No API keys yet.</div>
+            <div id="api-keys-error" role="alert" hidden style="text-align:center; padding: 2rem; color: var(--danger);">API anahtarları yüklenemedi.</div>
+            <div id="api-keys-empty" class="empty-state" hidden style="padding: 2rem;">Henüz API anahtarı yok. CLI veya CI için yukarıdan bir anahtar oluşturun.</div>
             <table id="api-keys-table" hidden>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Prefix</th>
-                  <th>Created</th>
-                  <th>Last Used</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th>Ad</th>
+                  <th>Önek</th>
+                  <th>Oluşturulma</th>
+                  <th>Son kullanım</th>
+                  <th>Durum</th>
+                  <th>İşlem</th>
                 </tr>
               </thead>
               <tbody id="api-keys-tbody"></tbody>
@@ -633,51 +695,85 @@
           </div>
         </div>
       </div>
+
+      <!-- View: System status (REQ-010 P-35). Built by app.js from GET /api/system/features. -->
+      <div id="view-system" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div class="card-header">
+            <h2 class="card-title">Özellikler</h2>
+          </div>
+          <div id="system-status-body" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- View: Help (REQ-010 P-34). Static content built by app.js from its text dictionary. -->
+      <div id="view-help" class="view-section" style="display: none;">
+        <div class="content-card">
+          <div id="help-body"></div>
+        </div>
+      </div>
     </main>
   </div>
 
-  <!-- New Scan Modal -->
+  <!-- New project modal -->
   <div class="modal" id="scanModal" role="dialog" aria-modal="true" aria-labelledby="scanModal-title">
     <div class="modal-content">
-      <button class="modal-close" type="button" id="modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
-      <h3 class="modal-title" id="scanModal-title">Trigger Compliance Scan</h3>
-      <p class="modal-subtitle">Create a new project: scan its code (repository path), its running web address, or both.</p>
+      <button class="modal-close" type="button" id="modal-close-btn" aria-label="Kapat"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="scanModal-title">Yeni proje taraması</h3>
+      <p class="modal-subtitle">Yeni bir proje oluşturun: kodunu (repo veya yerel klasör), çalışan web adresini ya da ikisini birden tarayın.</p>
 
       <div class="form-group">
-        <label for="projectName">Project Name</label>
-        <input type="text" id="projectName" class="form-control" placeholder="e.g. my-backend-service">
+        <label for="projectName">Proje adı</label>
+        <input type="text" id="projectName" class="form-control" placeholder="ör. musteri-portali-api">
       </div>
 
       <div class="form-group">
-        <label for="repoPath">Repository (local folder or https URL)</label>
-        <input type="text" id="repoPath" class="form-control" placeholder="C:\path\to\project  or  https://tfs.sirket.local/Collection/Project/_git/Repo" autocomplete="off" spellcheck="false">
-        <small class="form-hint">Yerel klasör SCAN_ROOTS altında olmalı. https adresi Azure DevOps / TFS, GitHub veya GitLab reposu olabilir; dal belirtilmezse reponun varsayılan dalı taranır.</small>
+        <label for="repoPath">Repo (yerel klasör veya https adresi)</label>
+        <input type="text" id="repoPath" class="form-control" placeholder="C:\Projeler\proje  veya  https://tfs.sirket.local/Collection/Project/_git/Repo" autocomplete="off" spellcheck="false">
+        <small class="form-hint">Yerel klasör, sunucuda SCAN_ROOTS ile izin verilen bir kökün altında olmalı. https adresi Azure DevOps / TFS, GitHub veya GitLab reposu olabilir; dal belirtilmezse reponun varsayılan dalı taranır.</small>
+        <small class="form-warning" id="repoPath-feature-warning" role="status"></small>
       </div>
 
       <div class="form-group" id="repoTokenGroup" hidden>
-        <label for="repoToken">Repo access token (PAT, optional)</label>
+        <label for="repoToken">Repo erişim anahtarı (<span data-term="pat">PAT</span>, isteğe bağlı)</label>
         <input type="password" id="repoToken" class="form-control" autocomplete="new-password" spellcheck="false">
         <small class="form-hint">Özel (giriş isteyen) repolar için gerekir. Azure DevOps / TFS'te: sağ üstte kullanıcı menüsü → Personal access tokens → New Token, kapsam olarak yalnız <strong>Code → Read</strong> yeterli. Token şifreli saklanır, ekranda tekrar gösterilmez. Şirket sunucusu Windows oturumunu kabul ediyorsa yönetici GIT_WINDOWS_AUTH_HOSTS ile tokensız erişimi de açabilir.</small>
+        <small class="form-warning" id="repoToken-feature-warning" role="status"></small>
       </div>
 
       <div class="form-group">
-        <label for="webUrl">Web URL (optional)</label>
+        <label for="webUrl">Web adresi (isteğe bağlı)</label>
         <input type="url" id="webUrl" class="form-control" placeholder="https://portal.sirket.local/" autocomplete="off" spellcheck="false">
-        <small class="form-hint">Çalışan uygulamanın adresi. Yalnız WEB_SCAN_ALLOWED_HOSTS listesindeki (kendi/şirket) sistemler taranabilir.</small>
+        <small class="form-hint">Çalışan uygulamanın adresi; <span data-term="webscan">pasif web taraması</span> yapılır. Yalnız WEB_SCAN_ALLOWED_HOSTS listesindeki (kendi/şirket) sistemler taranabilir.</small>
+        <small class="form-warning" id="webUrl-feature-warning" role="status"></small>
       </div>
 
-      <div class="form-group">
-        <label for="ecosystems">Technology Stack</label>
-        <select id="ecosystems" class="form-control" multiple style="height: 80px;">
-          <option value="nodejs" selected>Node.js (NPM / Yarn)</option>
-          <option value="python">Python (pip / PyPI)</option>
-          <option value="dotnet">.NET (NuGet)</option>
-        </select>
-      </div>
+      <fieldset class="form-group eco-fieldset" id="ecosystems" aria-describedby="ecosystems-hint">
+        <legend>Teknoloji (ekosistem)</legend>
+        <div class="eco-grid">
+          <label class="eco-card eco-auto">
+            <input type="checkbox" name="eco" value="auto" checked>
+            <span><strong>Otomatik algıla</strong><small>Önerilen. Repodaki tüm desteklenen dosyalar okunur.</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="nodejs">
+            <span><strong>Node.js</strong><small>package.json, package-lock.json, yarn.lock</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="python">
+            <span><strong>Python</strong><small>requirements*.txt, pyproject.toml</small></span>
+          </label>
+          <label class="eco-card">
+            <input type="checkbox" name="eco" value="dotnet">
+            <span><strong>.NET</strong><small>packages.lock.json, project.assets.json, *.csproj</small></span>
+          </label>
+        </div>
+        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Yalnız belirli teknolojileri taramak istiyorsanız onları seçin; desteklenenler Node.js, Python ve .NET'tir.</small>
+      </fieldset>
 
       <div class="form-actions">
-        <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Cancel</button>
-        <button class="btn" type="button" id="launch-btn"><i data-lucide="play"></i> Launch Scanner</button>
+        <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Vazgeç</button>
+        <button class="btn" type="button" id="launch-btn"><i data-lucide="play"></i> Taramayı başlat</button>
       </div>
     </div>
   </div>
@@ -685,28 +781,28 @@
   <!-- Web URL Modal (REQ-008 AC-P27-6) -->
   <div class="modal" id="webUrlModal" role="dialog" aria-modal="true" aria-labelledby="webUrlModal-title">
     <div class="modal-content">
-      <button class="modal-close" type="button" id="web-modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
-      <h3 class="modal-title" id="webUrlModal-title">Web Scan Target</h3>
-      <p class="modal-subtitle" id="webUrlModal-subtitle">Set the address of the running application.</p>
+      <button class="modal-close" type="button" id="web-modal-close-btn" aria-label="Kapat"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="webUrlModal-title">Web taraması hedefi</h3>
+      <p class="modal-subtitle" id="webUrlModal-subtitle">Çalışan uygulamanın adresini girin.</p>
 
       <div class="form-group">
-        <label for="webUrlInput">Web URL</label>
+        <label for="webUrlInput">Web adresi</label>
         <input type="url" id="webUrlInput" class="form-control" placeholder="https://portal.sirket.local/" autocomplete="off" spellcheck="false">
         <small class="form-hint">Boş bırakılırsa web adresi kaldırılır.</small>
       </div>
 
       <div class="form-group">
-        <label for="webScanMode">Scan mode</label>
+        <label for="webScanMode"><span data-term="webscan">Tarama modu</span></label>
         <select id="webScanMode" class="form-control">
-          <option value="passive">Passive (safe, read-only checks)</option>
-          <option value="active">Active (OWASP ZAP attack simulation)</option>
+          <option value="passive">Pasif (güvenli, yalnız okuma yapan kontroller)</option>
+          <option value="active">Aktif (OWASP ZAP ile saldırı simülasyonu)</option>
         </select>
         <small class="form-warning" id="webScanModeWarning">Aktif tarama yalnız OWASP ZAP tanımlıysa çalışır ve sisteme gerçek saldırı istekleri gönderir; kayıt/veri oluşturabilir. Canlı sistemlerde değil, test ortamında kullanın.</small>
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-ghost" type="button" id="web-modal-cancel-btn">Cancel</button>
-        <button class="btn" type="button" id="web-modal-save-btn"><i data-lucide="check"></i> Save</button>
+        <button class="btn btn-ghost" type="button" id="web-modal-cancel-btn">Vazgeç</button>
+        <button class="btn" type="button" id="web-modal-save-btn"><i data-lucide="check"></i> Kaydet</button>
       </div>
     </div>
   </div>
@@ -714,20 +810,21 @@
   <!-- Repo access token modal (REQ-009 AC-UI-2) -->
   <div class="modal" id="repoTokenModal" role="dialog" aria-modal="true" aria-labelledby="repoTokenModal-title">
     <div class="modal-content">
-      <button class="modal-close" type="button" id="token-modal-close-btn" aria-label="Close"><i data-lucide="x"></i></button>
-      <h3 class="modal-title" id="repoTokenModal-title">Repo Access Token</h3>
-      <p class="modal-subtitle" id="repoTokenModal-subtitle">Token for a private repository.</p>
+      <button class="modal-close" type="button" id="token-modal-close-btn" aria-label="Kapat"><i data-lucide="x"></i></button>
+      <h3 class="modal-title" id="repoTokenModal-title">Repo erişim anahtarı</h3>
+      <p class="modal-subtitle" id="repoTokenModal-subtitle">Özel bir repo için erişim anahtarı.</p>
 
       <div class="form-group">
-        <label for="repoTokenInput">Personal access token (PAT)</label>
+        <label for="repoTokenInput">Kişisel erişim anahtarı (<span data-term="pat">PAT</span>)</label>
         <input type="password" id="repoTokenInput" class="form-control" autocomplete="new-password" spellcheck="false">
         <small class="form-hint" id="repoTokenModal-state"></small>
         <small class="form-hint">Azure DevOps / TFS'te: kullanıcı menüsü → Personal access tokens → New Token, kapsam <strong>Code → Read</strong>. Yeni token kaydetmek eskisinin yerine geçer. Token yalnız bu repo sunucusuna gönderilir ve ekranda tekrar gösterilmez.</small>
+        <small class="form-warning" id="repoTokenModal-feature-warning" role="status"></small>
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-ghost" type="button" id="token-modal-cancel-btn">Cancel</button>
-        <button class="btn" type="button" id="token-modal-save-btn"><i data-lucide="key-round"></i> Save token</button>
+        <button class="btn btn-ghost" type="button" id="token-modal-cancel-btn">Vazgeç</button>
+        <button class="btn" type="button" id="token-modal-save-btn"><i data-lucide="key-round"></i> Token'ı kaydet</button>
       </div>
     </div>
   </div>

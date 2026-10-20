@@ -130,9 +130,9 @@ describe('AC-P10-18 / D-28 d: manifest names match case-sensitively', () => {
 
 // ---------------------------------------------------------------------------
 describe('AC-P10-10 / D-28 b: SKIP_DIRS applies only below the scan root', () => {
-  it('AC-P10-10: the skip set is exactly the Python set', () => {
+  it('AC-P10-10: the skip set is the Python set plus the REQ-010 r2 build-output folders (.next, .nuxt; D-286)', () => {
     expect([...SKIP_DIRS].sort()).toEqual(
-      ['.git', '.hg', '.svn', '.venv', 'venv', 'env', '__pycache__', '.mypy_cache', '.pytest_cache', 'node_modules', 'dist', 'build'].sort(),
+      ['.git', '.hg', '.svn', '.venv', 'venv', 'env', '__pycache__', '.mypy_cache', '.pytest_cache', 'node_modules', 'dist', 'build', '.next', '.nuxt'].sort(),
     );
   });
 

@@ -17,6 +17,8 @@ const SCAN_RESPONSE_COLUMNS = [
   'license_violations', 'error_message', 'retry_count', 'worker_id', 'initiated_by', 'created_at', 'updated_at',
   // REQ-008 contract 3.5 (additive).
   'scan_kind', 'target_url', 'web_summary',
+  // REQ-010 r2 (additive): lets the UI tell "no vulnerabilities" from "could not be checked".
+  'vulnerability_data_status',
 ] as const;
 const SCAN_RETURNING = SCAN_RESPONSE_COLUMNS.join(', ');
 const SCAN_SELECT = SCAN_RESPONSE_COLUMNS.map((c) => `s.${c}`).join(', ');

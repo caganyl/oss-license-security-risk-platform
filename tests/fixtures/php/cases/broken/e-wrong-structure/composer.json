@@ -1,0 +1,4 @@
+{
+    "require": ["psr/link"],
+    "require-dev": []
+}

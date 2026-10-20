@@ -1,0 +1,99 @@
+{
+  "scan_id": "golden-php-broken",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "php",
+      "name": "monolog/monolog",
+      "version": null,
+      "purl": "pkg:composer/monolog/monolog",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "composer.json",
+      "manifest_path": "a-broken-lock",
+      "declared_range": "^2.9"
+    },
+    {
+      "ecosystem": "php",
+      "name": "psr/container",
+      "version": "2.0.2",
+      "purl": "pkg:composer/psr/container@2.0.2",
+      "scope": "direct",
+      "licenses": [
+        "MIT"
+      ],
+      "manifest_file": "composer.lock",
+      "manifest_path": "c-lock-broken-json",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "php",
+      "name": "psr/clock",
+      "version": "1.0.0",
+      "purl": "pkg:composer/psr/clock@1.0.0",
+      "scope": "direct",
+      "licenses": [
+        "MIT"
+      ],
+      "manifest_file": "composer.lock",
+      "manifest_path": "d-invalid-entries",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "php",
+      "filename": "composer.json",
+      "file_path": "a-broken-lock/composer.json",
+      "file_hash": "0a6bca6c2994f0d718af8ab12e4381bc250585d6615c3c6c6be516a4a75095f7",
+      "size_bytes": 61
+    },
+    {
+      "ecosystem": "php",
+      "filename": "composer.lock",
+      "file_path": "c-lock-broken-json/composer.lock",
+      "file_hash": "10ca5b8074dbaa87ba3b98067f680aa8c6d37aa7d27682b720f6acf640b3bd54",
+      "size_bytes": 126
+    },
+    {
+      "ecosystem": "php",
+      "filename": "composer.lock",
+      "file_path": "d-invalid-entries/composer.lock",
+      "file_hash": "a81a0b93e9d44fd5ef5965f2a3026a2e7f085884d21cd3f6f81c82dedb2123ab",
+      "size_bytes": 277
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "php",
+      "file": "a-broken-lock/composer.lock",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "php",
+      "file": "b-broken-json/composer.json",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "php",
+      "file": "c-lock-broken-json/composer.json",
+      "error": "JSON ayrıştırılamadı."
+    },
+    {
+      "ecosystem": "php",
+      "file": "d-invalid-entries/composer.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    },
+    {
+      "ecosystem": "php",
+      "file": "e-wrong-structure/composer.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "php",
+      "file": "e-wrong-structure/composer.json",
+      "error": "Beklenmeyen dosya yapısı."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "scan_id": "golden-php-lock-only",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "php",
+      "name": "guzzlehttp/guzzle",
+      "version": "7.8.1",
+      "purl": "pkg:composer/guzzlehttp/guzzle@7.8.1",
+      "scope": "direct",
+      "licenses": [
+        "MIT"
+      ],
+      "manifest_file": "composer.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "php",
+      "name": "guzzlehttp/psr7",
+      "version": "2.6.2",
+      "purl": "pkg:composer/guzzlehttp/psr7@2.6.2",
+      "scope": "direct",
+      "licenses": [
+        "MIT"
+      ],
+      "manifest_file": "composer.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "php",
+      "filename": "composer.lock",
+      "file_path": "composer.lock",
+      "file_hash": "38df3d8c88dd4af70be7c359ecfbdbf76f03a8b1d818ebfc633d4621171ad7fd",
+      "size_bytes": 523
+    }
+  ],
+  "parse_errors": []
+}

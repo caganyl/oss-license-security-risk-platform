@@ -1,0 +1,11 @@
+{
+    "packages": [
+        {"name": "psr/clock", "version": "1.0.0", "license": ["MIT"]},
+        {"name": "psr/cache"},
+        {"name": "nosuffix", "version": "1.0.0"},
+        "not-an-object"
+    ],
+    "packages-dev": [
+        {"name": "psr/cache", "version": 3}
+    ]
+}

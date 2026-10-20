@@ -5,7 +5,8 @@
 -- Reference snapshot of the schema after migrations
 --   001_initial_core_schema, 002_local_auth, 003_declared_range,
 --   004_finding_fingerprint, 005_scan_next_attempt, 006_registry_enrichment,
---   007_vulnerability_recheck, 008_nuget_enrichment, 009_web_scan
+--   007_vulnerability_recheck, 008_nuget_enrichment, 009_web_scan,
+--   010_new_ecosystems
 -- The migrations in db/migrations/ are the source of truth and are applied
 -- with `npm run db:migrate` (src/db/migrate.ts). Do not load this file into a
 -- database that is (or will be) managed by the migration tool: it does not
@@ -38,8 +39,9 @@ CREATE TYPE role_name AS ENUM (
 
 CREATE TYPE project_criticality AS ENUM ('low', 'medium', 'high', 'critical');
 
+-- 'rust', 'dart', 'swift' added by 010 (REQ-011 D-300).
 CREATE TYPE tech_ecosystem AS ENUM (
-    'nodejs', 'python', 'java', 'dotnet', 'go', 'php', 'ruby', 'container', 'other'
+    'nodejs', 'python', 'java', 'dotnet', 'go', 'php', 'rust', 'ruby', 'dart', 'swift', 'container', 'other'
 );
 
 CREATE TYPE integration_provider AS ENUM (
@@ -353,7 +355,7 @@ CREATE TABLE packages (
 -- Independent of scans: written in its own autocommit transaction as soon as
 -- a registry response is classified; re-downloadable, safe to clear
 -- (db/README.md). ecosystem is the registry identity ('npm' | 'pypi' |
--- 'nuget' since 008), not tech_ecosystem.
+-- 'nuget' since 008 | 'depsdev' | 'pubdev' since 010), not tech_ecosystem.
 -- =============================================================================
 
 -- License metadata per (ecosystem, request name, exact version). found rows
@@ -361,7 +363,7 @@ CREATE TABLE packages (
 -- grows); not_found (404/410) rows expire after 24 h; transient errors are
 -- never stored.
 CREATE TABLE registry_package_cache (
-    ecosystem          TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi', 'nuget')),
+    ecosystem          TEXT        NOT NULL CHECK (ecosystem IN ('npm', 'pypi', 'nuget', 'depsdev', 'pubdev')),
     name               TEXT        NOT NULL,  -- request name: npm as-is, PyPI PEP 503, NuGet ASCII-lowercased id
     version            TEXT        NOT NULL,
     outcome            TEXT        NOT NULL CHECK (outcome IN ('found', 'not_found')),
@@ -453,7 +455,8 @@ CREATE TABLE scan_dependencies (
     -- completed before F3. Value sets = docs/contracts/REQ-004-notice-and-outputs.md §4.
     license_expression        TEXT    NULL,
     license_source            TEXT    NULL CHECK (license_source IN
-        ('registry:npm', 'registry:pypi', 'registry:nuget', 'lockfile (unverified)', 'none')),
+        ('registry:npm', 'registry:pypi', 'registry:nuget', 'registry:depsdev', 'registry:pubdev',
+         'lockfile (unverified)', 'none')),
     license_lock_hint         TEXT    NULL,
     license_hint_differs      BOOLEAN NULL,
     license_enrichment_status TEXT    NULL CHECK (license_enrichment_status IN

@@ -1,0 +1,213 @@
+{
+  "scan_id": "golden-java-pom-properties",
+  "status": "completed",
+  "total_deps": 16,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "com.example.cyclic:cyclic",
+      "version": null,
+      "purl": "pkg:maven/com.example.cyclic/cyclic",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${cycle.a}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.example:demo-common",
+      "version": "1.4.0",
+      "purl": "pkg:maven/com.example/demo-common@1.4.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${project.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.fasterxml.jackson.core:jackson-databind",
+      "version": "2.17.1",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.17.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${jackson.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.code.gson:gson",
+      "version": null,
+      "purl": "pkg:maven/com.google.code.gson/gson",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "[2.10,3.0)"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.micrometer:micrometer-core",
+      "version": null,
+      "purl": "pkg:maven/io.micrometer/micrometer-core",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${micrometer.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "jakarta.servlet:jakarta.servlet-api",
+      "version": "6.0.0",
+      "purl": "pkg:maven/jakarta.servlet/jakarta.servlet-api@6.0.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "6.0.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.apache.commons:commons-lang3",
+      "version": "3.14.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${commons.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "version": "5.10.2",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "5.10.2"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.mockito:mockito-core",
+      "version": "5.12.0",
+      "purl": "pkg:maven/org.mockito/mockito-core@5.12.0",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "5.12.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.postgresql:postgresql",
+      "version": "42.7.3",
+      "purl": "pkg:maven/org.postgresql/postgresql@42.7.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "42.7.3"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.springframework.boot:spring-boot-configuration-processor",
+      "version": "3.3.0",
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-configuration-processor@3.3.0",
+      "scope": "optional",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "${project.parent.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.springframework.boot:spring-boot-starter-web",
+      "version": null,
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-starter-web",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.yaml:snakeyaml",
+      "version": null,
+      "purl": "pkg:maven/org.yaml/snakeyaml",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": "LATEST"
+    },
+    {
+      "ecosystem": "java",
+      "name": "software.amazon.awssdk:s3",
+      "version": null,
+      "purl": "pkg:maven/software.amazon.awssdk/s3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.example:demo-common",
+      "version": "1.4.0",
+      "purl": "pkg:maven/com.example/demo-common@1.4.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": "module-a",
+      "declared_range": "${project.version}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.example:module-a",
+      "version": null,
+      "purl": "pkg:maven/com.example/module-a",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "pom.xml",
+      "manifest_path": "module-b",
+      "declared_range": "${project.version}"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "module-a/pom.xml",
+      "file_hash": "313f680c4ace4c82be39f97f1dd8a41130bff7a1d52296322031f31e3dd95b24",
+      "size_bytes": 568
+    },
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "module-b/pom.xml",
+      "file_hash": "12dd0f8a43765d1be2615990451bdaf331c87fe83bdd8d7217e9300c5df520c0",
+      "size_bytes": 532
+    },
+    {
+      "ecosystem": "java",
+      "filename": "pom.xml",
+      "file_path": "pom.xml",
+      "file_hash": "e6e6678cbf4ba2407e5905cdf37b39fe8b4e65ac12940f80752eea2240f71579",
+      "size_bytes": 5118
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "java",
+      "file": "pom.xml",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

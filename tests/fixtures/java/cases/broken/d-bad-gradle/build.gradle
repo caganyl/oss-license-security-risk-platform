@@ -1,0 +1,3 @@
+dependencies {
+    implementation 'org.secret:oops:1.0
+}

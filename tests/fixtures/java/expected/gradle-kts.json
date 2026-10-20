@@ -1,0 +1,171 @@
+{
+  "scan_id": "golden-java-gradle-kts",
+  "status": "completed",
+  "total_deps": 14,
+  "dependencies": [
+    {
+      "ecosystem": "java",
+      "name": "androidx.compose.ui:ui",
+      "version": null,
+      "purl": "pkg:maven/androidx.compose.ui/ui",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "java",
+      "name": "androidx.test.ext:junit",
+      "version": "1.1.5",
+      "purl": "pkg:maven/androidx.test.ext/junit@1.1.5",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.1.5"
+    },
+    {
+      "ecosystem": "java",
+      "name": "ch.qos.logback:logback-classic",
+      "version": "1.5.6",
+      "purl": "pkg:maven/ch.qos.logback/logback-classic@1.5.6",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.5.6"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.code.gson:gson",
+      "version": "2.11.0",
+      "purl": "pkg:maven/com.google.code.gson/gson@2.11.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "2.11.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.google.dagger:dagger-compiler",
+      "version": "2.51.1",
+      "purl": "pkg:maven/com.google.dagger/dagger-compiler@2.51.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "2.51.1"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.squareup.moshi:moshi",
+      "version": null,
+      "purl": "pkg:maven/com.squareup.moshi/moshi",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.+"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.squareup.moshi:moshi-kotlin-codegen",
+      "version": "1.15.1",
+      "purl": "pkg:maven/com.squareup.moshi/moshi-kotlin-codegen@1.15.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.15.1"
+    },
+    {
+      "ecosystem": "java",
+      "name": "com.squareup.okhttp3:okhttp",
+      "version": null,
+      "purl": "pkg:maven/com.squareup.okhttp3/okhttp",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "${libs.versions.okhttp.get()}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.github.example:strict",
+      "version": "1.2.3",
+      "purl": "pkg:maven/io.github.example/strict@1.2.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.2.3"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.ktor:ktor-server-core",
+      "version": null,
+      "purl": "pkg:maven/io.ktor/ktor-server-core",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "$ktorVersion"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.ktor:ktor-server-netty",
+      "version": null,
+      "purl": "pkg:maven/io.ktor/ktor-server-netty",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "${ktorVersion}"
+    },
+    {
+      "ecosystem": "java",
+      "name": "io.mockk:mockk",
+      "version": "1.13.11",
+      "purl": "pkg:maven/io.mockk/mockk@1.13.11",
+      "scope": "dev",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.13.11"
+    },
+    {
+      "ecosystem": "java",
+      "name": "javax.annotation:jsr250-api",
+      "version": "1.0",
+      "purl": "pkg:maven/javax.annotation/jsr250-api@1.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.0"
+    },
+    {
+      "ecosystem": "java",
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+      "version": "1.8.1",
+      "purl": "pkg:maven/org.jetbrains.kotlinx/kotlinx-coroutines-core@1.8.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "build.gradle.kts",
+      "manifest_path": ".",
+      "declared_range": "1.8.1"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "java",
+      "filename": "build.gradle.kts",
+      "file_path": "build.gradle.kts",
+      "file_hash": "3acc62332cfa1d599ca20b4b9d88777122afe0991fb34b5bbdd2a711d0c6d270",
+      "size_bytes": 1485
+    }
+  ],
+  "parse_errors": []
+}

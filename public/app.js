@@ -70,7 +70,7 @@ const TEXT = {
     file_upload: 'Dosya yükleme',
   },
   ecosystem: {
-    nodejs: 'Node.js', python: 'Python', java: 'Java', dotnet: '.NET', go: 'Go', php: 'PHP', ruby: 'Ruby', container: 'Konteyner', other: 'Diğer',
+    nodejs: 'Node.js', python: 'Python', java: 'Java / Kotlin', dotnet: '.NET', go: 'Go', php: 'PHP', rust: 'Rust', ruby: 'Ruby', dart: 'Dart / Flutter', swift: 'Swift', container: 'Konteyner', other: 'Diğer',
   },
   role: {
     admin: 'Yönetici',
@@ -396,7 +396,7 @@ const TEXT = {
       {
         key: 'registry_enrichment',
         name: 'Lisans bilgisi zenginleştirme',
-        description: 'Eksik lisans ve telif bilgisini paket kayıt defterlerinden (npm, PyPI, NuGet) tamamlar.',
+        description: 'Eksik lisans ve telif bilgisini paket kayıt defterlerinden tamamlar: npm, PyPI, NuGet, deps.dev (Go, Java, Rust, Ruby) ve pub.dev (Dart). Dışarıya yalnız paket adı ve sürümü gider.',
         enable: '.env dosyasında REGISTRY_ENRICHMENT=on yapın ve uygulamayı yeniden başlatın.',
       },
       {

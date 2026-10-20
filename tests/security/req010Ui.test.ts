@@ -359,6 +359,23 @@ describe('AC-P36: counters, ecosystem default, zero-package warning', () => {
   });
 });
 
+describe('REQ-010 r2: zero findings is "clean" only when the vulnerability lookup ran', () => {
+  it('unavailable/disabled -> "Kontrol edilemedi", partial -> "Kısmen kontrol edildi", complete -> "✓ Temiz"', async () => {
+    const unavailable = scan({ vulnerability_data_status: 'unavailable' });
+    const disabled = scan({ vulnerability_data_status: 'disabled' });
+    const partial = scan({ vulnerability_data_status: 'partial' });
+    const complete = scan({ vulnerability_data_status: 'complete' });
+    const p = loadPage({ 'GET /api/scans': () => ({ status: 200, body: { data: [unavailable, disabled, partial, complete] } }) });
+    await waitFor(() => p.doc.querySelectorAll('#scans-tbody tr').length === 4, 'rows');
+    const text = (r: Record<string, unknown>) => p.doc.getElementById(`scan-row-${r.id}`)!.textContent ?? '';
+    expect(text(unavailable)).toContain('Kontrol edilemedi');
+    expect(text(unavailable)).not.toContain('Temiz');
+    expect(text(disabled)).toContain('Kontrol edilemedi');
+    expect(text(partial)).toContain('Kısmen kontrol edildi');
+    expect(text(complete)).toContain('✓ Temiz');
+  });
+});
+
 describe('AC-P38-1 / AC-P38-2: "Raporlar" menu', () => {
   it('one menu button per completed dependency row with the five described options; keyboard, focus and aria-expanded', async () => {
     const a = scan();

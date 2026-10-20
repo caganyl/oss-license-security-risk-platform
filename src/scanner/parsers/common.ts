@@ -35,6 +35,9 @@ export const SKIP_DIRS: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
   'build',
+  // REQ-010 r2: framework build output (Next.js / Nuxt) holds generated package.json copies.
+  '.next',
+  '.nuxt',
 ]);
 
 export const NODEJS_MANIFEST_NAMES: readonly string[] = ['package.json', 'package-lock.json', 'yarn.lock'];

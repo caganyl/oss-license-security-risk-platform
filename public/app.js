@@ -159,6 +159,10 @@ const TEXT = {
     kindWebTitle: 'Web (URL) taraması',
     grade: (g) => `Güvenlik notu ${g}`,
     clean: '✓ Temiz',
+    unchecked: 'Kontrol edilemedi',
+    uncheckedHint: 'Güvenlik açığı kaynağına (OSV) ulaşılamadı veya sorgu kapalı; paketler kontrol edilmedi. Sistem Durumu ekranına ve proxy/sertifika ayarlarına bakın, sonra yeniden tarayın.',
+    partial: 'Kısmen kontrol edildi',
+    partialHint: 'Bazı paketler kontrol edilemedi; sonuç eksik olabilir. Yeniden taramayı deneyin.',
     critical: (n) => `${n} Kritik`,
     high: (n) => `${n} Yüksek`,
     medLow: (n) => `${n} Orta/Düşük`,
@@ -780,6 +784,14 @@ function isWebScan(row) {
 }
 
 function securityLabel(row) {
+  // REQ-010 r2: zero findings only means "clean" when the lookup actually ran.
+  const data = row.vulnerability_data_status;
+  if (!row.total_vulnerabilities && (data === 'unavailable' || data === 'disabled')) {
+    return el('span', { style: 'color: var(--warning);', title: TEXT.scans.uncheckedHint }, TEXT.scans.unchecked);
+  }
+  if (!row.total_vulnerabilities && data === 'partial') {
+    return el('span', { style: 'color: var(--warning);', title: TEXT.scans.partialHint }, TEXT.scans.partial);
+  }
   if (!row.total_vulnerabilities) return el('span', { style: 'color: var(--success);' }, TEXT.scans.clean);
   const parts = [];
   if (row.critical_vulns) parts.push(el('span', { style: 'color: var(--danger);' }, TEXT.scans.critical(formatNumber(row.critical_vulns))));

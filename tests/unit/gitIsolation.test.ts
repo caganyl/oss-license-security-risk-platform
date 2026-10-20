@@ -426,8 +426,10 @@ describe('AC-T-4 / L-5: the clone error tail is sanitized before it is cut (1024
       `fatal: repository '${dest}' not found\n`,
     ]);
 
-    expect(message.startsWith('git clone failed (exit code 128): ')).toBe(true);
-    const detail = message.slice('git clone failed (exit code 128): '.length);
+    // REQ-009 AC-P31-2: a classified failure starts with its guiding sentence.
+    const marker = 'git clone failed (exit code 128): ';
+    expect(message.startsWith(`Repository not found or no access. ${marker}`)).toBe(true);
+    const detail = message.slice(message.indexOf(marker) + marker.length);
     expect(Array.from(detail).length).toBeLessThanOrEqual(1024);
     expect(message).not.toContain(FAKE_TOKEN);
     expect(message).not.toContain(basic);

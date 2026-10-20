@@ -299,7 +299,9 @@ describe('P-02 page structure: no external or inline script (AC-P02-5…7, D-17,
 });
 
 describe('P-02 UI works with the P-01 session (AC-P02-4)', () => {
-  const hasPasswordInput = (page: Page) => page.dom.window.document.querySelector('input[type="password"]') !== null;
+  // Scoped to the auth screen: the page also has static password-type fields (REQ-009 repo token).
+  const AUTH_PASSWORD = '#auth-screen input[type="password"]';
+  const hasPasswordInput = (page: Page) => page.dom.window.document.querySelector(AUTH_PASSWORD) !== null;
 
   it('AC-P02-4: GET /api/auth/me 401 setup_required -> a password (setup) form is shown, no data requests succeed', async () => {
     const unauth = () => ({ status: 401, body: { error: 'Unauthorized', message: 'Initial password setup required', code: 'setup_required' } });
@@ -317,7 +319,7 @@ describe('P-02 UI works with the P-01 session (AC-P02-4)', () => {
     });
     await waitFor(() => hasPasswordInput(page), 'login form with a password field');
     const doc = page.dom.window.document;
-    const input = doc.querySelector<HTMLInputElement>('input[type="password"]')!;
+    const input = doc.querySelector<HTMLInputElement>(AUTH_PASSWORD)!;
     input.value = 'wrong-password-123';
     const form = input.closest('form');
     if (form && typeof form.requestSubmit === 'function') form.requestSubmit();

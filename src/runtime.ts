@@ -37,6 +37,7 @@ import { canonicalizeScanRoots, parseScanRoots } from './lib/scanSource';
 import { ExportWorker, type ExportWorkerDeps } from './reports/worker';
 import { describeGitVersion, getGitVersion, type GitVersionProvider } from './scanner/gitVersion';
 import { ScanWorker, type ScanWorkerDeps } from './scanner/worker';
+import { WINDOWS_AUTH_HOSTS_INVALID_MESSAGE, parseWindowsAuthHosts } from './scanner/workspace';
 import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
 import { createDependencyEnricher, type DependencyEnricher } from './enrichment';
 import { createVulnerabilityClient, type VulnerabilityClient } from './vulnerability/client';
@@ -271,6 +272,17 @@ class Runtime implements RuntimeHandle {
       if (webSettings.allowlist.empty) this.logger.log('Web taraması kapalı: WEB_SCAN_ALLOWED_HOSTS boş.');
       if (webSettings.zap) this.logger.log('OWASP ZAP bağlayıcısı etkin (ZAP_API_URL).');
       this.checkCancelled();
+
+      // 4c. Windows identity hosts for git (REQ-009 AC-P30-1): an invalid list stops the start-up.
+      let windowsAuthHosts: ReadonlySet<string>;
+      try {
+        windowsAuthHosts = parseWindowsAuthHosts(this.env.GIT_WINDOWS_AUTH_HOSTS);
+      } catch {
+        throw new RuntimeStartupError(WINDOWS_AUTH_HOSTS_INVALID_MESSAGE);
+      }
+      if (windowsAuthHosts.size > 0) {
+        this.logger.log(`git Windows kimliği şu hostlar için açık: ${[...windowsAuthHosts].join(', ')}.`);
+      }
 
       // 5. Git version: informational, never stops the start-up (AC-T-3).
       try {

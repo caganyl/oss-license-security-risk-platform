@@ -78,9 +78,14 @@ export class ScanController {
         return;
       }
 
-      // Verify project exists
-      const projCheck = await this.db.query<{ id: string; repo_url: string | null }>(
-        'SELECT id, repo_url FROM projects WHERE id = $1',
+      // Verify project exists; its active integration for exactly this repo URL
+      // carries the repo access token (REQ-009 AC-P29-8, AC-P29-10).
+      const projCheck = await this.db.query<{ id: string; repo_url: string | null; integration_id: string | null }>(
+        `SELECT p.id, p.repo_url,
+                (SELECT i.id FROM integrations i
+                  WHERE i.project_id = p.id AND i.is_active AND i.access_token_enc IS NOT NULL AND i.repo_url = p.repo_url
+                  ORDER BY i.created_at ASC LIMIT 1) AS integration_id
+         FROM projects p WHERE p.id = $1`,
         [projectId],
       );
       if (projCheck.rows.length === 0) {
@@ -89,7 +94,7 @@ export class ScanController {
 
       // P-03 (AC-P03-11, K12) and P-04 (AC-P04-5): re-check the effective
       // source before queueing; a rejection is a 400 and no scans row is
-      // created. Scans created here carry no integration, so the project's
+      // created. A linked integration has the same repo_url, so the project's
       // repo_url is the effective one. A missing source would otherwise only
       // fail later in the worker, so it is rejected up front.
       const repoUrl = projCheck.rows[0].repo_url;
@@ -98,16 +103,19 @@ export class ScanController {
       }
       await resolveScanSource(repoUrl, this.scanRoots);
 
+      // REQ-009 D-255: no ref = NULL, the worker clones the remote's default
+      // branch instead of assuming 'main'.
       const result = await this.db.query(`
-        INSERT INTO scans (project_id, trigger, status, ref, ref_type, queued_at, initiated_by)
-        VALUES ($1, COALESCE($2, 'manual')::scan_trigger, 'pending', $3, COALESCE($4, 'branch'), NOW(), $5)
+        INSERT INTO scans (project_id, trigger, status, ref, ref_type, queued_at, initiated_by, integration_id)
+        VALUES ($1, COALESCE($2, 'manual')::scan_trigger, 'pending', $3, COALESCE($4, 'branch'), NOW(), $5, $6)
         RETURNING ${SCAN_RETURNING}
       `, [
         projectId,
         trigger || 'manual',
-        ref || 'main',
+        typeof ref === 'string' && ref !== '' ? ref : null,
         refType || 'branch',
-        user.id
+        user.id,
+        projCheck.rows[0].integration_id,
       ]);
 
       // Write audit

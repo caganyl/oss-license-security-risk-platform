@@ -635,7 +635,10 @@ export class ScanWorker {
       if (source.kind === 'local') {
         parsed = toParserRunOutput(await this.deps.runParser(source.path, ecosystems, scanId, signal));
       } else {
-        const ref = scanRow.ref || scanRow.default_branch || null;
+        // REQ-009 D-255: no ref = the remote's default branch (no `--branch`).
+        // `integrations.default_branch` is not used: its column default 'main'
+        // broke repositories whose default branch is master/develop.
+        const ref = scanRow.ref || null;
         if (ref !== null && !isValidRef(ref)) {
           throw new NonRetryableScanError('Invalid git ref for the scan');
         }

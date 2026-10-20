@@ -1,0 +1,134 @@
+{
+  "scan_id": "golden-nodejs-extra-bun-lock",
+  "status": "completed",
+  "total_deps": 11,
+  "dependencies": [
+    {
+      "ecosystem": "nodejs",
+      "name": "@types/bun",
+      "version": "1.1.4",
+      "declared_range": "^1.1.4",
+      "purl": "pkg:npm/@types/bun@1.1.4",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "@types/node",
+      "version": "20.12.14",
+      "declared_range": null,
+      "purl": "pkg:npm/@types/node@20.12.14",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "bun-types",
+      "version": "1.1.13",
+      "declared_range": null,
+      "purl": "pkg:npm/bun-types@1.1.13",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "fsevents",
+      "version": "2.3.3",
+      "declared_range": "^2.3.3",
+      "purl": "pkg:npm/fsevents@2.3.3",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "optional"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "hono",
+      "version": "4.4.6",
+      "declared_range": "^4.4.0",
+      "purl": "pkg:npm/hono@4.4.6",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "my-fork",
+      "version": null,
+      "declared_range": "github:acme/my-fork#0123abc",
+      "purl": "pkg:npm/my-fork",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "react",
+      "version": "18.3.1",
+      "declared_range": ">=18",
+      "purl": "pkg:npm/react@18.3.1",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "peer"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "typescript",
+      "version": "5.4.5",
+      "declared_range": "^5.4.5",
+      "purl": "pkg:npm/typescript@5.4.5",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "undici-types",
+      "version": "5.26.5",
+      "declared_range": null,
+      "purl": "pkg:npm/undici-types@5.26.5",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "zod",
+      "version": "3.23.8",
+      "declared_range": "^3.23.8",
+      "purl": "pkg:npm/zod@3.23.8",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "zod",
+      "version": "3.22.4",
+      "declared_range": null,
+      "purl": "pkg:npm/zod@3.22.4",
+      "manifest_file": "bun.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "package.json",
+      "file_hash": "df263e35f2c7e6115afc08737b724ef8c4c077a06673973a71892adbaee28805",
+      "size_bytes": 349
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "bun.lock",
+      "file_path": "bun.lock",
+      "file_hash": "416646446a34cf076f74f8f1c737029a677d4194bfa17b965cd53e12fe1244e2",
+      "size_bytes": 1977
+    }
+  ],
+  "parse_errors": []
+}

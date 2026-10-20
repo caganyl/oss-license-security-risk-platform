@@ -1,0 +1,10 @@
+version = 1
+
+[[package]]
+name = "no-version"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "ok-uv"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }

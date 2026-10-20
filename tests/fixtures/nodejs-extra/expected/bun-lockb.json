@@ -1,0 +1,43 @@
+{
+  "scan_id": "golden-nodejs-extra-bun-lockb",
+  "status": "completed",
+  "total_deps": 2,
+  "dependencies": [
+    {
+      "ecosystem": "nodejs",
+      "name": "hono",
+      "version": null,
+      "declared_range": "^4.4.0",
+      "purl": "pkg:npm/hono",
+      "manifest_file": "package.json",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "typescript",
+      "version": "5.4.5",
+      "declared_range": "5.4.5",
+      "purl": "pkg:npm/typescript@5.4.5",
+      "manifest_file": "package.json",
+      "manifest_path": ".",
+      "scope": "dev"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "package.json",
+      "file_hash": "00fb90108bcfa8f8a8575bf410c5d6044c0a4f4bea9ea0a897751eea0a7695c9",
+      "size_bytes": 127
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "nodejs",
+      "file": "bun.lockb",
+      "error": "Desteklenmeyen dosya biçimi."
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "scan_id": "golden-python-extra-pipfile-lock",
+  "status": "completed",
+  "total_deps": 7,
+  "dependencies": [
+    {
+      "ecosystem": "python",
+      "name": "Django",
+      "version": "5.0.6",
+      "declared_range": null,
+      "purl": "pkg:pypi/django@5.0.6",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "certifi",
+      "version": "2024.6.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/certifi@2024.6.2",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "loose",
+      "version": null,
+      "declared_range": "*",
+      "purl": "pkg:pypi/loose",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "requests",
+      "version": "2.32.3",
+      "declared_range": null,
+      "purl": "pkg:pypi/requests@2.32.3",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "typing_extensions",
+      "version": "4.12.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/typing-extensions@4.12.2",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "pluggy",
+      "version": "1.5.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/pluggy@1.5.0",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "python",
+      "name": "pytest",
+      "version": "8.2.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/pytest@8.2.2",
+      "manifest_file": "Pipfile.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "python",
+      "filename": "Pipfile.lock",
+      "file_path": "Pipfile.lock",
+      "file_hash": "4f86b6f9edc677581d3b40db1c57e4cdb3bb1334440acf79b05e809c8528677c",
+      "size_bytes": 2240
+    }
+  ],
+  "parse_errors": []
+}

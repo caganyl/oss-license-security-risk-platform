@@ -1,0 +1,17 @@
+{
+  "name": "pnpm-v6-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@babel/runtime": "^7.23.0",
+    "from-git": "github:acme/from-git",
+    "local-lib": "link:../local-lib",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.3"
+  },
+  "devDependencies": {
+    "typescript": "~5.2.2"
+  }
+}

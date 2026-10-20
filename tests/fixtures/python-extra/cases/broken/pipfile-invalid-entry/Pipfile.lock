@@ -1,0 +1,9 @@
+{
+  "default": {
+    "bad name!": {"version": "==1.0.0"},
+    "numeric-version": {"version": 1},
+    "not-a-table": "==1.0.0",
+    "ok-pkg": {"version": "==1.0.0"}
+  },
+  "develop": {}
+}

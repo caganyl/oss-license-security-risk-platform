@@ -1,0 +1,164 @@
+{
+  "scan_id": "golden-nodejs-extra-pnpm-v9",
+  "status": "completed",
+  "total_deps": 14,
+  "dependencies": [
+    {
+      "ecosystem": "nodejs",
+      "name": "@types/node",
+      "version": "20.14.2",
+      "declared_range": "^20.14.2",
+      "purl": "pkg:npm/@types/node@20.14.2",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "ansi-regex",
+      "version": "5.0.1",
+      "declared_range": null,
+      "purl": "pkg:npm/ansi-regex@5.0.1",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "debug",
+      "version": "2.6.9",
+      "declared_range": null,
+      "purl": "pkg:npm/debug@2.6.9",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "express",
+      "version": "4.19.2",
+      "declared_range": "^4.19.2",
+      "purl": "pkg:npm/express@4.19.2",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "js-tokens",
+      "version": "4.0.0",
+      "declared_range": null,
+      "purl": "pkg:npm/js-tokens@4.0.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "loose-envify",
+      "version": "1.4.0",
+      "declared_range": null,
+      "purl": "pkg:npm/loose-envify@1.4.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "ms",
+      "version": "2.0.0",
+      "declared_range": null,
+      "purl": "pkg:npm/ms@2.0.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "react",
+      "version": "18.3.1",
+      "declared_range": null,
+      "purl": "pkg:npm/react@18.3.1",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "shared-util",
+      "version": "1.0.0",
+      "declared_range": null,
+      "purl": "pkg:npm/shared-util@1.0.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "string-width",
+      "version": "4.2.3",
+      "declared_range": "npm:string-width@^4.2.0",
+      "purl": "pkg:npm/string-width@4.2.3",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "strip-ansi",
+      "version": "6.0.1",
+      "declared_range": null,
+      "purl": "pkg:npm/strip-ansi@6.0.1",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "tinypool",
+      "version": "0.8.4",
+      "declared_range": null,
+      "purl": "pkg:npm/tinypool@0.8.4",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "undici-types",
+      "version": "5.26.5",
+      "declared_range": null,
+      "purl": "pkg:npm/undici-types@5.26.5",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "nodejs",
+      "name": "vitest",
+      "version": "1.6.0",
+      "declared_range": "^1.6.0",
+      "purl": "pkg:npm/vitest@1.6.0",
+      "manifest_file": "pnpm-lock.yaml",
+      "manifest_path": ".",
+      "scope": "dev"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "nodejs",
+      "filename": "package.json",
+      "file_path": "package.json",
+      "file_hash": "7a2b57faf639b3cc285fbbd66ea7bcbb00c4772ca6a4a2e5eeb09b347bbe70fd",
+      "size_bytes": 267
+    },
+    {
+      "ecosystem": "nodejs",
+      "filename": "pnpm-lock.yaml",
+      "file_path": "pnpm-lock.yaml",
+      "file_hash": "ecc9bc4eceafd35022bf34222dcb46e1608bdbb9bc65d5553b03e42f3ae65e27",
+      "size_bytes": 3776
+    }
+  ],
+  "parse_errors": []
+}

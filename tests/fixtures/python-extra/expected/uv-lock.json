@@ -1,0 +1,137 @@
+{
+  "scan_id": "golden-python-extra-uv-lock",
+  "status": "completed",
+  "total_deps": 12,
+  "dependencies": [
+    {
+      "ecosystem": "python",
+      "name": "anyio",
+      "version": "4.4.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/anyio@4.4.0",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "certifi",
+      "version": "2024.6.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/certifi@2024.6.2",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "httpx",
+      "version": "0.27.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/httpx@0.27.0",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    },
+    {
+      "ecosystem": "python",
+      "name": "idna",
+      "version": "3.7",
+      "declared_range": null,
+      "purl": "pkg:pypi/idna@3.7",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "iniconfig",
+      "version": "2.0.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/iniconfig@2.0.0",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "numpy",
+      "version": "1.26.4",
+      "declared_range": null,
+      "purl": "pkg:pypi/numpy@1.26.4",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "numpy",
+      "version": "2.0.0",
+      "declared_range": null,
+      "purl": "pkg:pypi/numpy@2.0.0",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "pytest",
+      "version": "8.2.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/pytest@8.2.2",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "python",
+      "name": "rich",
+      "version": "13.7.1",
+      "declared_range": null,
+      "purl": "pkg:pypi/rich@13.7.1",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "optional"
+    },
+    {
+      "ecosystem": "python",
+      "name": "ruff",
+      "version": "0.4.9",
+      "declared_range": null,
+      "purl": "pkg:pypi/ruff@0.4.9",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "dev"
+    },
+    {
+      "ecosystem": "python",
+      "name": "sniffio",
+      "version": "1.3.1",
+      "declared_range": null,
+      "purl": "pkg:pypi/sniffio@1.3.1",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "transitive"
+    },
+    {
+      "ecosystem": "python",
+      "name": "typing-extensions",
+      "version": "4.12.2",
+      "declared_range": null,
+      "purl": "pkg:pypi/typing-extensions@4.12.2",
+      "manifest_file": "uv.lock",
+      "manifest_path": ".",
+      "scope": "direct"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "python",
+      "filename": "uv.lock",
+      "file_path": "uv.lock",
+      "file_hash": "576023c9d7dc001cb29c56810db8231dacb99f6fe0b9e716a1260eefd0e5a41a",
+      "size_bytes": 3423
+    }
+  ],
+  "parse_errors": []
+}

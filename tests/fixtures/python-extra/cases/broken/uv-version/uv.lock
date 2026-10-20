@@ -1,0 +1,6 @@
+version = 2
+
+[[package]]
+name = "requests"
+version = "2.32.3"
+source = { registry = "https://pypi.org/simple" }

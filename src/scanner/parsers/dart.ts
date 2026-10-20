@@ -1,9 +1,6 @@
 /**
  * Dart / Flutter (pub) dependency parser — REQ-011 P-40 (AC-P40-1…7; ADR-012 Karar 1).
  *
- * STUB (phase 1): returns no dependencies yet.
- * TODO(REQ-011 phase 2): implement the rules below.
- *
  * Files (MANIFEST_SPECS.dart): `pubspec.lock` only.
  *   - read with `parseYamlSubset` of `./yamlSubset` (anchors, aliases,
  *     tags and multi-document streams are rejected, AC-P40-4);
@@ -12,6 +9,22 @@
  *     `direct`, `"direct dev"` -> `dev`, `transitive` -> `transitive`;
  *     `version` exact.
  * Package name = pub package name; purl `pkg:pub/<name>@v` (lower case).
+ *
+ * Details of the phase-2 implementation:
+ * - The package name is the `packages` key (pub writes the same name in
+ *   `description.name`). Every hosted package is taken, whatever
+ *   `description.url` says (`https://pub.dev`, the legacy
+ *   `https://pub.dartlang.org`, or a private pub server / mirror).
+ * - `sdk` (`flutter`, `flutter_test`, ...), `git` and `path` packages are
+ *   never entries (D-311). The lock has no constraints: `declaredRange` is
+ *   always null.
+ * - Broken file -> one fixed record: YAML outside the subset or invalid
+ *   (YAML texts of the kit), a root that is not a mapping or a `packages`
+ *   value that is not a mapping ("unexpected structure"). `packages`
+ *   missing or empty -> no entries. A package entry that is not a mapping,
+ *   has no string `source`, or (hosted) has an unknown `dependency` value or
+ *   no string `version` is dropped with one "invalid entries skipped"
+ *   record for the file.
  *
  * Contract for this file (phase 2 owner edits ONLY this file, its own
  * fixtures under `tests/fixtures/dart/` and its own tests
@@ -35,10 +48,69 @@
  * - never run a build tool, never read outside the walk, never put file
  *   content into an error text.
  */
-import type { ParseResult, TreeWalk } from './common';
-import type { ParserContext } from './kit';
+import type { DependencyScope } from '../../types/scan';
+import { isPyDict, type ParseResult, type TreeWalk } from './common';
+import { PARSER_MESSAGES, ParserFileError, type DependencyEntry, type ParserContext } from './kit';
+import { parseYamlSubset } from './yamlSubset';
+
+const PUBSPEC_LOCK = 'pubspec.lock';
+
+const SCOPES: ReadonlyMap<string, DependencyScope> = new Map([
+  ['direct main', 'direct'],
+  ['direct overridden', 'direct'],
+  ['direct dev', 'dev'],
+  ['transitive', 'transitive'],
+]);
+
+interface PubLock {
+  entries: DependencyEntry[];
+  invalid: boolean;
+}
+
+function own(table: Record<string, unknown>, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
+}
+
+function parsePubspecLock(text: string): PubLock {
+  const root = parseYamlSubset(text);
+  if (!isPyDict(root)) throw new ParserFileError(PARSER_MESSAGES.structure);
+  const packages = own(root, 'packages');
+  const lock: PubLock = { entries: [], invalid: false };
+  if (packages === undefined || packages === null) return lock;
+  if (!isPyDict(packages)) throw new ParserFileError(PARSER_MESSAGES.structure);
+  for (const [name, value] of Object.entries(packages)) {
+    if (!isPyDict(value)) {
+      lock.invalid = true;
+      continue;
+    }
+    const source = own(value, 'source');
+    if (typeof source !== 'string') {
+      lock.invalid = true;
+      continue;
+    }
+    if (source !== 'hosted') continue; // sdk, git, path (D-311)
+    const dependency = own(value, 'dependency');
+    const scope = typeof dependency === 'string' ? SCOPES.get(dependency) : undefined;
+    const version = own(value, 'version');
+    if (scope === undefined || typeof version !== 'string' || version === '') {
+      lock.invalid = true;
+      continue;
+    }
+    lock.entries.push({ name, version, scope, manifestFile: PUBSPEC_LOCK, declaredRange: null });
+  }
+  return lock;
+}
 
 export function parseDart(walk: TreeWalk, ctx: ParserContext): ParseResult {
   void walk;
+  for (const folder of ctx.folders()) {
+    if (ctx.capped) break;
+    const file = folder.files.get(PUBSPEC_LOCK);
+    if (!file) continue;
+    const read = ctx.read(file, (input) => parsePubspecLock(input.text()));
+    if (!read) continue;
+    if (read.value.invalid) ctx.issue(file, PARSER_MESSAGES.invalidEntry);
+    ctx.commit(folder, read.record, read.value.entries);
+  }
   return ctx.finish();
 }

@@ -1,0 +1,50 @@
+{
+  "scan_id": "golden-swift-v1",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "swift",
+      "name": "github.com/Alamofire/Alamofire",
+      "version": "5.8.1",
+      "purl": "pkg:swift/github.com/Alamofire/Alamofire@5.8.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "swift",
+      "name": "github.com/apple/swift-log",
+      "version": "1.5.3",
+      "purl": "pkg:swift/github.com/apple/swift-log@1.5.3",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "swift",
+      "name": "github.com/SnapKit/SnapKit",
+      "version": null,
+      "purl": "pkg:swift/github.com/SnapKit/SnapKit",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Package.resolved",
+      "manifest_path": ".",
+      "declared_range": "develop"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "swift",
+      "filename": "Package.resolved",
+      "file_path": "Package.resolved",
+      "file_hash": "4f5f93d29b8c0b8a7ef37511ba35b92e24976701c86aa0eb70edbcc90e6241e6",
+      "size_bytes": 1100
+    }
+  ],
+  "parse_errors": []
+}

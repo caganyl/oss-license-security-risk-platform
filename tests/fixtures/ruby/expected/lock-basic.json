@@ -1,0 +1,156 @@
+{
+  "scan_id": "golden-ruby-lock-basic",
+  "status": "completed",
+  "total_deps": 12,
+  "dependencies": [
+    {
+      "ecosystem": "ruby",
+      "name": "acme-auth",
+      "version": "2.1.0",
+      "purl": "pkg:gem/acme-auth@2.1.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "concurrent-ruby",
+      "version": "1.2.3",
+      "purl": "pkg:gem/concurrent-ruby@1.2.3",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "i18n",
+      "version": "1.14.4",
+      "purl": "pkg:gem/i18n@1.14.4",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "money",
+      "version": "6.19.0",
+      "purl": "pkg:gem/money@6.19.0",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "nio4r",
+      "version": "2.7.1",
+      "purl": "pkg:gem/nio4r@2.7.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "puma",
+      "version": "6.4.2",
+      "purl": "pkg:gem/puma@6.4.2",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": ">= 5.0, < 7"
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rack",
+      "version": "3.0.10",
+      "purl": "pkg:gem/rack@3.0.10",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rspec-core",
+      "version": "3.13.0",
+      "purl": "pkg:gem/rspec-core@3.13.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rspec-support",
+      "version": "3.13.1",
+      "purl": "pkg:gem/rspec-support@3.13.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "zeitwerk",
+      "version": "2.6.13",
+      "purl": "pkg:gem/zeitwerk@2.6.13",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": ".",
+      "declared_range": "~> 2.6"
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rack",
+      "version": "2.2.8.1",
+      "purl": "pkg:gem/rack@2.2.8.1",
+      "scope": "transitive",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": "api",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "sinatra",
+      "version": "3.2.0",
+      "purl": "pkg:gem/sinatra@3.2.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": "api",
+      "declared_range": "~> 3.2"
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "ruby",
+      "filename": "Gemfile.lock",
+      "file_path": "Gemfile.lock",
+      "file_hash": "1c6b7da1d715aef27b83310769669ae5502815d9299e4905a5e5ead6cd2ceb5c",
+      "size_bytes": 1150
+    },
+    {
+      "ecosystem": "ruby",
+      "filename": "Gemfile.lock",
+      "file_path": "api/Gemfile.lock",
+      "file_hash": "7a3bf1e36e3afdbcf2d340a70a70dd578701e7fc7437c2edc4fa54ae42adcd82",
+      "size_bytes": 204
+    }
+  ],
+  "parse_errors": []
+}

@@ -1,0 +1,18 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    json (2.7.1)
+    oops-no-version
+    oops (-java)
+    rake (13.1.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  json
+  oops bad line (1
+  rake (~> 13.0)
+
+BUNDLED WITH
+   2.5.6

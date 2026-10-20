@@ -1,0 +1,78 @@
+{
+  "scan_id": "golden-ruby-broken",
+  "status": "completed",
+  "total_deps": 3,
+  "dependencies": [
+    {
+      "ecosystem": "ruby",
+      "name": "json",
+      "version": "2.7.1",
+      "purl": "pkg:gem/json@2.7.1",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": "d-invalid-entry",
+      "declared_range": null
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rake",
+      "version": "13.1.0",
+      "purl": "pkg:gem/rake@13.1.0",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": "d-invalid-entry",
+      "declared_range": "~> 13.0"
+    },
+    {
+      "ecosystem": "ruby",
+      "name": "rack",
+      "version": "3.0.10",
+      "purl": "pkg:gem/rack@3.0.10",
+      "scope": "direct",
+      "licenses": [],
+      "manifest_file": "Gemfile.lock",
+      "manifest_path": "e-ok",
+      "declared_range": null
+    }
+  ],
+  "scan_files": [
+    {
+      "ecosystem": "ruby",
+      "filename": "Gemfile.lock",
+      "file_path": "d-invalid-entry/Gemfile.lock",
+      "file_hash": "45bf8f059e2da5cbf2f44c5f4b2100492cf060f29e946bb5f94c053927433efd",
+      "size_bytes": 215
+    },
+    {
+      "ecosystem": "ruby",
+      "filename": "Gemfile.lock",
+      "file_path": "e-ok/Gemfile.lock",
+      "file_hash": "03f560682faa769931d231a1ae5d2b9d1adbd3f128d1fea1a3dae197c95d97af",
+      "size_bytes": 102
+    }
+  ],
+  "parse_errors": [
+    {
+      "ecosystem": "ruby",
+      "file": "a-conflict/Gemfile.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "ruby",
+      "file": "b-not-a-lock/Gemfile.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "ruby",
+      "file": "c-no-section/Gemfile.lock",
+      "error": "Beklenmeyen dosya yapısı."
+    },
+    {
+      "ecosystem": "ruby",
+      "file": "d-invalid-entry/Gemfile.lock",
+      "error": "Geçersiz paket girdileri atlandı."
+    }
+  ]
+}

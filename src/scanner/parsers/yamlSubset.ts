@@ -63,12 +63,15 @@ export interface YamlLimits {
   maxDepth: number;
   /** Maximum number of collection entries plus scalars. */
   maxNodes: number;
+  /** Maximum number of physical lines (security review M-4: checked before splitting). */
+  maxLines: number;
 }
 
 export const DEFAULT_YAML_LIMITS: Readonly<YamlLimits> = Object.freeze({
   maxChars: 32 * 1024 * 1024,
   maxDepth: 64,
   maxNodes: 2_000_000,
+  maxLines: 2_000_000,
 });
 
 interface Line {
@@ -85,6 +88,17 @@ function isBlankOrComment(text: string): boolean {
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (c === ' ' || c === '\t') continue;
+    return c === '#';
+  }
+  return true;
+}
+
+/** Same answer as `isBlankOrComment` on the line without its indentation and CR, without building it. */
+function rawIsBlank(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (c === ' ' || c === '\t') continue;
+    if (c === '\r' && i === value.length - 1) return true;
     return c === '#';
   }
   return true;
@@ -148,7 +162,15 @@ const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
 };
 
 class Reader {
-  private readonly lines: Line[];
+  /** Physical lines (CR kept); a `Line` is built only when a parser step needs it. */
+  private readonly raw: string[];
+  /**
+   * Content lines built so far (sparse). Blank and comment-only lines never
+   * get a cached object (security review M-4: a file of 2M empty lines
+   * costs one string array, not 2M objects); a block scalar that needs one
+   * gets a transient object from `line()`.
+   */
+  private readonly cache: Array<Line | undefined>;
   private pos = 0;
   private nodes = 0;
 
@@ -156,27 +178,47 @@ class Reader {
     text: string,
     private readonly limits: YamlLimits,
   ) {
-    const raw = text.split('\n');
-    this.lines = raw.map((value, i) => {
-      const lineText = value.endsWith('\r') ? value.slice(0, -1) : value;
-      let indent = 0;
-      while (indent < lineText.length && lineText[indent] === ' ') indent++;
-      const rest = lineText.slice(indent);
-      const blank = isBlankOrComment(rest);
-      // A tab in the indentation of a content line is not allowed in YAML.
-      if (!blank && rest.startsWith('\t')) throw new YamlSubsetError('syntax', i + 1);
-      return { no: i + 1, indent, text: rest, blank };
-    });
+    // Count before splitting, so a huge run of newlines never becomes a huge array.
+    let lineCount = 1;
+    for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
+      if (++lineCount > limits.maxLines) throw new YamlSubsetError('limit', 0);
+    }
+    this.raw = text.split('\n');
+    this.cache = new Array<Line | undefined>(this.raw.length);
+    // A tab in the indentation of a content line is not allowed in YAML (checked over the whole text first).
+    for (let i = 0; i < this.raw.length; i++) {
+      if (!rawIsBlank(this.raw[i]) && this.line(i).text.startsWith('\t')) throw new YamlSubsetError('syntax', i + 1);
+    }
     // Directives anywhere, and a document marker other than one leading `---`, are outside the subset.
     let seenContent = false;
-    for (const line of this.lines) {
-      if (line.blank) continue;
+    for (let i = 0; i < this.raw.length; i++) {
+      if (rawIsBlank(this.raw[i])) continue;
+      const line = this.line(i);
       if (line.indent === 0) {
         if (line.text.startsWith('%')) throw new YamlSubsetError('unsupported', line.no);
         if (isMarker(line.text, '...') || (seenContent && isMarker(line.text, '---'))) throw new YamlSubsetError('unsupported', line.no);
       }
       seenContent = true;
     }
+  }
+
+  private get length(): number {
+    return this.raw.length;
+  }
+
+  /** The line at index `i` (cached for content lines, transient for blank ones). */
+  private line(i: number): Line {
+    const cached = this.cache[i];
+    if (cached !== undefined) return cached;
+    const value = this.raw[i];
+    const lineText = value.endsWith('\r') ? value.slice(0, -1) : value;
+    let indent = 0;
+    while (indent < lineText.length && lineText[indent] === ' ') indent++;
+    const rest = lineText.slice(indent);
+    const blank = isBlankOrComment(rest);
+    const line: Line = { no: i + 1, indent, text: rest, blank };
+    if (!blank) this.cache[i] = line;
+    return line;
   }
 
   private count(line: number): void {
@@ -186,8 +228,8 @@ class Reader {
 
   /** Next content line at or after `pos` (skips blank and comment-only lines), without consuming it. */
   private peek(): Line | null {
-    while (this.pos < this.lines.length && this.lines[this.pos].blank) this.pos++;
-    return this.pos < this.lines.length ? this.lines[this.pos] : null;
+    while (this.pos < this.length && rawIsBlank(this.raw[this.pos])) this.pos++;
+    return this.pos < this.length ? this.line(this.pos) : null;
   }
 
   document(): YamlValue {
@@ -258,7 +300,7 @@ class Reader {
       }
       if (isSequenceItem(rest) || mappingKey(rest, line.no) !== null) {
         // Re-read the same line as a block node indented at the item's content column.
-        this.lines[this.pos] = { no: line.no, indent: indent + offset, text: rest, blank: false };
+        this.cache[this.pos] = { no: line.no, indent: indent + offset, text: rest, blank: false };
         result.push(this.node(indent + offset, depth + 1));
         continue;
       }
@@ -335,8 +377,8 @@ class Reader {
     // Content lines: every following line that is blank or indented deeper than the parent.
     const body: string[] = [];
     let contentIndent = explicitIndent > 0 ? parentIndent + explicitIndent : 0;
-    while (this.pos < this.lines.length) {
-      const l = this.lines[this.pos];
+    while (this.pos < this.length) {
+      const l = this.line(this.pos);
       const isEmpty = l.text.trim() === '' && !l.text.includes('\t');
       if (!isEmpty && l.indent <= parentIndent) break;
       if (!isEmpty && contentIndent === 0) contentIndent = l.indent;

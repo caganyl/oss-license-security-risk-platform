@@ -215,21 +215,43 @@ function parseGoMod(text: string): { requires: GoRequire[]; replaces: GoReplace[
   return { requires, replaces };
 }
 
-/** Requirement after `replace` (version-specific replace first, then path-wide); null = local directory, skipped. */
-function applyReplace(req: GoRequire, replaces: readonly GoReplace[]): { path: string; version: string } | null {
-  let match: GoReplace | undefined;
+/** Replacements of one old module path: the last path-wide line and the last line per old version. */
+interface GoReplaceIndex {
+  pathWide: GoReplace | undefined;
+  byVersion: Map<string, GoReplace>;
+}
+
+/**
+ * Replacements indexed by old module path (security review M-1: one pass,
+ * so `applyReplace` is O(1) per requirement instead of a scan of every
+ * replace line). The last matching line wins, as in modfile.
+ */
+function indexReplaces(replaces: readonly GoReplace[]): Map<string, GoReplaceIndex> {
+  const index = new Map<string, GoReplaceIndex>();
   for (const r of replaces) {
-    if (r.oldPath !== req.path) continue;
-    if (r.oldVersion === req.version) match = r; // the last matching line wins, as in modfile
-    else if (r.oldVersion === null && (match === undefined || match.oldVersion === null)) match = r;
+    let entry = index.get(r.oldPath);
+    if (entry === undefined) {
+      entry = { pathWide: undefined, byVersion: new Map() };
+      index.set(r.oldPath, entry);
+    }
+    if (r.oldVersion === null) entry.pathWide = r;
+    else entry.byVersion.set(r.oldVersion, r);
   }
+  return index;
+}
+
+/** Requirement after `replace` (version-specific replace first, then path-wide); null = local directory, skipped. */
+function applyReplace(req: GoRequire, replaces: ReadonlyMap<string, GoReplaceIndex>): { path: string; version: string } | null {
+  const entry = replaces.get(req.path);
+  const match = entry === undefined ? undefined : (entry.byVersion.get(req.version) ?? entry.pathWide);
   if (!match) return { path: req.path, version: req.version };
   if (match.newVersion === null) return null;
   return { path: match.newPath, version: match.newVersion };
 }
 
 function goEntries(text: string): DependencyEntry[] {
-  const { requires, replaces } = parseGoMod(text);
+  const { requires, replaces: replaceLines } = parseGoMod(text);
+  const replaces = indexReplaces(replaceLines);
   const entries: DependencyEntry[] = [];
   for (const req of requires) {
     const target = applyReplace(req, replaces);

@@ -336,12 +336,25 @@ export function parseRust(walk: TreeWalk, ctx: ParserContext): ParseResult {
     return null;
   };
 
+  // Source-less package names per lock, built once (security review M-2: a
+  // linear `local.some(...)` per member folder and ancestor was quadratic).
+  const localNames = new Map<FolderState, Set<string>>();
+  const localNamesOf = (state: FolderState): Set<string> | null => {
+    if (state.lock === null) return null;
+    let names = localNames.get(state);
+    if (names === undefined) {
+      names = new Set(state.lock.value.local.map((p) => p.name));
+      localNames.set(state, names);
+    }
+    return names;
+  };
+
   // Workspace members covered by the nearest ancestor lock that lists them as source-less packages.
   for (const state of states.values()) {
     const name = state.manifest?.value.packageName;
     if (state.lock !== null || !state.manifest || name === null || name === undefined) continue;
     for (const ancestor of ancestorStates(state.folder.relDir, false)) {
-      if (ancestor.lock?.value.local.some((p) => p.name === name)) {
+      if (localNamesOf(ancestor)?.has(name)) {
         ancestor.members.push(state.manifest);
         state.covered = true;
         break;

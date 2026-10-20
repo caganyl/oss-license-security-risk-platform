@@ -783,3 +783,38 @@ describe('AC-P19-1 / AC-P19-2 / AC-P19-4: risk acceptance expiry', () => {
     await vi.waitFor(() => expect(s.lastEvaluatedAt()).not.toBeNull(), { timeout: 10_000 });
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('REQ-011 AC-P41-1 / AC-P41-3: new ecosystems are looked up in the scan and covered by the daily recheck', () => {
+  const dep = (ecosystem: string, name: string, version: string | null, purl: string): Dep =>
+    ({ ecosystem, name, version, purl, scope: 'direct', licenses: [], manifest_file: 'm', manifest_path: '.' }) as Dep;
+
+  it('Maven / Packagist / crates.io packages: scan finds the published one, recheck opens the later one; a versionless package is not unchecked', async () => {
+    const lookup = lookupOf();
+    osv.vulns.set(osvKey('Maven', 'org.apache.logging.log4j:log4j-core', '2.14.1'), [{ id: 'GHSA-jfh8-c2jp-5v3q', modified: '2026-01-01T00:00:00Z' }]);
+    osv.addRecord('GHSA-jfh8-c2jp-5v3q');
+    const [p] = await db.query<{ id: string }>(`INSERT INTO projects (name, repo_url) VALUES ('req011-recheck', $1) RETURNING id::text AS id`, [tmpRoot]);
+    const scanId = await workerScan(p.id, lookup, [
+      dep('java', 'org.apache.logging.log4j:log4j-core', '2.14.1', 'pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1'),
+      dep('php', 'monolog/monolog', 'v3.5.0', 'pkg:composer/monolog/monolog@v3.5.0'),
+      dep('rust', 'serde', '1.0.0', 'pkg:cargo/serde@1.0.0'),
+      dep('java', 'com.example:ranged', null, 'pkg:maven/com.example/ranged'),
+    ]);
+    expect((await securityFindings(scanId)).length).toBe(1);
+    expect((await scanState(scanId)).vds).toBe('complete');
+    expect(osv.batches()[0].map((q) => q.package.ecosystem)).toEqual(['Maven', 'Packagist', 'crates.io']);
+
+    osv.vulns.set(osvKey('Packagist', 'monolog/monolog', '3.5.0'), [{ id: 'GHSA-5555-6666-7777', modified: '2026-01-01T00:00:00Z' }]);
+    osv.addRecord('GHSA-5555-6666-7777');
+    osv.vulns.set(osvKey('crates.io', 'serde', '1.0.0'), [{ id: 'RUSTSEC-2026-0001', modified: '2026-01-01T00:00:00Z' }]);
+    osv.addRecord('RUSTSEC-2026-0001');
+    nowMs += 24 * H;
+    const s = schedulerOf({ lookup });
+    await s.start();
+    await s.tick();
+    const [run] = await runs();
+    expect(run).toMatchObject({ status: 'completed', projects_checked: 1, packages_checked: 3, packages_unchecked: 0, findings_opened: 2 });
+    expect((await securityFindings(scanId)).length).toBe(3);
+    expect((await scanState(scanId)).total).toBe(3);
+  });
+});

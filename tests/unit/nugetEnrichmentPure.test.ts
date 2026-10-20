@@ -213,8 +213,15 @@ describe('AC-NV-1 / AC-NV-4: OSV candidate queries', () => {
   });
 
   it('AC-NV-1: exhaustive ecosystem mapping — dotnet never becomes PyPI, unsupported ecosystems are skipped', () => {
-    const qs = candidateQueries([dep('dotnet', 'Requests', '2.31.0'), dep('python', 'Requests', '2.31.0'), dep('nodejs', 'left-pad', '1.3.0'), dep('rust', 'serde', '1.0.0')]);
-    expect(qs.map((q) => `${q.ecosystem}|${q.name}`).sort()).toEqual(['NuGet|Requests', 'PyPI|requests', 'npm|left-pad']);
+    // REQ-011 D-301: rust is queried as crates.io now; `container` is an enum value that is never sent to OSV.
+    const qs = candidateQueries([
+      dep('dotnet', 'Requests', '2.31.0'),
+      dep('python', 'Requests', '2.31.0'),
+      dep('nodejs', 'left-pad', '1.3.0'),
+      dep('rust', 'serde', '1.0.0'),
+      dep('container', 'alpine', '3.19'),
+    ]);
+    expect(qs.map((q) => `${q.ecosystem}|${q.name}`).sort()).toEqual(['NuGet|Requests', 'PyPI|requests', 'crates.io|serde', 'npm|left-pad']);
   });
 
   it('AC-NV-4: npm/PyPI-only queries are identical with or without a canonical-name map (F4 shape)', () => {

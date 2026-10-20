@@ -154,9 +154,16 @@ function notFound(): Error {
   return Object.assign(new Error('Scan not found or not yet completed'), { statusCode: 404 });
 }
 
-/** `nodejs` -> `npm`, `python` -> `pypi`, others as stored (contract 3.3). */
+const ECOSYSTEM_LABELS: Readonly<Record<string, string>> = Object.freeze({ nodejs: 'npm', python: 'pypi', dotnet: 'nuget' });
+
+/**
+ * `nodejs` -> `npm`, `python` -> `pypi`, `dotnet` -> `nuget`, others as
+ * stored (contract 3.3; REQ-011: `java`, `go`, ... stay as their enum
+ * value). A fixed table, not `registryEcosystemOf`, so a new registry
+ * source (REQ-011 deps.dev / pub.dev) never changes labels or NOTICE order.
+ */
 export function ecosystemLabel(ecosystem: string): string {
-  return registryEcosystemOf(ecosystem) ?? ecosystem;
+  return Object.prototype.hasOwnProperty.call(ECOSYSTEM_LABELS, ecosystem) ? ECOSYSTEM_LABELS[ecosystem] : ecosystem;
 }
 
 function compareBytes(a: string, b: string): number {

@@ -53,7 +53,22 @@ const STATUS_TR: Readonly<Record<string, string>> = {
 };
 const SCOPE_TR: Readonly<Record<string, string>> = { direct: 'Doğrudan', transitive: 'Dolaylı', dev: 'Geliştirme', peer: 'Eş', optional: 'İsteğe bağlı' };
 const TRIGGER_TR: Readonly<Record<string, string>> = { manual: 'elle', scheduled: 'zamanlanmış', schedule: 'zamanlanmış', webhook: 'webhook', ci: 'CI', api: 'API' };
-const ECOSYSTEM_TR: Readonly<Record<string, string>> = { npm: 'npm', pypi: 'PyPI', nuget: 'NuGet', nodejs: 'npm', python: 'PyPI', dotnet: 'NuGet' };
+const ECOSYSTEM_TR: Readonly<Record<string, string>> = {
+  npm: 'npm',
+  pypi: 'PyPI',
+  nuget: 'NuGet',
+  nodejs: 'npm',
+  python: 'PyPI',
+  dotnet: 'NuGet',
+  // REQ-011 AC-P42-2: package system names of the new ecosystems.
+  java: 'Maven',
+  go: 'Go',
+  php: 'Composer',
+  rust: 'Cargo',
+  ruby: 'RubyGems',
+  dart: 'Pub',
+  swift: 'SwiftPM',
+};
 
 /** Statuses that need no further action. */
 const CLOSED_STATUSES = new Set(['accepted', 'risk_accepted', 'false_positive', 'fixed', 'resolved', 'wont_fix', 'suppressed']);
@@ -66,6 +81,11 @@ const COLORS = {
 
 const label = (map: Readonly<Record<string, string>>, value: string | null | undefined): string =>
   value != null && Object.hasOwn(map, value) ? map[value] : (value ?? '-');
+
+/** Readable package system name of an ecosystem value in the PDF tables (REQ-011 AC-P42-2); unknown values as stored. */
+export function pdfEcosystemLabel(ecosystem: string | null | undefined): string {
+  return label(ECOSYSTEM_TR, ecosystem);
+}
 
 const DATE_FORMAT = new Intl.DateTimeFormat('tr-TR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Istanbul' });
 export function formatDateTr(value: Date | null): string {
@@ -315,7 +335,7 @@ export async function renderDependencyPdf(data: ReportData, reportType: ReportTy
       ['Paket', 'Sürüm', 'Ekosistem', 'Kullanım', 'Lisans'],
       [0.34, 0.14, 0.12, 0.14, 0.26],
       data.dependencies.slice(0, PDF_DEPENDENCY_ROW_LIMIT).map((dep) => [
-        dep.name, dep.version, label(ECOSYSTEM_TR, dep.ecosystem), label(SCOPE_TR, dep.scope), singleLine(dep.licenseExpression) || 'bilinmiyor',
+        dep.name, dep.version, pdfEcosystemLabel(dep.ecosystem), label(SCOPE_TR, dep.scope), singleLine(dep.licenseExpression) || 'bilinmiyor',
       ]),
       data.dependencies.length,
     );

@@ -167,33 +167,42 @@ function expectNoKeyLeak(p: Page): void {
 }
 
 // ---------------------------------------------------------------------------
-describe('AC-P24-8 / AC-P24-9: one-click download links (contract section 8)', () => {
-  it('completed rows: PDF, Excel, CSV, NOTICE, SBOM in this order; the four exports are <a download> with aria-labels and no target/rel; SBOM unchanged', async () => {
+describe('AC-P24-8 / AC-P24-9: one-click download links (contract section 8), grouped in the REQ-010 "Raporlar" menu', () => {
+  // REQ-010 AC-P38-1/2: the links keep href, download and target/rel; they now sit
+  // as menu items (title + one-sentence description) behind one menu button.
+  it('completed rows: PDF, Excel, CSV, NOTICE, SBOM in this order inside one menu; the four exports are <a download> without target/rel; SBOM unchanged', async () => {
     const { doc } = loadPage();
     await waitFor(() => doc.querySelectorAll('a[href$="/notice"]').length >= 2, 'links rendered');
     for (const id of [ID.done1, ID.done2]) {
-      const expected: Array<[string, string, string]> = [
-        [`/api/scans/${id}/exports/project-report.pdf`, 'Download project PDF report', 'PDF'],
-        [`/api/scans/${id}/exports/license-inventory.xlsx`, 'Download license inventory (Excel)', 'Excel'],
-        [`/api/scans/${id}/exports/license-inventory.csv`, 'Download license inventory (CSV)', 'CSV'],
-        [`/api/scans/${id}/notice`, 'Download NOTICE file', 'NOTICE'],
+      const expected: Array<[string, string]> = [
+        [`/api/scans/${id}/exports/project-report.pdf`, 'Yönetici raporu (PDF)'],
+        [`/api/scans/${id}/exports/license-inventory.xlsx`, 'Ayrıntılı tablo (Excel)'],
+        [`/api/scans/${id}/exports/license-inventory.csv`, 'Paket listesi (CSV)'],
+        [`/api/scans/${id}/notice`, 'Lisans bildirimi (NOTICE)'],
       ];
       const sbom = doc.querySelector<HTMLAnchorElement>(`a[href="/api/scans/${id}/sbom/download"]`)!;
       expect(sbom).not.toBeNull();
-      for (const [href, label, text] of expected) {
+      for (const [href, title] of expected) {
         const matches = doc.querySelectorAll<HTMLAnchorElement>(`a[href="${href}"][download]`);
         expect(matches, href).toHaveLength(1);
         const a = matches[0];
         expect(a.getAttribute('download')).toBe('');
-        expect(a.getAttribute('aria-label')).toBe(label);
-        expect(a.textContent?.trim()).toBe(text);
-        expect(a.className).toBe('btn btn-sm');
+        expect(a.getAttribute('role')).toBe('menuitem');
+        expect(a.querySelector('.reports-item-title')?.textContent).toBe(title);
+        expect(a.querySelector('.reports-item-desc')?.textContent?.length ?? 0).toBeGreaterThan(10);
+        expect(a.className).toBe('reports-item');
         expect(a.hasAttribute('target')).toBe(false);
         expect(a.hasAttribute('rel')).toBe(false);
-        expect(a.getAttribute('style')).toBe(sbom.getAttribute('style'));
         expect(a.parentElement).toBe(sbom.parentElement);
       }
-      expect(Array.from(sbom.parentElement!.querySelectorAll('a')).map((a) => a.textContent?.trim())).toEqual(['PDF', 'Excel', 'CSV', 'NOTICE', 'SBOM']);
+      const menu = sbom.parentElement!;
+      expect(Array.from(menu.querySelectorAll('a .reports-item-title')).map((t) => t.textContent)).toEqual(
+        ['Yönetici raporu (PDF)', 'Ayrıntılı tablo (Excel)', 'Paket listesi (CSV)', 'Lisans bildirimi (NOTICE)', 'SBOM']);
+      expect(menu.getAttribute('role')).toBe('menu');
+      expect((menu as HTMLElement).hidden).toBe(true);
+      const button = menu.previousElementSibling as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('menu');
+      expect(button.getAttribute('aria-controls')).toBe(menu.id);
       expect(sbom.getAttribute('target')).toBe('_blank');
       expect(sbom.getAttribute('rel')).toBe('noopener');
       expect(sbom.hasAttribute('download')).toBe(false);
@@ -221,7 +230,7 @@ describe('AC-AK-1: API Keys view and list (contract 9.1, 9.2)', () => {
     expect(nav.indexOf('api-keys')).toBe(nav.indexOf('users') + 1);
     expect(doc.getElementById('view-api-keys')).not.toBeNull();
     expect(doc.getElementById('api-keys-cli-hint')!.textContent).toBe(
-      'Use the key with the CLI: set OSS_RISK_API_KEY (or OSS_RISK_API_KEY_FILE) and run oss-risk scan --project <name>. Only one key is active at a time.',
+      'Anahtarı CLI ile kullanın: OSS_RISK_API_KEY (veya OSS_RISK_API_KEY_FILE) ortam değişkenini ayarlayıp oss-risk scan --project <proje-adı> komutunu çalıştırın. Aynı anda yalnız bir anahtar etkindir.',
     );
     expect(doc.getElementById('api-key-create-form')!.hasAttribute('novalidate')).toBe(true);
     const input = doc.getElementById('api-key-name') as HTMLInputElement;
@@ -230,11 +239,11 @@ describe('AC-AK-1: API Keys view and list (contract 9.1, 9.2)', () => {
     expect(doc.getElementById('api-keys-error')!.getAttribute('role')).toBe('alert');
   });
 
-  it('list: name (textContent, no markup), prefix, Never, Active / Revoked; Revoke only on the active row', async () => {
+  it('list: name (textContent, no markup), prefix, never used, active / revoked; revoke only on the active row', async () => {
     const p = loadPage();
     await openApiKeys(p);
     const { doc } = p;
-    expect(doc.getElementById('page-title')!.textContent).toBe('API Keys');
+    expect(doc.getElementById('page-title')!.textContent).toBe('API Anahtarları');
     expect((doc.getElementById('api-keys-body') as HTMLElement).dataset.state).toBe('ready');
     expect((doc.getElementById('api-keys-table') as HTMLElement).hidden).toBe(false);
     expect((doc.getElementById('api-keys-empty') as HTMLElement).hidden).toBe(true);
@@ -245,17 +254,17 @@ describe('AC-AK-1: API Keys view and list (contract 9.1, 9.2)', () => {
     expect(cells(active)[0]).toBe('<img src=x onerror=alert(1)>');
     expect(doc.querySelector('#api-keys-tbody img')).toBeNull();
     expect(cells(active)[1]).toBe(PREFIX);
-    expect(cells(active)[3]).toBe('Never');
-    expect(cells(active)[4]).toBe('Active');
+    expect(cells(active)[3]).toBe('Hiç kullanılmadı');
+    expect(cells(active)[4]).toBe('Etkin');
     const revokeBtn = active.querySelector('button')!;
-    expect(revokeBtn.textContent?.trim()).toBe('Revoke');
-    expect(revokeBtn.getAttribute('aria-label')).toBe(`Revoke API key ${PREFIX}`);
+    expect(revokeBtn.textContent?.trim()).toBe('İptal et');
+    expect(revokeBtn.getAttribute('aria-label')).toBe(`${PREFIX} API anahtarını iptal et`);
     expect(cells(revoked)[0]).toBe('—');
-    expect(cells(revoked)[4]).toMatch(/^Revoked /);
+    expect(cells(revoked)[4]).toMatch(/^İptal edildi /);
     expect(revoked.querySelector('button')).toBeNull();
   });
 
-  it('empty list -> "No API keys yet."; list error -> data-state error and alert', async () => {
+  it('empty list -> empty state; list error -> data-state error and alert', async () => {
     const empty = loadPage({ 'GET /api/auth/api-keys': () => ({ status: 200, body: { data: [] } }) });
     await openApiKeys(empty);
     expect((empty.doc.getElementById('api-keys-body') as HTMLElement).dataset.state).toBe('empty');
@@ -266,7 +275,7 @@ describe('AC-AK-1: API Keys view and list (contract 9.1, 9.2)', () => {
     await openApiKeys(broken);
     expect((broken.doc.getElementById('api-keys-body') as HTMLElement).dataset.state).toBe('error');
     expect((broken.doc.getElementById('api-keys-error') as HTMLElement).hidden).toBe(false);
-    expect(broken.doc.getElementById('api-keys-error')!.textContent).toBe('Could not load API keys.');
+    expect(broken.doc.getElementById('api-keys-error')!.textContent).toBe('API anahtarları yüklenemedi.');
   });
 });
 
@@ -276,7 +285,7 @@ describe('AC-AK-2: create with one-time reveal (contract 9.3)', () => {
     await openApiKeys(p);
     p.confirmAnswer.value = false;
     await createKey(p, 'ci');
-    expect(p.confirms).toEqual(['Creating a new key revokes the current active key. Continue?']);
+    expect(p.confirms).toEqual(['Yeni anahtar oluşturmak mevcut etkin anahtarı iptal eder. Devam edilsin mi?']);
     expect(p.calls.some((c) => c.key === 'POST /api/auth/api-keys')).toBe(false);
     expect(p.doc.getElementById('api-key-reveal')).toBeNull();
   });
@@ -302,10 +311,10 @@ describe('AC-AK-2: create with one-time reveal (contract 9.3)', () => {
     expect(field.value).toBe(NEW_KEY);
     expect(field.readOnly).toBe(true);
     expect(field.getAttribute('autocomplete')).toBe('off');
-    expect(field.getAttribute('aria-label')).toBe('New API key');
-    expect(p.doc.getElementById('api-key-reveal')!.textContent).toContain('Copy this key now. It will not be shown again.');
+    expect(field.getAttribute('aria-label')).toBe('Yeni API anahtarı');
+    expect(p.doc.getElementById('api-key-reveal')!.textContent).toContain('Bu anahtarı şimdi kopyalayın. Bir daha gösterilmeyecek.');
     expect(p.doc.getElementById('api-key-copy-btn')).not.toBeNull();
-    expect(p.doc.getElementById('api-key-dismiss-btn')!.textContent?.trim()).toBe('Done');
+    expect(p.doc.getElementById('api-key-dismiss-btn')!.textContent?.trim()).toBe('Tamam');
     expect((p.doc.getElementById('api-key-name') as HTMLInputElement).value).toBe('');
     await waitFor(() => listCalls() > before, 'list reloaded');
     expect((p.doc.getElementById('api-key-create-btn') as HTMLButtonElement).disabled).toBe(false);
@@ -338,7 +347,7 @@ describe('AC-AK-2: create with one-time reveal (contract 9.3)', () => {
     expectNoKeyLeak(p);
   });
 
-  it('Copy: clipboard available -> writeText(key) and "Copied to clipboard"; missing or rejected -> field selected and "Press Ctrl+C to copy"', async () => {
+  it('Copy: clipboard available -> writeText(key) and "Panoya kopyalandı"; missing or rejected -> field selected and the Ctrl+C hint', async () => {
     for (const mode of ['ok', 'missing', 'reject'] as const) {
       const p = loadPage();
       await openApiKeys(p);
@@ -349,10 +358,10 @@ describe('AC-AK-2: create with one-time reveal (contract 9.3)', () => {
       const status = p.doc.getElementById('api-key-copy-status')!;
       await waitFor(() => (status.textContent ?? '') !== '', `copy status (${mode})`);
       if (mode === 'ok') {
-        expect(status.textContent).toBe('Copied to clipboard');
+        expect(status.textContent).toBe('Panoya kopyalandı');
         expect(p.clipboard.writes).toEqual([NEW_KEY]);
       } else {
-        expect(status.textContent).toBe('Press Ctrl+C to copy');
+        expect(status.textContent).toBe('Kopyalamak için Ctrl+C’ye basın');
         expect(p.clipboard.writes).toEqual([]);
       }
       expect(status.getAttribute('aria-live')).toBe('polite');
@@ -379,7 +388,7 @@ describe('AC-AK-3: revoke (contract 9.4)', () => {
     p.confirmAnswer.value = false;
     btn().click();
     await tick();
-    expect(p.confirms).toEqual([`Revoke API key ${PREFIX}? Clients using it will stop working.`]);
+    expect(p.confirms).toEqual([`${PREFIX} API anahtarı iptal edilsin mi? Bu anahtarı kullanan istemciler çalışmayı durduracak.`]);
     expect(p.calls.some((c) => c.key.startsWith('DELETE '))).toBe(false);
 
     p.confirmAnswer.value = true;
@@ -403,12 +412,13 @@ describe('AC-AK-3: revoke (contract 9.4)', () => {
     await waitFor(() => p.doc.getElementById('api-key-reveal') === null, 'panel removed on revoke');
   });
 
-  it('revoke error -> error toast, row and button kept', async () => {
+  it('revoke error -> error toast (REQ-010 AC-P33-4 Turkish text for internal_error), row and button kept', async () => {
     const p = loadPage({ 'DELETE /api/auth/api-keys/k-active': () => ({ status: 500, body: { error: 'x', message: 'Internal server error', code: 'internal_error' } }) });
     await openApiKeys(p);
     p.doc.querySelector<HTMLButtonElement>('#api-keys-tbody button')!.click();
     await waitFor(() => (p.doc.getElementById('toast-msg')?.textContent ?? '') !== '', 'toast');
-    expect(p.doc.getElementById('toast-msg')!.textContent).toBe('Internal server error');
+    expect(p.doc.getElementById('toast-msg')!.textContent).toBe(
+      'Sunucuda beklenmeyen bir hata oluştu. Tekrar deneyin; sürerse yöneticinizden sunucu kayıtlarını kontrol etmesini isteyin.');
     const btn = p.doc.querySelector<HTMLButtonElement>('#api-keys-tbody button')!;
     expect(btn).not.toBeNull();
     expect(btn.disabled).toBe(false);

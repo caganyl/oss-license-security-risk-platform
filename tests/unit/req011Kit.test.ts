@@ -195,7 +195,12 @@ describe('D-304: walker manifest specs', () => {
     }
     if (!linked) return;
     const r = parseManifests(root, ['go'], 'links');
-    expect(r.parse_errors).toEqual([{ ecosystem: 'go', file: 'go.mod', error: LINK_NOT_FOLLOWED_MESSAGE }]);
+    // A link with the requested ecosystem's name is that ecosystem's record; a link named after a
+    // non-requested ecosystem (Cargo.lock) stays a generic filesystem record, as for any other name.
+    expect(r.parse_errors.map((e) => [e.ecosystem, e.file, e.error]).sort()).toEqual([
+      ['filesystem', 'Cargo.lock', LINK_NOT_FOLLOWED_MESSAGE],
+      ['go', 'go.mod', LINK_NOT_FOLLOWED_MESSAGE],
+    ]);
     const none = parseManifests(root, ['nodejs'], 'links');
     expect(none.parse_errors.map((e) => [e.ecosystem, e.file]).sort()).toEqual([
       ['filesystem', 'Cargo.lock'],

@@ -8,6 +8,7 @@ import {
   actionItems,
   overallStatus,
   pdfVulnerabilityDataText,
+  renderDependencyPdf,
 } from '../../src/reports/dependencyPdf';
 import type { ReportData, ReportDependency } from '../../src/reports/reportService';
 import { systemFeatures } from '../../src/routes/systemRoutes';
@@ -124,6 +125,22 @@ describe('AC-P37-3: "Ne yapılmalı?" actions', () => {
   it('unknown licenses are one aggregated item', () => {
     const items = actionItems(report([dep('x', { risk: 'unknown', license: 'Custom' }), dep('y', { risk: 'unknown', license: 'Custom' })]));
     expect(items).toEqual(['2 paketin lisansı belirlenemedi; Excel çıktısındaki lisans sütunundan kontrol edin.']);
+  });
+});
+
+describe('P-37 regression: NULL database values in table cells', () => {
+  it('renders a PDF when advisory id, version, license and status are null (real scans have such rows)', async () => {
+    const d = dep('nully', { sev: 'critical' });
+    const nulls = d as unknown as Record<string, unknown>;
+    nulls.version = null;
+    nulls.licenseExpression = null;
+    (d.vulnerabilities[0] as unknown as Record<string, unknown>).advisoryId = null;
+    (d.vulnerabilities[0] as unknown as Record<string, unknown>).status = null;
+    (d.licenses[0] as unknown as Record<string, unknown>).normalizedLicense = null;
+    (d.licenses[0] as unknown as Record<string, unknown>).detectedLicense = null;
+    (d.licenses[0] as unknown as Record<string, unknown>).status = null;
+    const pdf = await renderDependencyPdf(report([d], { criticalVulns: 1, totalVulnerabilities: 1 }), 'project_report');
+    expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 });
 

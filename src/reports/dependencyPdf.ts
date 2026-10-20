@@ -172,9 +172,9 @@ export async function renderDependencyPdf(data: ReportData, reportType: ReportTy
   };
 
   /** Fits `text` into `w` points with "…" (REQ-010 AC-P37-4). */
-  const fit = (text: string, w: number): string => {
-    // Pre-cut keeps the width search cheap for very long values (security review L1).
-    const value = t(text.slice(0, 300));
+  const fit = (text: string | null | undefined, w: number): string => {
+    // Database values can be NULL; pre-cut keeps the width search cheap for very long values (security review L1).
+    const value = t((text ?? '').slice(0, 300));
     if (doc.widthOfString(value) <= w) return value;
     let cut = value;
     while (cut.length > 1 && doc.widthOfString(`${cut}…`) > w) cut = cut.slice(0, -1);
@@ -182,7 +182,7 @@ export async function renderDependencyPdf(data: ReportData, reportType: ReportTy
   };
 
   /** Column-aligned table; `widths` are fractions of the text width. Repeats the header after a page break. */
-  const table = (headers: string[], widths: number[], rows: string[][], total: number) => {
+  const table = (headers: string[], widths: number[], rows: Array<Array<string | null | undefined>>, total: number) => {
     const cols = widths.map((f) => f * width);
     const rowHeight = 15;
     const drawHeader = () => {

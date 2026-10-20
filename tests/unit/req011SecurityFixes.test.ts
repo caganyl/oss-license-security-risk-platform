@@ -141,6 +141,71 @@ describe('M-2: Cargo workspace membership uses one name set per lock', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('M-3: pom.xml ${...} interpolation is bounded and order-independent', () => {
+  function pom(properties: string, management: string, dependencies: string): string {
+    return [
+      '<project xmlns="http://maven.apache.org/POM/4.0.0">',
+      '  <modelVersion>4.0.0</modelVersion>',
+      '  <groupId>com.example</groupId><artifactId>app</artifactId><version>1.0.0</version>',
+      `  <properties>${properties}</properties>`,
+      `  <dependencyManagement><dependencies>${management}</dependencies></dependencyManagement>`,
+      `  <dependencies>${dependencies}</dependencies>`,
+      '</project>',
+      '',
+    ].join('\n');
+  }
+
+  it(
+    `64 KiB of \${e} in a managed version shared by 5 000 dependencies stays fast (< ${PERF_LIMIT_MS} ms) and is unresolved`,
+    () => {
+      const huge = '${e}'.repeat(16 * 1024);
+      const deps = Array.from({ length: 5_000 }, (_, i) => `<dependency><groupId>org.x</groupId><artifactId>a${i % 50}</artifactId></dependency>`).join('');
+      const managed = Array.from({ length: 50 }, (_, i) => `<dependency><groupId>org.x</groupId><artifactId>a${i}</artifactId><version>${huge}</version></dependency>`).join('');
+      const dir = root('java-huge-interp', { 'pom.xml': pom('<e></e>', managed, deps) });
+      const { value: r, ms } = timed(() => parseManifests(dir, ['java'], 'm3-huge'));
+      expect(ms, `took ${ms.toFixed(0)} ms`).toBeLessThan(PERF_LIMIT_MS);
+      expect(r.parse_errors).toEqual([]);
+      expect(r.dependencies).toHaveLength(50);
+      for (const d of r.dependencies) {
+        expect(d.version).toBeNull();
+        expect(d.declared_range).toBe('${e}'.repeat(50)); // the kit keeps at most 200 code points of the declaration
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it('a text longer than 1 024 characters is unresolved even when it would shrink; shorter texts still resolve', () => {
+    const long = `\${e}${'${e}'.repeat(300)}1.0.0`; // 1 209 characters -> "1.0.0" if expanded
+    const dir = root('java-long-text', {
+      'pom.xml': pom(
+        '<e></e><v>2.0.0</v>',
+        '',
+        `<dependency><groupId>org.x</groupId><artifactId>long</artifactId><version>${long}</version></dependency>` +
+          '<dependency><groupId>org.x</groupId><artifactId>short</artifactId><version>${e}${v}</version></dependency>',
+      ),
+    });
+    const r = parseManifests(dir, ['java'], 'm3-long');
+    expect(r.dependencies.map((d) => `${d.name}@${d.version ?? '-'}`)).toEqual(['org.x:long@-', 'org.x:short@2.0.0']);
+  });
+
+  it('the depth limit gives the same result whatever the order of the declarations', () => {
+    // p1 -> p2 -> ... -> p17 = "1.0.0": ${p2} needs 16 nested lookups (resolved), ${p1} needs 17 (unresolved).
+    const chain = Array.from({ length: 16 }, (_, i) => `<p${i + 1}>\${p${i + 2}}</p${i + 1}>`).join('') + '<p17>1.0.0</p17>';
+    const shallow = '<dependency><groupId>org.x</groupId><artifactId>shallow</artifactId><version>${p2}</version></dependency>';
+    const deep = '<dependency><groupId>org.x</groupId><artifactId>deep</artifactId><version>${p1}</version></dependency>';
+    const results = [
+      ['deep-first', deep + shallow],
+      ['shallow-first', shallow + deep],
+    ].map(([name, deps]) => {
+      const r = parseManifests(root(`java-depth-${name}`, { 'pom.xml': pom(chain, '', deps) }), ['java'], `m3-${name}`);
+      return r.dependencies.map((d) => `${d.name}@${d.version ?? '-'}`);
+    });
+    expect(results[0]).toEqual(['org.x:deep@-', 'org.x:shallow@1.0.0']);
+    expect(results[1]).toEqual(results[0]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('M-4: YAML subset reader line limit and blank lines', () => {
   it('the default line limit is 2 000 000', () => {
     expect(DEFAULT_YAML_LIMITS.maxLines).toBe(2_000_000);

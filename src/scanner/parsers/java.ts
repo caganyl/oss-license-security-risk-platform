@@ -220,7 +220,10 @@ function textOf(element: XmlElement, localName: string): string | null {
 /** `${name}` resolver of one POM (properties + project built-ins). */
 class PomProperties {
   private readonly values = new Map<string, string>();
+  /** Property values by `depth\0name` (see `lookup`). */
   private readonly cache = new Map<string, string | null>();
+  /** `resolve` results by input text. */
+  private readonly resolved = new Map<string, string | null>();
 
   constructor(project: XmlElement) {
     const properties = childOf(project, 'properties');
@@ -248,9 +251,20 @@ class PomProperties {
     }
   }
 
-  /** The text with every `${name}` replaced, or null when one cannot be resolved. */
+  /**
+   * The text with every `${name}` replaced, or null when one cannot be
+   * resolved. Security review M-3: a text longer than `MAX_INTERPOLATED` is
+   * unresolved before any expansion, and results are memoized by text, so
+   * one huge managed `<version>` shared by many dependencies is not
+   * expanded again for each of them.
+   */
   resolve(text: string): string | null {
-    return this.interpolate(text, 0, new Set());
+    if (text.length > MAX_INTERPOLATED) return null;
+    const memo = this.resolved.get(text);
+    if (memo !== undefined) return memo;
+    const value = this.interpolate(text, 0, new Set());
+    this.resolved.set(text, value);
+    return value;
   }
 
   private interpolate(text: string, depth: number, active: Set<string>): string | null {
@@ -274,15 +288,23 @@ class PomProperties {
     return out.length > MAX_INTERPOLATED ? null : out;
   }
 
+  /**
+   * Value of property `name` looked up at nesting `depth`. Cached per
+   * `(depth, name)`: whether the depth limit is reached depends on where the
+   * lookup starts, so a name-only cache made the result depend on the order
+   * of the declarations (security review M-3). A reference cycle gives null
+   * from any start, so `active` does not need to be part of the key.
+   */
   private lookup(name: string, depth: number, active: Set<string>): string | null {
-    const cached = this.cache.get(name);
+    const key = `${depth}\u0000${name}`;
+    const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
     const raw = this.values.get(name);
     if (raw === undefined || depth >= MAX_INTERPOLATION_DEPTH || active.has(name)) return null;
     active.add(name);
     const value = this.interpolate(raw, depth + 1, active);
     active.delete(name);
-    this.cache.set(name, value);
+    this.cache.set(key, value);
     return value;
   }
 }

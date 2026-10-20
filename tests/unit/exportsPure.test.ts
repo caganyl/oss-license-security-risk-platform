@@ -16,9 +16,9 @@ import {
   DEPENDENCY_HEADERS,
   type ReportDependency,
   dependencyRowCells,
-  pdfTruncationNote,
   vulnerabilityDataStatusText,
 } from '../../src/reports/reportService';
+import { pdfTruncationNoteTr } from '../../src/reports/dependencyPdf';
 
 const EMOJI = String.fromCodePoint(0x1f600);
 
@@ -139,9 +139,9 @@ describe('AC-P24-10: V-12 value table (REQ-004 contract 1.5.0 5.3, C-34)', () =>
   });
 });
 
-describe('AC-P24-11: truncation note text (REQ-004 contract 1.5.0 5.4)', () => {
+describe('AC-P24-11: truncation note text (REQ-004 contract 1.6.0 5.4, Turkish since REQ-010)', () => {
   it('exact text, plain integers without grouping', () => {
-    expect(pdfTruncationNote(40, 41)).toBe('Showing first 40 of 41; see the Excel or CSV export for the full list.');
-    expect(pdfTruncationNote(50, 10000)).toBe('Showing first 50 of 10000; see the Excel or CSV export for the full list.');
+    expect(pdfTruncationNoteTr(40, 41)).toBe('İlk 40 / 41 kayıt gösteriliyor; tam liste için Excel veya CSV çıktısına bakın.');
+    expect(pdfTruncationNoteTr(50, 10000)).toBe('İlk 50 / 10000 kayıt gösteriliyor; tam liste için Excel veya CSV çıktısına bakın.');
   });
 });

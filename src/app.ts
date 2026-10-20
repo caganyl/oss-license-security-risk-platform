@@ -28,6 +28,7 @@ import createProjectRouter from './routes/projectRoutes';
 import createScanRouter from './routes/scanRoutes';
 import createWebFindingsRouter from './routes/webFindingsRoutes';
 import createVulnerabilityStatusRouter from './routes/vulnerabilityStatusRoutes';
+import createSystemRouter from './routes/systemRoutes';
 import type { AppClock } from './lib/clock';
 import { sandboxRunnerConfig } from './scanner/sandbox/runner.config';
 import type { VulnerabilitySchedulerView } from './vulnerability/scheduler';
@@ -130,6 +131,7 @@ export function createApp(deps: AppDeps): express.Express {
   api.use(createProjectRouter(db, scanRoots, webAllowlist));
   api.use(createScanRouter(db, scanRoots, webAllowlist));
   api.use(createWebFindingsRouter(db));
+  api.use(createSystemRouter(scanRoots, webAllowlist));
   api.use(
     createVulnerabilityStatusRouter({
       db,

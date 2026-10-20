@@ -172,7 +172,7 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-const withoutGenerated = (lines: string[]) => lines.filter((l) => !l.startsWith('Generated:'));
+const withoutGenerated = (lines: string[]) => lines.filter((l) => !l.startsWith('Rapor tarihi:'));
 
 // ---------------------------------------------------------------------------
 describe('AC-P24-1 / AC-P24-2 / AC-P24-9: 200 responses and headers', () => {
@@ -363,12 +363,13 @@ describe('AC-P24-1 / contract 6.3: side-effect free', () => {
 });
 
 describe('AC-P24-3 / AC-P24-4 / AC-P24-5: same renderers as the async reports', () => {
-  it('AC-P24-3: sync PDF text == async project_report PDF text (Generated line excluded)', async () => {
+  it('AC-P24-3: sync PDF text == async project_report PDF text (report-date line excluded; REQ-010 Turkish PDF)', async () => {
     const sync = pdfLines((await exportReq(scanId, 'project-report.pdf')).body as Buffer);
     const asyncPdf = pdfLines(await asyncReport(scanId, 'project_report', 'pdf'));
-    expect(sync.some((l) => l.startsWith('Generated:'))).toBe(true);
-    expect(sync).toContain('Dependency Inventory');
-    expect(sync).toContain('Security Findings');
+    expect(sync.some((l) => l.startsWith('Rapor tarihi:'))).toBe(true);
+    expect(sync).toContain('Paket envanteri');
+    expect(sync).toContain('Güvenlik açıkları');
+    expect(sync).toContain('Ne yapılmalı?');
     expect(withoutGenerated(sync)).toEqual(withoutGenerated(asyncPdf));
   });
 
@@ -403,14 +404,15 @@ describe('AC-P24-3 / AC-P24-4 / AC-P24-5: same renderers as the async reports', 
 });
 
 describe('AC-P24-10: V-12 Vulnerability Data Status row (five values)', () => {
-  const VALUES: Array<[string | null, string]> = [
-    ['complete', 'complete'],
-    ['partial', 'partial (some packages could not be checked)'],
-    ['unavailable', 'unavailable (vulnerability source unreachable)'],
-    ['disabled', 'disabled (lookup turned off)'],
-    [null, 'not checked'],
+  // [status, Excel text (unchanged), PDF text (REQ-010 Turkish; REQ-004 contract 1.6.0 §5.3)]
+  const VALUES: Array<[string | null, string, string]> = [
+    ['complete', 'complete', 'tam'],
+    ['partial', 'partial (some packages could not be checked)', 'kısmi (bazı paketler kontrol edilemedi)'],
+    ['unavailable', 'unavailable (vulnerability source unreachable)', 'alınamadı (güvenlik açığı kaynağına ulaşılamadı)'],
+    ['disabled', 'disabled (lookup turned off)', 'kapalı (sorgu devre dışı)'],
+    [null, 'not checked', 'kontrol edilmedi'],
   ];
-  it.each(VALUES)('%j -> Excel Summary last row and PDF Summary last item "%s"', async (status, text) => {
+  it.each(VALUES)('%j -> Excel Summary last row "%s" and PDF Summary last item "%s"', async (status, text, trText) => {
     const { scanId: sid } = await seedScan(db, { projectName: `v12-${String(status)}`, deps: manyDeps(`v12${String(status)}`, 1) });
     await db.query('UPDATE scans SET vulnerability_data_status = $2 WHERE id = $1', [sid, status]);
     const wb = await workbook((await exportReq(sid, 'license-inventory.xlsx')).body as Buffer);
@@ -422,15 +424,20 @@ describe('AC-P24-10: V-12 Vulnerability Data Status row (five values)', () => {
     ]);
     expect(summary[summary.length - 1]).toEqual(['Vulnerability Data Status', text]);
     const lines = pdfLines((await exportReq(sid, 'project-report.pdf')).body as Buffer);
-    const at = lines.findIndex((l) => l.startsWith('License violations:'));
+    const at = lines.findIndex((l) => l.startsWith('Projenin önem derecesi:'));
     expect(at).toBeGreaterThan(-1);
-    expect(lines[at + 1]).toBe(`Vulnerability Data Status: ${text}`);
-    expect(lines[at + 2]).toBe('Security Findings');
+    expect(lines[at + 1]).toBe(`Güvenlik açığı verisi: ${trText}`);
+    // the summary ends here: an optional incomplete-data note, then the actions section
+    expect(lines[at + 2] === 'Ne yapılmalı?' || lines[at + 2].startsWith('Not: ')).toBe(true);
+    expect(lines[at + 2] === 'Ne yapılmalı?').toBe(status === 'complete');
   });
 });
 
 describe('AC-P24-11: PDF truncation note per table (40 / 40 / 50)', () => {
-  const note = (n: number, total: number) => `Showing first ${n} of ${total}; see the Excel or CSV export for the full list.`;
+  // REQ-010: Turkish note (REQ-004 contract 1.6.0 §5.4); a table row is a " | "-joined line, the header repeats after a page break.
+  const note = (n: number, total: number) => `İlk ${n} / ${total} kayıt gösteriliyor; tam liste için Excel veya CSV çıktısına bakın.`;
+  const dataRows = (lines: string[]) => lines.filter((l) => l.includes(' | ') && !l.startsWith('Paket | '));
+  const notes = (lines: string[]) => lines.filter((l) => l.startsWith('İlk ') && l.includes('kayıt gösteriliyor'));
   const section = (lines: string[], from: string, to: string | null) => {
     const a = lines.indexOf(from);
     const b = to === null ? lines.length : lines.indexOf(to);
@@ -443,30 +450,30 @@ describe('AC-P24-11: PDF truncation note per table (40 / 40 / 50)', () => {
     const { scanId: sid } = await seedScan(db, { projectName: 'trunc-cut', deps: manyDeps('cut', 51) });
     await seedFindings(sid, 41, 41);
     const lines = pdfLines((await exportReq(sid, 'project-report.pdf')).body as Buffer);
-    const sec = section(lines, 'Security Findings', 'License Findings');
-    const lic = section(lines, 'License Findings', 'Dependency Inventory');
-    const inv = section(lines, 'Dependency Inventory', null);
+    const sec = section(lines, 'Güvenlik açıkları', 'Lisans bulguları');
+    const lic = section(lines, 'Lisans bulguları', 'Paket envanteri');
+    const inv = section(lines, 'Paket envanteri', 'Terimler');
     expect(sec[sec.length - 1]).toBe(note(40, 41));
-    expect(sec).toHaveLength(1 + 40 + 1); // header + rows + note
+    expect(dataRows(sec)).toHaveLength(40);
     expect(lic[lic.length - 1]).toBe(note(40, 41));
-    expect(lic).toHaveLength(1 + 40 + 1);
+    expect(dataRows(lic)).toHaveLength(40);
     expect(inv[inv.length - 1]).toBe(note(50, 51));
-    expect(inv).toHaveLength(1 + 50 + 1);
-    expect(lines.filter((l) => l.startsWith('Showing first'))).toHaveLength(3);
+    expect(dataRows(inv)).toHaveLength(50);
+    expect(notes(lines)).toHaveLength(3);
   });
 
   it('tables exactly at the limit (40 / 40 / 50) get no note', async () => {
     const { scanId: sid } = await seedScan(db, { projectName: 'trunc-edge', deps: manyDeps('edge', 50) });
     await seedFindings(sid, 40, 40);
     const lines = pdfLines((await exportReq(sid, 'project-report.pdf')).body as Buffer);
-    expect(lines.filter((l) => l.startsWith('Showing first'))).toEqual([]);
-    expect(section(lines, 'Dependency Inventory', null)).toHaveLength(1 + 50);
+    expect(notes(lines)).toEqual([]);
+    expect(dataRows(section(lines, 'Paket envanteri', 'Terimler'))).toHaveLength(50);
   });
 
   it('only one table cut -> only that table gets a note (security cut, others not)', async () => {
     const { scanId: sid } = await seedScan(db, { projectName: 'trunc-one', deps: manyDeps('one', 3) });
     await seedFindings(sid, 45, 1);
     const lines = pdfLines((await exportReq(sid, 'project-report.pdf')).body as Buffer);
-    expect(lines.filter((l) => l.startsWith('Showing first'))).toEqual([note(40, 45)]);
+    expect(notes(lines)).toEqual([note(40, 45)]);
   });
 });

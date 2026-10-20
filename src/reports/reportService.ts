@@ -1,13 +1,13 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import PDFDocument from 'pdfkit';
 import { loadWebScanResult, renderWebFindingsCsv, renderWebReportPdf } from '../webscan/report';
 import ExcelJS from 'exceljs';
 import type { Pool } from 'pg';
 import { sanitizeErrorText } from '../lib/errorText';
 import { excelSafeText, singleLine } from '../lib/outputText';
 import { toCsv } from './csv';
+import { renderDependencyPdf } from './dependencyPdf';
 
 export type ReportType =
   | 'executive_summary'
@@ -80,7 +80,7 @@ export interface ReportDependency {
   vulnerabilities: ReportSecurityFinding[];
 }
 
-interface ReportData {
+export interface ReportData {
   generatedAt: Date;
   scan: {
     id: string;
@@ -565,96 +565,9 @@ export class ReportService {
   }
 }
 
-async function renderPdfReport(data: ReportData, reportType: ReportType): Promise<Buffer> {
-  const doc = new PDFDocument({ margin: 48, size: 'A4', bufferPages: true });
-  const chunks: Buffer[] = [];
-
-  doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-  const done = new Promise<Buffer>((resolve) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-
-  doc.fontSize(18).text(reportTitle(reportType), { underline: false });
-  doc.moveDown(0.5);
-  doc.fontSize(11).text(`Project: ${data.project.name}`);
-  doc.text(`Scan: ${data.scan.id}`);
-  doc.text(`Generated: ${formatDate(data.generatedAt)}`);
-  if (data.project.repoUrl) doc.text(`Repository: ${data.project.repoUrl}`);
-  doc.moveDown();
-
-  writePdfSection(doc, 'Summary');
-  writePdfKeyValues(doc, [
-    ['Criticality', data.project.criticality],
-    ['Ref', data.scan.ref ?? 'n/a'],
-    ['Trigger', data.scan.trigger],
-    ['Completed', formatDate(data.scan.completedAt)],
-    ['Dependencies', String(data.scan.totalDependencies)],
-    ['Vulnerabilities', String(data.scan.totalVulnerabilities)],
-    ['Critical / High', `${data.scan.criticalVulns} / ${data.scan.highVulns}`],
-    ['License violations', String(data.scan.licenseViolations)],
-    // REQ-004 contract 1.5.0 §5.3 (V-12): always the last Summary item.
-    [VULNERABILITY_DATA_STATUS_LABEL, vulnerabilityDataStatusText(data.scan.vulnerabilityDataStatus)],
-  ]);
-
-  // Row caps are unchanged (40/40/50); a cut table gets its own note (§5.4).
-  if (reportType !== 'license_inventory') {
-    writePdfSection(doc, 'Security Findings');
-    const vulnerabilities = data.dependencies.flatMap((dep) =>
-      dep.vulnerabilities.map((vuln) => ({ dep, vuln })),
-    );
-    writePdfRows(
-      doc,
-      vulnerabilities.slice(0, PDF_FINDING_ROW_LIMIT).map(({ dep, vuln }) => [
-        `${dep.name}@${dep.version}`,
-        vuln.advisoryId,
-        vuln.severity,
-        vuln.fixVersion ?? 'n/a',
-        vuln.status,
-      ]),
-      ['Package', 'Advisory', 'Severity', 'Fix', 'Status'],
-      vulnerabilities.length,
-    );
-  }
-
-  if (reportType !== 'vulnerability_report') {
-    writePdfSection(doc, 'License Findings');
-    const licenses = data.dependencies.flatMap((dep) =>
-      dep.licenses.map((license) => ({ dep, license })),
-    );
-    writePdfRows(
-      doc,
-      licenses.slice(0, PDF_FINDING_ROW_LIMIT).map(({ dep, license }) => [
-        `${dep.name}@${dep.version}`,
-        license.normalizedLicense ?? license.detectedLicense ?? 'unknown',
-        license.riskLevel,
-        license.appliedPolicy ?? 'n/a',
-        license.status,
-      ]),
-      ['Package', 'License', 'Risk', 'Policy', 'Status'],
-      licenses.length,
-    );
-  }
-
-  if (reportType === 'project_report' || reportType === 'audit_evidence') {
-    writePdfSection(doc, 'Dependency Inventory');
-    writePdfRows(
-      doc,
-      data.dependencies.slice(0, PDF_DEPENDENCY_ROW_LIMIT).map((dep) => [
-        `${dep.name}@${dep.version}`,
-        dep.ecosystem,
-        dep.scope,
-        dep.manifestPath,
-        String(dep.depth),
-        // REQ-004 contract 5.2: effective license, empty (pre-F3 included) -> n/a.
-        singleLine(dep.licenseExpression) || 'n/a',
-      ]),
-      ['Package', 'Eco', 'Scope', 'Manifest', 'Depth', 'License'],
-      data.dependencies.length,
-    );
-  }
-
-  doc.end();
-  return done;
+/** REQ-010 P-37: the Turkish manager report (src/reports/dependencyPdf.ts). */
+function renderPdfReport(data: ReportData, reportType: ReportType): Promise<Buffer> {
+  return renderDependencyPdf(data, reportType);
 }
 
 async function renderExcelReport(data: ReportData, reportType: ReportType): Promise<Buffer> {
@@ -764,7 +677,7 @@ function renderDependencyCsv(data: ReportData): Buffer {
 /** Key of the V-12 row in the Excel and PDF `Summary` (REQ-004 contract 1.5.0 §5.3). */
 const VULNERABILITY_DATA_STATUS_LABEL = 'Vulnerability Data Status';
 
-/** The single value table of the V-12 row; Excel and PDF use the same text (§5.3). */
+/** Value table of the V-12 row in the Excel `Summary` (§5.3); the PDF uses its Turkish table (REQ-010, contract 1.6.0). */
 const VULNERABILITY_DATA_STATUS_TEXT: Readonly<Record<string, string>> = {
   complete: 'complete',
   partial: 'partial (some packages could not be checked)',
@@ -777,15 +690,6 @@ export function vulnerabilityDataStatusText(status: string | null | undefined): 
   return (status != null && Object.hasOwn(VULNERABILITY_DATA_STATUS_TEXT, status))
     ? VULNERABILITY_DATA_STATUS_TEXT[status]
     : 'not checked';
-}
-
-/** PDF row caps of the finding tables and the dependency table (unchanged; §5.4). */
-const PDF_FINDING_ROW_LIMIT = 40;
-const PDF_DEPENDENCY_ROW_LIMIT = 50;
-
-/** Note under a cut PDF table (REQ-004 contract 1.5.0 §5.4); plain integers, no grouping. */
-export function pdfTruncationNote(shown: number, total: number): string {
-  return `Showing first ${String(shown)} of ${String(total)}; see the Excel or CSV export for the full list.`;
 }
 
 /**
@@ -891,44 +795,6 @@ function addVulnerabilityWorksheet(workbook: ExcelJS.Workbook, data: ReportData)
   )));
 }
 
-function writePdfSection(doc: PDFKit.PDFDocument, title: string): void {
-  doc.moveDown(0.8);
-  doc.fontSize(14).text(title);
-  doc.moveDown(0.3);
-}
-
-function writePdfKeyValues(doc: PDFKit.PDFDocument, rows: Array<[string, string]>): void {
-  doc.fontSize(10);
-  for (const [key, value] of rows) {
-    doc.text(`${key}: ${value}`);
-  }
-}
-
-/**
- * `rows` are the already capped rows; `total` is the full row count. When
- * the table was cut (`total > rows.length`) one note line follows the last
- * row in the same font size, without the 28-character cell cut (§5.4).
- */
-function writePdfRows(doc: PDFKit.PDFDocument, rows: string[][], headers: string[], total: number = rows.length): void {
-  doc.fontSize(9).text(headers.join(' | '));
-  doc.moveDown(0.2);
-
-  if (rows.length === 0) {
-    doc.text('No records found.');
-    return;
-  }
-
-  for (const row of rows) {
-    if (doc.y > 740) doc.addPage();
-    doc.text(row.map((value) => truncate(value, 28)).join(' | '));
-  }
-
-  if (total > rows.length) {
-    if (doc.y > 740) doc.addPage();
-    doc.text(pdfTruncationNote(rows.length, total));
-  }
-}
-
 function reportTitle(reportType: ReportType): string {
   return reportType
     .split('_')
@@ -938,10 +804,6 @@ function reportTitle(reportType: ReportType): string {
 
 function formatDate(value: Date | null): string {
   return value ? value.toISOString() : 'n/a';
-}
-
-function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
 const REPORT_COLUMNS = `id, project_id,

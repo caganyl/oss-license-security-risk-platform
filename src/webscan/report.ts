@@ -13,11 +13,11 @@
  * fixed system path (Windows Arial/Segoe UI, DejaVu/Liberation on Linux);
  * otherwise the standard Helvetica font with Turkish letters folded to ASCII.
  */
-import fs from 'node:fs';
 import PDFDocument from 'pdfkit';
 import type { Pool } from 'pg';
 import { excelSafeText, singleLine } from '../lib/outputText';
 import { toCsv, type CsvCell } from '../reports/csv';
+import { foldTurkish, systemFont } from '../reports/pdfFont';
 import { locationOf } from './allowlist';
 import { countBySeverity, webGrade, webScore } from './score';
 import type { WebSeverity } from './types';
@@ -134,23 +134,6 @@ export function renderWebFindingsCsv(result: WebScanResult): Buffer {
 // PDF (AC-P27-4)
 // ---------------------------------------------------------------------------
 
-const FONT_CANDIDATES: ReadonlyArray<{ regular: string; bold: string }> = [
-  { regular: 'C:\\Windows\\Fonts\\arial.ttf', bold: 'C:\\Windows\\Fonts\\arialbd.ttf' },
-  { regular: 'C:\\Windows\\Fonts\\segoeui.ttf', bold: 'C:\\Windows\\Fonts\\segoeuib.ttf' },
-  { regular: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', bold: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' },
-  { regular: '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf', bold: '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf' },
-  { regular: '/System/Library/Fonts/Supplemental/Arial.ttf', bold: '/System/Library/Fonts/Supplemental/Arial Bold.ttf' },
-];
-
-let fontCache: { regular: string; bold: string } | null | undefined;
-function systemFont(): { regular: string; bold: string } | null {
-  if (fontCache !== undefined) return fontCache;
-  fontCache = FONT_CANDIDATES.find((c) => fs.existsSync(c.regular) && fs.existsSync(c.bold)) ?? null;
-  return fontCache;
-}
-
-const TURKISH_FOLD: Readonly<Record<string, string>> = { ş: 's', Ş: 'S', ğ: 'g', Ğ: 'G', ı: 'i', İ: 'I' };
-
 const COLORS: Readonly<Record<string, string>> = {
   critical: '#b91c1c', high: '#ea580c', medium: '#ca8a04', low: '#2563eb', info: '#6b7280',
   A: '#15803d', B: '#65a30d', C: '#ca8a04', D: '#ea580c', F: '#b91c1c',
@@ -190,7 +173,7 @@ export async function renderWebReportPdf(result: WebScanResult, generatedAt: Dat
   const bold = font ? 'bold' : 'Helvetica-Bold';
   const t = (value: string | null | undefined): string => {
     const clean = singleLine(value);
-    return font ? clean : clean.replace(/[şŞğĞıİ]/g, (c) => TURKISH_FOLD[c] ?? c);
+    return font ? clean : foldTurkish(clean);
   };
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;

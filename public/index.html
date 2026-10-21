@@ -198,9 +198,10 @@
     .form-group label { display: block; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
     .eco-fieldset { border: 0; padding: 0; margin-left: 0; margin-right: 0; min-width: 0; }
     .eco-fieldset legend { padding: 0; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--text-main); }
-    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; max-height: 18rem; overflow-y: auto; padding: 2px; }
-    .eco-card {
-      display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.65rem 0.75rem; cursor: pointer;
+    .eco-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    /* `label.eco-card` outranks `.form-group label` (block, muted, bottom margin) from the fieldset. */
+    label.eco-card {
+      display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.55rem 0.75rem; cursor: pointer; margin: 0;
       background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px;
       transition: border-color 0.15s, background 0.15s;
     }
@@ -211,6 +212,16 @@
     .eco-card:has(input:checked) { border-color: var(--primary); background: rgba(139, 92, 246, 0.14); }
     .eco-card:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
     @media (max-width: 520px) { .eco-grid { grid-template-columns: 1fr; } }
+    /* New project form: wide enough for the fields on the left and all ecosystem cards on the
+       right, so the dialog fits a laptop screen without scrolling. Narrow windows stack them. */
+    .modal-content.modal-wide { width: 1080px; padding: 1.75rem 2.25rem 1.5rem; }
+    .modal-wide .modal-subtitle { margin-bottom: 1.25rem; }
+    .modal-content { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.25) transparent; }
+    .scan-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 2rem; align-items: start; }
+    .scan-layout .eco-auto { grid-column: 1 / -1; }
+    .scan-layout > div > .form-group:last-child, .scan-layout > .eco-fieldset { margin-bottom: 0; }
+    .modal-wide .form-actions { border-top: 1px solid var(--card-border); padding-top: 1.1rem; margin-top: 1.25rem; }
+    @media (max-width: 900px) { .scan-layout { grid-template-columns: 1fr; gap: 0; } .scan-layout > div > .form-group:last-child { margin-bottom: 1.25rem; } }
     .form-control {
       width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--card-border);
       border-radius: 10px; padding: 0.75rem 1rem; color: white; font-family: inherit; font-size: 0.9rem;
@@ -720,11 +731,13 @@
 
   <!-- New project modal -->
   <div class="modal" id="scanModal" role="dialog" aria-modal="true" aria-labelledby="scanModal-title">
-    <div class="modal-content">
+    <div class="modal-content modal-wide">
       <button class="modal-close" type="button" id="modal-close-btn" aria-label="Kapat"><i data-lucide="x"></i></button>
       <h3 class="modal-title" id="scanModal-title">Yeni proje taraması</h3>
       <p class="modal-subtitle">Yeni bir proje oluşturun: kodunu (repo veya yerel klasör), çalışan web adresini ya da ikisini birden tarayın.</p>
 
+      <div class="scan-layout">
+      <div>
       <div class="form-group">
         <label for="projectName">Proje adı</label>
         <input type="text" id="projectName" class="form-control" placeholder="ör. musteri-portali-api">
@@ -749,6 +762,7 @@
         <input type="url" id="webUrl" class="form-control" placeholder="https://portal.sirket.local/" autocomplete="off" spellcheck="false">
         <small class="form-hint">Çalışan uygulamanın adresi; <span data-term="webscan">pasif web taraması</span> yapılır. Yalnız WEB_SCAN_ALLOWED_HOSTS listesindeki (kendi/şirket) sistemler taranabilir.</small>
         <small class="form-warning" id="webUrl-feature-warning" role="status"></small>
+      </div>
       </div>
 
       <fieldset class="form-group eco-fieldset" id="ecosystems" aria-describedby="ecosystems-hint">
@@ -799,8 +813,9 @@
             <span><strong>Swift</strong><small>Package.resolved</small></span>
           </label>
         </div>
-        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Yalnız belirli teknolojileri taramak istiyorsanız onları seçin. Kilit dosyası (lock) olan projeler en doğru sonucu verir; yalnız bildirim dosyası (pom.xml, build.gradle, composer.json, Cargo.toml) varsa dolaylı paketler görünmez.</small>
+        <small class="form-hint" id="ecosystems-hint">Boş bırakılırsa tüm desteklenen ekosistemler otomatik algılanır (önerilen). Kilit dosyası (lock) olan projeler en doğru sonucu verir; yalnız pom.xml, build.gradle, composer.json veya Cargo.toml varsa dolaylı paketler görünmez.</small>
       </fieldset>
+      </div>
 
       <div class="form-actions">
         <button class="btn btn-ghost" type="button" id="modal-cancel-btn">Vazgeç</button>

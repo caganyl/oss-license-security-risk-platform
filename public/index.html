@@ -175,12 +175,15 @@
     .modal {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
-      align-items: center; justify-content: center; z-index: 1000;
+      align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
     }
     .modal.open { display: flex; }
+    /* Taller than the window (e.g. the scan form with 11 ecosystem cards): scroll inside the card
+       instead of cutting off the title and the buttons. */
     .modal-content {
       background: #1e293b; border: 1px solid var(--card-border); border-radius: 24px;
       padding: 2.5rem; width: 520px; max-width: 95vw;
+      max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto;
       box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;
       animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
